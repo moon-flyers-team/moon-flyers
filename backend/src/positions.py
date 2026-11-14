@@ -1,4 +1,7 @@
 import json
+import threading
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -8,8 +11,32 @@ MOON_ID = "301"
 SUN_ID = "10"
 EARTH_ID = "399"
 
+# Horizons rejects concurrent requests from one client with 503.
+_lock = threading.Lock()
+_cache: dict[tuple, tuple] = {}
+_RETRIES = 5
 
-def _query_azel(target, lon_deg, lat_deg, alt_km, start, stop, step):
+
+def _fetch(url):
+    for attempt in range(_RETRIES):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code != 503 or attempt == _RETRIES - 1:
+                raise
+            time.sleep(1 + attempt)
+
+
+def _query_azel(*args):
+    """Serialized, cached `_query_azel_uncached`."""
+    with _lock:
+        if args not in _cache:
+            _cache[args] = _query_azel_uncached(*args)
+        return _cache[args]
+
+
+def _query_azel_uncached(target, lon_deg, lat_deg, alt_km, start, stop, step):
     """Query Horizons for az/el of `target` from a lunar surface site.
     Returns (list of datetime, list of az_deg, list of el_deg)."""
     params = {
@@ -31,13 +58,11 @@ def _query_azel(target, lon_deg, lat_deg, alt_km, start, stop, step):
         "APPARENT": "'AIRLESS'",
     }
     url = HORIZONS_URL + "?" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
-    with urllib.request.urlopen(url, timeout=60) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    data = _fetch(url)
 
     if "error" in data:
         raise RuntimeError(f"Horizons error: {data['error']}")
     text = data.get("result", "")
-    print(text)
     if "$$SOE" not in text:
         raise RuntimeError(f"Horizons returned no ephemeris table:\n{text[-1500:]}")
 
@@ -51,7 +76,7 @@ def _query_azel(target, lon_deg, lat_deg, alt_km, start, stop, step):
         times.append(datetime.strptime(fields[0], "%Y-%b-%d %H:%M:%S"))
         az.append(float(nums[-2]))
         el.append(float(nums[-1]))
-    return times, az, el
+    return tuple(times), tuple(az), tuple(el)
 
 
 def positions(latitude_deg, longitude_deg, window_start_utc, window_end_utc,

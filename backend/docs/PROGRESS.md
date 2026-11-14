@@ -4,16 +4,18 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Live JPL Horizons ephemeris is wired in (2026-11-14).** `ephemeris.generate()` calls
+  `positions.positions()`; header is `horizons`. `EPHEMERIS_SOURCE=mock` restores the mock
+  (`tests/conftest.py` sets it so tests stay offline). Horizons failures → 502. A 1-day hourly
+  site request takes about 3 s.
+- 2026-11-14: Horizons returns 503 for concurrent requests. `positions._query_azel` is now
+  serialized, retries 503s, and caches identical queries in memory (needed for reliability,
+  an exception to "no caching"). A cold 7-site default load takes about 30 s; repeats are instant.
 - **The mock API is done and tested (2026-11-14).** All v0 endpoints in `docs/API.md` serve
   deterministic synthetic data (`src/services/ephemeris.py`). Every response carries `X-Moon-Flyers-Data-Source: mock`.
   10 pytest tests pass. A 3-month, 7-site `/compare` takes about 0.3 s and returns about 0.7 MB.
 
 ## Next up (backend)
-1. Swap the mock ephemeris for real data. In `services/ephemeris.py`, make `generate()` call the
-   teammate's `positions.positions()` (JPL Horizons). Keep `visible_flags`, `metrics`, `fit` and
-   `intervals`, which already work on any az/el series. Set `ephemeris.DATA_SOURCE` to `"horizons"`.
-   Watch out: `positions()` makes two Horizons calls per site and prints the raw response
-   (remove the `print`). Its time strings have no `Z`.
 2. Verify the site coordinates in `services/catalogue.py` (currently approximate, from the frontend mock
    and memory).
 3. Deferred: LOLA terrain. Add a `HorizonModel` class in `services/horizon.py` and return it from

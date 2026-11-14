@@ -1,23 +1,24 @@
 """Sun and Earth azimuth/elevation series for a site.
 
-Currently MOCK: deterministic synthetic values (no network, not NASA data) that behave
+Live by default: JPL Horizons via `positions.positions()`. Set `EPHEMERIS_SOURCE=mock` for the
+offline mock below: deterministic synthetic values (no network, not NASA data) that behave
 plausibly:
 - the Sun circles the sky once per synodic month; its elevation swings by about the site's
   colatitude, plus a ±1.54° seasonal term, so polar sites sit near the horizon;
 - Earth hangs near the sub-Earth direction and wobbles with libration (±7°), so near-side polar
   sites get intermittent contact and far-side sites never see Earth.
 
-To go live, make `generate()` call `positions.positions()` (JPL Horizons) and return the same
-dict shape. Nothing else needs to change.
 """
 
 import math
+import os
 from datetime import datetime, timedelta, timezone
 
+from .. import positions
 from ..schemas import Site
-from .errors import LimitExceededError
+from .errors import EphemerisUnavailableError, LimitExceededError
 
-DATA_SOURCE = "mock"  # sent as the X-Moon-Flyers-Data-Source header; set to "horizons" when live
+DATA_SOURCE = "mock" if os.getenv("EPHEMERIS_SOURCE", "horizons") == "mock" else "horizons"
 MAX_SAMPLES = 100_000
 
 _J2000 = datetime(2000, 1, 1, 12, tzinfo=timezone.utc)
@@ -58,6 +59,22 @@ def generate(site: Site, start: datetime, end: datetime, step_s: int) -> dict:
     if n > MAX_SAMPLES:
         raise LimitExceededError(f"request needs {n} samples per series; the limit is {MAX_SAMPLES}")
     times = [start + timedelta(seconds=i * step_s) for i in range(n)]
+    if DATA_SOURCE == "horizons":
+        return _horizons(site, times, step_s)
     cols = list(zip(*(_angles(site, t) for t in times)))
     return {"times": times, "sun_az": list(cols[0]), "sun_el": list(cols[1]),
             "earth_az": list(cols[2]), "earth_el": list(cols[3])}
+
+
+def _horizons(site: Site, times: list[datetime], step_s: int) -> dict:
+    utc = [t.astimezone(timezone.utc).replace(tzinfo=None) for t in times]
+    try:
+        p = positions.positions(site.latitude_deg, site.longitude_deg,
+                                utc[0].isoformat(), utc[-1].isoformat(), step_s)
+    except Exception as e:
+        raise EphemerisUnavailableError(f"JPL Horizons request failed: {e}") from e
+    if len(p["time_utc"]) != len(times):
+        raise EphemerisUnavailableError(
+            f"JPL Horizons returned {len(p['time_utc'])} samples, expected {len(times)}")
+    return {"times": times, "sun_az": list(p["sun_azimuth_deg"]), "sun_el": list(p["sun_elevation_deg"]),
+            "earth_az": list(p["earth_azimuth_deg"]), "earth_el": list(p["earth_elevation_deg"])}

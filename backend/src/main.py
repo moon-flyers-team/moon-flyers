@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from .routers import compare, health, landing_windows, sites
 from .services import ephemeris
-from .services.errors import DomainError, LimitExceededError, UnknownSiteError
+from .services.errors import DomainError, EphemerisUnavailableError, LimitExceededError, UnknownSiteError
 
 app = FastAPI(title="Moon Flyers API")
 
@@ -32,7 +32,7 @@ async def mark_data_source(request: Request, call_next):
     return response
 
 
-ERROR_STATUS = {UnknownSiteError: 404, LimitExceededError: 422}
+ERROR_STATUS = {UnknownSiteError: 404, LimitExceededError: 422, EphemerisUnavailableError: 502}
 
 
 @app.exception_handler(DomainError)

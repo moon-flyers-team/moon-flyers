@@ -17,6 +17,7 @@
   --red:       #f44336;
   --orange:    #ff9800;
   --input-bg:  #0a0a14;
+  --tl-inset:  28px; /* side-column width shared by slider grid and tl-wrap padding */
 }
 
 body {
@@ -269,6 +270,102 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* ── Time Slider ─────────────────────────────────────── */
+.ts-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* grid: [--tl-inset wide ◀ cell] [1fr track] [--tl-inset wide ▶ cell]
+   same inset as tl-wrap padding → slider thumb and bar marker align exactly */
+.ts-controls-row {
+  display: grid;
+  grid-template-columns: var(--tl-inset) 1fr var(--tl-inset);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ts-nav-btn {
+  width: 100%;
+  padding: 1px 0;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.ts-custom-track {
+  position: relative;
+  height: 8px;
+  background: var(--border);
+  border-radius: 2px;
+  cursor: col-resize;
+}
+
+.ts-custom-track--disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.ts-thumb {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  background: rgba(230, 230, 255, 1);
+  box-shadow: 0 0 6px 1px rgba(210, 210, 255, 0.85);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: 1px;
+}
+
+/* ticks inset to match the track start/end position */
+.ts-ticks-inset {
+  position: relative;
+  height: 16px;
+  margin: 0 var(--tl-inset);
+}
+
+.ts-tick {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+}
+
+.ts-tick-mark {
+  width: 1px;
+  height: 4px;
+  background: var(--dim);
+}
+
+.ts-tick-label {
+  font-size: 9px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+/* kept for TimeSlider standalone use */
+.ts-wrap { display: flex; flex-direction: column; flex: 1; }
+.ts-date { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.ts-date-label { color: var(--muted); }
+.ts-time { font-family: monospace; font-size: 12px; color: #9090e0; letter-spacing: 0.5px; }
+.ts-track-wrap { position: relative; }
+.ts-range { width: 100%; cursor: pointer; accent-color: var(--comms); }
+.ts-ticks { position: relative; height: 16px; margin-top: auto; }
+
+.ct-slider-cell {
+  font-weight: normal;
+  text-align: left;
+  vertical-align: middle;
+  padding: 5px 9px;
+  min-width: 300px;
+  width: 35%;
+}
+
 .ct-scroll { overflow-x: auto; overflow-y: auto; max-height: 220px; }
 .ct thead { position: sticky; top: 0; z-index: 1; }
 
@@ -346,7 +443,7 @@ body {
 .badge--orange { color: var(--orange); background: rgba(255,152,0,.12); }
 
 /* timeline bars */
-.tl-wrap { min-width: 160px; }
+.tl-wrap { min-width: 160px; padding: 0 var(--tl-inset); }
 
 .tl-ticks {
   position: relative;
