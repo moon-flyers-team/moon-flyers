@@ -17,7 +17,7 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 2. Verify the site coordinates in `services/catalogue.py` (currently approximate, from the frontend mock
    and memory).
 3. Deferred: LOLA terrain. Add a `HorizonModel` class in `services/horizon.py` and return it from
-   `for_site()`; everything else follows.
+   `for_site()` instead of `MockTerrainHorizon`; everything else follows.
 4. Not done (user chose to skip): injecting the ephemeris source via FastAPI `Depends`, so tests
    can stay offline once Horizons is live. Revisit when swapping in Horizons, since the tests will hit the network.
 
@@ -112,6 +112,10 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-14: Mock terrain horizon (`MockTerrainHorizon` in `services/horizon.py`): smooth
+  0–1.5° hills seeded by site coordinates, taller near the pole, and it blocks the Sun/Earth.
+  It was first up to 4°, but then the polar rim sites failed on power for every landing, so it was lowered.
+  The test environment (https://moon-flyers.tail644248.ts.net:8443) serves the mock API since PR #4.
 - 2026-11-14: Modifiability/testability pass. Horizon is now a per-site model (`services/horizon.py`).
   Services raise domain errors (`services/errors.py`) that are mapped to HTTP in `main.py`. Logic
   moved out of routers (timeseries and window metrics into `SiteSeries`, ranking into
