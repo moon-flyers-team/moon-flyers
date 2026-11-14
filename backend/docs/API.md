@@ -25,7 +25,7 @@ The mock returns `X-Moon-Flyers-Data-Source: mock`, exposed through CORS. The fr
 that header from the catalogue response to show a synthetic-data banner; the catalogue JSON
 shape is unchanged. Data is deterministic, varies with site/date, and recomputes visibility
 metrics, fit violations, and timelines from the same generated samples. Custom sites are
-accepted without being stored. Slope remains `null`, and the horizon is flat.
+accepted without being stored. Slope remains `null`. The horizon is mock terrain (smooth 0–1.5° hills, fixed per site), not LOLA data.
 
 There is a 0.4-second artificial analysis delay so loading states are visible. For slower
 responses, use `MOCK_API_DELAY_SECONDS=3 pnpm mock:api`; set it to `0` to disable the delay.
@@ -142,8 +142,8 @@ Response:
 - `timeseries` spans from `window_start_utc` to `window_end_utc + days_on_surface`, at one point
   per `timestep_seconds`. The client filters it to a one-lunar-day window starting at the slider
   position to show Sun and Earth paths without re-fetching.
-- `horizon` is the horizon profile. **For now it's a flat 0° line.** The real terrain profile comes
-  later in the same shape.
+- `horizon` is the horizon profile. **For now it's mock terrain:** smooth hills of 0–1.5°, fixed per
+  site, and the Sun and Earth are blocked by it. Real LOLA terrain comes later in the same shape.
 
 ## 2. `POST /compare`: the comparison table and the timeline bars
 

@@ -52,7 +52,7 @@ Key domain facts:
   - `services/`: **one file per piece of logic**. Services never import FastAPI.
     - `catalogue.py`: predefined sites, `resolve_site`.
     - `ephemeris.py`: Sun/Earth az/el series. **Mock now**; swap to `positions.py` here.
-    - `horizon.py`: `HorizonModel` per site (`for_site`). Flat 0° now; LOLA plugs in here.
+    - `horizon.py`: `HorizonModel` per site (`for_site`). Mock terrain (`MockTerrainHorizon`, 0–1.5°) now; LOLA plugs in here.
     - `visibility.py`: visible flags, intervals, metrics, fit.
     - `analysis.py`: `SiteSeries` (timeseries, analysis, window metrics, timeline), landing candidates.
     - `ranking.py`: best-landing ordering.
