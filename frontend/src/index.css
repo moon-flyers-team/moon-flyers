@@ -367,6 +367,7 @@ body {
   flex-direction: column;
   gap: 3px;
 }
+.tl-tracks--interactive { cursor: col-resize; }
 
 .tl-track {
   position: relative;
@@ -389,8 +390,9 @@ body {
 .tl-marker {
   position: absolute;
   top: 0; bottom: 0;
-  width: 1.5px;
-  background: rgba(190, 190, 210, 0.55);
+  width: 3px;
+  background: rgba(230, 230, 255, 1);
+  box-shadow: 0 0 6px 1px rgba(210, 210, 255, 0.85);
   transform: translateX(-50%);
   pointer-events: none;
 }

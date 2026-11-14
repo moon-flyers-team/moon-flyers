@@ -17,6 +17,7 @@ interface Props {
   onSelect: (id: string) => void;
   landingTime: string;
   onTimeShift: (hours: number) => void;
+  onTimeSeek: (iso: string) => void;
   canShiftBack: boolean;
   canShiftForward: boolean;
   missionStart: string;
@@ -26,7 +27,7 @@ interface Props {
   onRetry: () => void;
 }
 export function ComparisonTable({ sites, results, constraints: c, selectedId, onSelect,
-  landingTime, onTimeShift, canShiftBack, canShiftForward, missionStart, missionEnd,
+  landingTime, onTimeShift, onTimeSeek, canShiftBack, canShiftForward, missionStart, missionEnd,
   loading, error, onRetry }: Props) {
   return <section className="ct-wrap" aria-label="Site comparison" aria-busy={loading}>
     <div className="ct-topbar">
@@ -70,7 +71,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             <NumCell value={metrics?.longest_earth_blackout_hours} warn={warn('longest_earth_blackout_hours')} unit=" h" />
             <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
             <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
-              missionStart={missionStart} missionEnd={missionEnd} landingUtc={landingTime} />
+              missionStart={missionStart} missionEnd={missionEnd} landingUtc={landingTime} onChange={onTimeSeek} />
           </tr>;
         })}
       </tbody>

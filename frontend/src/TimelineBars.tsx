@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import type { TimeWindow } from './types';
 import { formatUtc } from './time';
+
+const STEP_MS = 6 * 3_600_000;
 
 interface Props {
   powerWindows?: TimeWindow[];
@@ -8,6 +10,7 @@ interface Props {
   missionStart: string;
   missionEnd: string;
   landingUtc?: string;
+  onChange?: (iso: string) => void;
 }
 export function normalise(windows: TimeWindow[], missionStart: string, missionEnd: string) {
   const start = Date.parse(missionStart);
@@ -20,9 +23,11 @@ export function normalise(windows: TimeWindow[], missionStart: string, missionEn
     return [{ left: (left - start) / (end - start), width: (right - left) / (end - start), window }];
   });
 }
-export function TimelineBars({ powerWindows, commsWindows, missionStart, missionEnd, landingUtc }: Props) {
+export function TimelineBars({ powerWindows, commsWindows, missionStart, missionEnd, landingUtc, onChange }: Props) {
   const startMs = Date.parse(missionStart);
   const endMs   = Date.parse(missionEnd);
+  const tracksRef = useRef<HTMLDivElement>(null);
+  const dragging  = useRef(false);
 
   const ticks = useMemo(() => {
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
@@ -44,6 +49,23 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
     ? Math.max(0, Math.min(100, (Date.parse(landingUtc) - startMs) / (endMs - startMs) * 100))
     : null;
 
+  function seek(clientX: number) {
+    if (!onChange || !tracksRef.current || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return;
+    const rect = tracksRef.current.getBoundingClientRect();
+    const pct  = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const raw  = startMs + pct * (endMs - startMs);
+    onChange(new Date(Math.round(raw / STEP_MS) * STEP_MS).toISOString());
+  }
+
+  useEffect(() => {
+    if (!onChange) return;
+    function onMove(e: MouseEvent) { if (dragging.current) seek(e.clientX); }
+    function onUp()  { dragging.current = false; }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [onChange, startMs, endMs]);
+
   return (
     <td>
       <div className="tl-wrap">
@@ -52,7 +74,11 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
             <span key={t.label} className="tl-tick-label" style={{ left: `${t.pct}%` }}>{t.label}</span>
           ))}
         </div>
-        <div className="tl-tracks">
+        <div
+          ref={tracksRef}
+          className={`tl-tracks${onChange ? ' tl-tracks--interactive' : ''}`}
+          onMouseDown={e => { dragging.current = true; seek(e.clientX); }}
+        >
           <div className={`tl-track${powerWindows ? '' : ' tl-track--empty'}`}
             role="img" aria-label={`Sun: ${powerWindows ? `${powerWindows.length} visibility windows` : 'data unavailable'}`}>
             {normalise(powerWindows ?? [], missionStart, missionEnd).map((seg, i) => (

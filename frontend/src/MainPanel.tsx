@@ -6,7 +6,7 @@ import { TimeSlider } from './TimeSlider';
 import { api } from './api';
 import { useRequest } from './useRequest';
 import { dateUtc, DAY_MS } from './time';
-import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints } from './types';
+import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints, SiteAnalysisResponse } from './types';
 
 interface Props {
   sites: LandingSite[];
@@ -54,13 +54,18 @@ export function MainPanel({ sites, power, comms, terrain, mission }: Props) {
     }, signal), [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
   const comparison = useRequest(compareRequest);
 
-  const horizonRequest = useMemo(() => validation || !siteId ? null
-    : (signal: AbortSignal) => api.getSiteAnalysis({
-      site: { id: siteId },
-      window_start_utc: dateUtc(mission.windowStart), window_end_utc: dateUtc(mission.windowEnd),
-      constraints,
-    }, signal), [validation, siteId, mission.windowStart, mission.windowEnd, constraints]);
-  const horizon = useRequest(horizonRequest);
+  const horizonsRequest = useMemo(() => validation || !enabled.length ? null
+    : (signal: AbortSignal) => Promise.all(
+        enabled.map(site => api.getSiteAnalysis({
+          site: { id: site.id },
+          window_start_utc: dateUtc(mission.windowStart), window_end_utc: dateUtc(mission.windowEnd),
+          constraints,
+        }, signal))
+      ).then(results => new Map<string, SiteAnalysisResponse>(
+        enabled.map((site, i) => [site.id, results[i]])
+      )),
+    [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
+  const horizons = useRequest(horizonsRequest);
   const timelineEnd = validDates && validConstraints
     ? new Date(end + mission.daysOnSurface * DAY_MS).toISOString() : '';
 
@@ -91,13 +96,13 @@ export function MainPanel({ sites, power, comms, terrain, mission }: Props) {
         />
         <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} landingTime={landingUtc}
-          onTimeShift={shiftTime} canShiftBack={canShift(-6)} canShiftForward={canShift(6)}
+          onTimeShift={shiftTime} onTimeSeek={setLandingUtc} canShiftBack={canShift(-6)} canShiftForward={canShift(6)}
           missionStart={dateUtc(mission.windowStart)} missionEnd={timelineEnd}
           loading={comparison.loading} error={comparison.error} onRetry={comparison.retry} />
         <div className="bottom-row">
-          <HorizonChart key={siteId} siteName={selectedSite?.name ?? '—'}
-            analysis={horizon.data?.analysis} landingUtc={landingUtc}
-            loading={horizon.loading} error={horizon.error} onRetry={horizon.retry} />
+          <HorizonChart siteName={selectedSite?.name ?? '—'}
+            analysis={siteId ? horizons.data?.get(siteId)?.analysis : undefined} landingUtc={landingUtc}
+            loading={horizons.loading} error={horizons.error} onRetry={horizons.retry} />
         </div>
         {siteId && !validation && <LandingWindows key={JSON.stringify([siteId, mission.windowStart, mission.windowEnd, constraints])}
           siteId={siteId} siteName={selectedSite.name} windowStart={mission.windowStart}
