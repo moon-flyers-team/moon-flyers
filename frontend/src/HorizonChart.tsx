@@ -33,6 +33,15 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
       return time >= start && time <= end;
     }).sort((a, b) => Date.parse(a.time_utc) - Date.parse(b.time_utc));
   }, [analysis, landingUtc]);
+
+  const trail = useMemo(() => {
+    const start = Date.parse(landingUtc);
+    return (analysis?.timeseries ?? [])
+      .filter(p => Date.parse(p.time_utc) < start)
+      .sort((a, b) => Date.parse(b.time_utc) - Date.parse(a.time_utc))
+      .slice(0, 8);
+  }, [analysis, landingUtc]);
+
   const current = samples[0];
   const terrain = analysis?.horizon;
   const elevations = samples.flatMap(point => [point.sun_elevation_deg, point.earth_elevation_deg]);
@@ -54,6 +63,20 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
     {error ? <div className="request-error" role="alert">Horizon request failed: {error} <button className="ct-btn" onClick={onRetry}>Retry horizon</button></div>
       : status && <p className="request-status" role="status">{status}</p>}
     <svg viewBox={`0 0 ${VW} ${VH}`} className="hz-svg" role="img" aria-label={`Sun and Earth azimuth and elevation at ${siteName}${current ? `, ${formatUtc(current.time_utc)}` : ''}`}>
+      <defs>
+        <linearGradient id="fade-sun" x1={ML} y1="0" x2={ML + CW} y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#f5a623" stopOpacity="0" />
+          <stop offset="8%"   stopColor="#f5a623" stopOpacity="1" />
+          <stop offset="92%"  stopColor="#f5a623" stopOpacity="1" />
+          <stop offset="100%" stopColor="#f5a623" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="fade-earth" x1={ML} y1="0" x2={ML + CW} y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0%"   stopColor="#4fc3f7" stopOpacity="0" />
+          <stop offset="8%"   stopColor="#4fc3f7" stopOpacity="1" />
+          <stop offset="92%"  stopColor="#4fc3f7" stopOpacity="1" />
+          <stop offset="100%" stopColor="#4fc3f7" stopOpacity="0" />
+        </linearGradient>
+      </defs>
       <rect x={ML} y={MT} width={CW} height={CH} fill="#12121e" />
       {Array.from({ length: 6 }, (_, i) => min + i * (max - min) / 5).map(el => <g key={el}>
         <line x1={ML} y1={y(el)} x2={ML + CW} y2={y(el)} stroke="#262640" />
@@ -63,8 +86,15 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
       {COMPASS.map((label, i) => <text key={i} x={ML + i / 4 * CW} y={VH - 8}
         textAnchor={i === 0 ? 'start' : i === 4 ? 'end' : 'middle'} fill="#8989af" fontSize={11}>{label}</text>)}
       {terrainPoints.length > 0 && <path d={`M ${ML},${MT + CH} L ${terrainPoints.join(' L ')} L ${ML + CW},${MT + CH} Z`} fill="#303040" />}
-      <path d={skyPath(samples, 'sun', y)} fill="none" stroke="#f5a623" strokeWidth={2} opacity={0.65} />
-      <path d={skyPath(samples, 'earth', y)} fill="none" stroke="#4fc3f7" strokeWidth={2} opacity={0.65} />
+      <path d={skyPath(samples, 'sun', y)} fill="none" stroke="url(#fade-sun)" strokeWidth={2} opacity={0.75} />
+      <path d={skyPath(samples, 'earth', y)} fill="none" stroke="url(#fade-earth)" strokeWidth={2} opacity={0.75} />
+      {trail.map((point, i) => (['sun', 'earth'] as const).map(body => (
+        <circle key={`${body}-trail-${i}`}
+          cx={azToX(point[`${body}_azimuth_deg`])} cy={y(point[`${body}_elevation_deg`])}
+          r={Math.max(1.5, 4.5 - i * 0.43)}
+          fill={body === 'sun' ? '#f5a623' : '#4fc3f7'}
+          opacity={Math.max(0.03, 0.58 - i * 0.08)} />
+      )))}
       {current && (['sun', 'earth'] as const).map(body => <circle key={body}
         cx={azToX(current[`${body}_azimuth_deg`])} cy={y(current[`${body}_elevation_deg`])} r={6}
         fill={current[`${body}_visible`] ? body === 'sun' ? '#f5a623' : '#4fc3f7' : '#12121e'}
