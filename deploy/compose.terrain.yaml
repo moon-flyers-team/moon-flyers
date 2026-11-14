@@ -1,0 +1,12 @@
+# Optional, release-snapshotted overlay. No public ports or frontend mounts.
+services:
+  backend:
+    environment:
+      MOON_FLYERS_DEM_DIR: /data/lola
+    volumes:
+      - type: bind
+        source: ${LOLA_DATA_DIR:?Set LOLA_DATA_DIR to a verified dataset dem directory}
+        target: /data/lola
+        read_only: true
+        bind:
+          create_host_path: false

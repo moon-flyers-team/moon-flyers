@@ -96,6 +96,62 @@ Tags do not change the test deployment. Do not move published tags; create a new
 
 Deployments are serialized per environment and also protected by a host-side lock. A test build superseded by a newer `main` commit fails before connecting to the tailnet, preventing out-of-order builds from publishing stale code. Different environments can deploy concurrently. This is a small single-host Compose setup, not a zero-downtime release system: brief interruptions are possible during replacement.
 
+## 5. Optional: LOLA terrain dataset
+
+The backend can additionally validate a **host-prepared** LOLA dataset. It is opt-in per
+environment, mounted read-only, and never baked into images or GitHub Actions artifacts.
+**The horizon calculation is still flat**, so mounting data changes no prediction yet; it makes
+validated terrain available for the horizon work that follows.
+
+### Prepare on Beelink (no sudo beyond installing packages)
+
+```sh
+sudo apt install -y python3-rasterio python3-gdal gdal-bin curl
+python3 backend/tools/prepare_lola.py prepare
+python3 backend/tools/prepare_lola.py verify
+```
+
+Run it from a checkout of this branch on the Beelink; the tool is not part of release bundles.
+It downloads the eight official LOLA GDR JP2 products (~2.7 GB) from
+`imbrium.mit.edu`, converts them to DEFLATE COGs, and writes
+`~/moon-flyers/data/lola/v1/dem/{8 rasters,manifest.json}`. Sources, PDS labels and the
+archives' AUX files stay in `source/` and `metadata/` for re-verification and are not served.
+
+Preparation is safe to interrupt and to re-run: downloads resume, a converted raster is
+reused only after its metadata and sampled pixels match the source, and `manifest.json` is
+written last. Budget ~25 GB free while preparing. The conversion runs at low priority with two
+`nice -n 10` threads, but disk I/O can still be felt by the live site.
+
+`prepare` refuses to proceed when it finds:
+
+- a missing GDAL driver (`JP2OpenJPEG`, `GTiff`, `COG`) or too little free space,
+- a download whose byte size differs from the archive index,
+- a raster whose CRS, grid origin, pixel size, height scale or decoded samples are wrong,
+- a polar raster that disagrees with the independent global product by more than 1 km at the
+  same lon/lat (the placement check that metadata alone cannot give you).
+
+### Enable per environment
+
+The path is recorded per environment, outside release directories:
+
+```sh
+printf '%s\n' "$HOME/moon-flyers/data/lola/v1/dem" > "$HOME/moon-flyers/test/terrain-directory"
+bash ~/moon-flyers/test/current/deploy.sh test
+```
+
+Use `production` for the production environment. `deploy.sh` then snapshots `LOLA_DATA_DIR` into
+that release's `.env`, adds `compose.terrain.yaml`, and mounts the directory read-only at
+`/data/lola`. Because each release records its own path, a rollback keeps using the path that
+release was deployed with.
+
+Disable it by removing `terrain-directory` and redeploying. An invalid or unreadable path,
+a relative path, a path containing whitespace, or a release bundle without
+`compose.terrain.yaml` aborts **before** Docker is touched, so the running site keeps working.
+
+Startup validates the manifest, file sizes, metadata and a few decoded samples (not full
+checksums) and refuses to serve if they fail; the deployment then rolls back as usual. Look for
+`LOLA dataset validated at /data/lola` in the backend logs.
+
 ## Operations
 
 ### OIDC token exchange returns 403
