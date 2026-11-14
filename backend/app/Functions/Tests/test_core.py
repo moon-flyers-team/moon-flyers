@@ -1,8 +1,18 @@
 import unittest
-from physics.visibility import calculate_visibility, calculate_visibility_margin
-from physics.windows import extract_visibility_windows
-from physics.metrics import calculate_metrics
-from physics.suitability import evaluate_fit
+import sys
+from pathlib import Path
+
+# Add backend/app to Python's module search path
+APP_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(APP_DIR))
+
+from Functions.visibility import (
+    calculate_visibility,
+    calculate_visibility_margin
+)
+from Functions.windows import extract_visibility_windows
+from Functions.metrics import calculate_metrics
+from Functions.suitability import evaluate_fit
 
 H_AZ = [0, 90, 180, 270]
 H_EL = [0, 0, 0, 0]
