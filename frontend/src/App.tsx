@@ -44,6 +44,13 @@ export default function App() {
     setSites(previous => [...previous, { ...coordinates, id: `custom_${crypto.randomUUID()}`,
       name, group: 'Custom map sites', custom: true, enabled: true }]);
   }
+  function renameSite(id: string, name: string) {
+    if (!name.trim()) return;
+    setSites(previous => previous.map(site => site.id === id && site.custom ? { ...site, name: name.trim() } : site));
+  }
+  function deleteSite(id: string) {
+    setSites(previous => previous.filter(site => site.id !== id || !site.custom));
+  }
 
   return (
     <div className="app-shell">
@@ -72,6 +79,8 @@ export default function App() {
         />
         <MainPanel
           onSiteAdd={addSite}
+          onSiteRename={renameSite}
+          onSiteDelete={deleteSite}
           sites={sites}
           power={power}
           comms={comms}

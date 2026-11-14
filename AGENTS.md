@@ -203,8 +203,21 @@ decisions change.
 
 - The map uses spherical lunar south-polar stereographic coordinates, radius 1,737,400 m,
   central meridian 0°, with 0°E at the top. Limit the surface and cursor picks to 80°S–90°S.
-  Zoom is centred on the pole; Reset view restores the entire cap. Out-of-cap sites remain
+  Zoom follows the cursor; right/middle drag or two-finger scrolling pans. Reset view restores
+  the entire cap. Out-of-cap sites remain
   in the sidebar and Profiles and are counted in a map notice.
+- `frontend/src/map/navigation.ts` owns camera bounds (1×–16×), cursor-anchored zoom and
+  wheel classification. Smooth pixel wheel deltas pan; coarse vertical/line wheel ticks zoom.
+  Ctrl+wheel pinches zoom, Safari gesture events are supported, and Shift+scroll explicitly
+  pans. Browsers expose no reliable mouse/trackpad device identifier, so wheel classification
+  is heuristic; keep the Shift fallback and on-map instructions. Non-passive wheel handlers
+  prevent browser/page zoom over the surface. Pointer capture keeps right-drag working
+  outside the map; context menus are suppressed only on the map.
+- Default site markers are red; custom markers are cyan and have keyboard-accessible
+  edit tooltips. App owns rename/delete callbacks and guards them to custom sites only.
+  Renaming/deleting updates Sidebar and Profiles too; coordinates and local IDs stay stable
+  on rename. Both add/edit tooltips dismiss when navigating the map. Unnamed feature
+  readouts are blank, with a fixed-width coordinate field.
 - The 36 local PNGs retain NASA WMTS level-4 tile origins and scale. Source, tile dimensions,
   projection and catalogue provenance are in `frontend/public/maps/south-pole/README.md`.
   The basemap is observational imagery with fixed illumination, not a mission simulation.

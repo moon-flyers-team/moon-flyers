@@ -516,6 +516,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); out
 .map-zoom .ct-btn { min-height: 28px; }
 .map-viewport { position: relative; border: 1px solid var(--border-hi); border-radius: 6px; overflow: hidden; background: radial-gradient(ellipse at center, #191b29, #0a0d17 75%); }
 .polar-map { display: block; width: 100%; height: min(62dvh, 720px); min-height: 340px; cursor: crosshair; }
+.polar-map--panning { cursor: grabbing; user-select: none; }
 .map-grid { fill: none; stroke: #dce2f5; opacity: .27; pointer-events: none; }
 .map-grid circle, .map-grid line { vector-effect: non-scaling-stroke; stroke-width: .7; }
 .map-grid-labels, .map-feature-label, .map-compass { fill: #e1e5ed; pointer-events: none; paint-order: stroke; stroke: #111521; stroke-width: 2px; stroke-linejoin: round; }
@@ -524,6 +525,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); out
 .map-waypoint { pointer-events: none; }
 .map-waypoint circle { fill: #4fc3f7; stroke: #0b1020; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .map-waypoint text { fill: #b6ecff; paint-order: stroke; stroke: #101523; stroke-width: 2px; stroke-linejoin: round; }
+.map-waypoint--default circle { fill: #ff5252; }
+.map-waypoint--default text { fill: #ffb3b3; }
+.map-waypoint--custom { pointer-events: auto; cursor: pointer; }
+.map-waypoint .map-waypoint-hit { fill: transparent; stroke: none; }
+.map-waypoint--custom:focus-visible { outline: none; }
+.map-waypoint--custom:focus-visible circle:not(.map-waypoint-hit) { stroke: white; stroke-width: 2.5; }
+.map-site-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: #aeb7cc; }
+.map-site-key::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+.map-site-key--default::before { background: #ff5252; }
+.map-site-key--custom::before { background: #4fc3f7; }
 .map-waypoint--disabled { opacity: .45; }
 .map-waypoint--disabled circle { fill: none; stroke: #a3adb9; }
 .map-pick { fill: none; stroke: var(--power); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
@@ -537,6 +548,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); out
 .map-tooltip input { margin-top: 4px; }
 .map-tooltip .ct-btn { padding: 6px 9px; margin-right: 8px; }
 .map-tooltip .map-add-button { background: #17384b; border-color: #38769a; }
+.map-tooltip .map-delete-button { align-self: flex-start; color: #ffb3ab; border-color: #86483f; }
 .map-tooltip small, .map-legend small { font-size: 10px; color: #9292b3; }
 .map-announcement:empty { display: none; }
 .map-announcement { color: #9ed6b9; font-size: 12px; }

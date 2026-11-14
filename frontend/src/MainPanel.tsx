@@ -17,9 +17,11 @@ interface Props {
   terrain: TerrainParams;
   mission: MissionParams;
   onSiteAdd: (coordinates: Coordinates, name: string) => void;
+  onSiteRename: (id: string, name: string) => void;
+  onSiteDelete: (id: string) => void;
 }
 
-export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd }: Props) {
+export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
   const [tab, setTab] = useState<'profiles' | 'map'>('profiles');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [landingUtc, setLandingUtc] = useState(`${mission.windowStart}T06:00:00Z`);
@@ -126,7 +128,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd }: 
       </div>
       <div className="main-body map-body" id="panel-map" role="tabpanel" aria-labelledby="tab-map" hidden={tab !== 'map'}>
         <MapPanel sites={sites} constraints={constraints} mission={mission} active={tab === 'map'}
-          validation={validation} onSiteAdd={onSiteAdd} />
+          validation={validation} onSiteAdd={onSiteAdd} onSiteRename={onSiteRename} onSiteDelete={onSiteDelete} />
       </div>
     </main>
   );

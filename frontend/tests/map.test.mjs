@@ -4,7 +4,7 @@ import { createServer } from 'vite';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-let server, projection, validateHeatmaps, rasterPixels, api, siteReference, MapPanel, MainPanel;
+let server, projection, validateHeatmaps, rasterPixels, api, siteReference, MapPanel, MainPanel, navigation;
 const nativeFetch = globalThis.fetch;
 const constraints = { days_on_surface: 14, horizon_clearance_deg: 0.3, min_sun_visible_pct: 60,
   max_darkness_hours: 96, min_earth_visible_pct: 45, max_earth_blackout_hours: 240, max_slope_deg: 8 };
@@ -14,6 +14,7 @@ before(async () => {
   server = await createServer({ optimizeDeps: { noDiscovery: true, include: [] },
     server: { middlewareMode: true, watch: null, hmr: false, ws: false }, appType: 'custom' });
   projection = await server.ssrLoadModule('/src/map/projection.ts');
+  navigation = await server.ssrLoadModule('/src/map/navigation.ts');
   ({ validateHeatmaps, rasterPixels } = await server.ssrLoadModule('/src/map/heatmaps.ts'));
   ({ api, siteReference } = await server.ssrLoadModule('/src/api.ts'));
   ({ MapPanel } = await server.ssrLoadModule('/src/MapPanel.tsx'));
@@ -102,7 +103,7 @@ test('heatmap colors preserve no-data transparency and handle a constant-valued 
 test('map renders the polar grid, real local basemap tiles, disabled and custom waypoints, and fixed cursor output', () => {
   const sites=[custom,{...custom,id:'disabled',name:'Disabled site',enabled:false},
     {...custom,id:'outside',name:'Outside cap',latitude_deg:-60}];
-  const html=renderToStaticMarkup(React.createElement(MapPanel,{sites,constraints,mission,active:false,validation:'',onSiteAdd(){}}));
+  const html=renderToStaticMarkup(React.createElement(MapPanel,{sites,constraints,mission,active:false,validation:'',onSiteAdd(){},onSiteRename(){},onSiteDelete(){}}));
   assert.equal((html.match(/href="\/maps\/south-pole\//g)??[]).length,36);
   assert.match(html,/map-grid/);
   assert.match(html,/Shackleton/);
@@ -110,13 +111,43 @@ test('map renders the polar grid, real local basemap tiles, disabled and custom 
   assert.match(html,/map-waypoint--disabled/);
   assert.match(html,/1 sidebar site lies outside/);
   assert.match(html,/class="map-coordinates"/);
+  assert.match(html,/map-waypoint--custom/);
+  assert.match(html,/aria-label="Edit site A map site"/);
+  assert.doesNotMatch(html,/No named feature/);
   assert.doesNotMatch(html,/NaN|Infinity/);
 });
 
 test('Profiles remains the initial tab and Map has its own accessible tab panel', () => {
   const html=renderToStaticMarkup(React.createElement(MainPanel,{sites:[custom],mission,
-    power:{minSunlight:60,maxNight:96},comms:{minEarthContact:45,maxCommsGap:240},terrain:{maxSlope:8},onSiteAdd(){}}));
+    power:{minSunlight:60,maxNight:96},comms:{minEarthContact:45,maxCommsGap:240},terrain:{maxSlope:8},onSiteAdd(){},onSiteRename(){},onSiteDelete(){}}));
   assert.match(html,/id="tab-profiles" role="tab" aria-selected="true"/);
   assert.match(html,/id="panel-map" role="tabpanel" aria-labelledby="tab-map" hidden/);
   assert.match(html,/id="panel-profiles" role="tabpanel" aria-labelledby="tab-profiles"/);
+});
+
+
+test('zoom preserves the point under the cursor and constrains the camera to the cap viewport', () => {
+  const {INITIAL_CAMERA,zoomAt,panBy,constrainCamera}=navigation;
+  const anchor={x:400,y:300};
+  const zoomed=zoomAt(INITIAL_CAMERA,2,anchor);
+  assert.equal(zoomed.zoom,2);
+  assert.equal((anchor.x-zoomed.x)*zoomed.zoom,(anchor.x-INITIAL_CAMERA.x)*INITIAL_CAMERA.zoom);
+  assert.equal((anchor.y-zoomed.y)*zoomed.zoom,(anchor.y-INITIAL_CAMERA.y)*INITIAL_CAMERA.zoom);
+  assert.deepEqual(panBy(INITIAL_CAMERA,100,-100),INITIAL_CAMERA);
+  assert.deepEqual(constrainCamera({zoom:2,x:-1000,y:1000}),{zoom:2,x:175,y:525});
+  assert.equal(zoomAt(zoomed,100,anchor).zoom,16);
+  const edge=constrainCamera({zoom:16,x:-10000,y:10000});
+  assert.ok(projection.unproject(edge), 'panning cannot lose the lunar surface');
+  assert.deepEqual(zoomAt(zoomed,0.01,anchor),INITIAL_CAMERA);
+});
+
+test('wheel gestures distinguish pinch, smooth pan, mouse ticks and explicit Shift-pan', () => {
+  const {wheelAction}=navigation;
+  const event={deltaX:0,deltaY:100,deltaMode:0,ctrlKey:false,metaKey:false,shiftKey:false};
+  assert.equal(wheelAction(event),'zoom');
+  assert.equal(wheelAction({...event,deltaY:12.5}),'pan');
+  assert.equal(wheelAction({...event,deltaX:45}),'pan');
+  assert.equal(wheelAction({...event,deltaY:2,deltaMode:1}),'zoom');
+  assert.equal(wheelAction({...event,deltaY:-12,ctrlKey:true}),'zoom');
+  assert.equal(wheelAction({...event,shiftKey:true}),'pan');
 });

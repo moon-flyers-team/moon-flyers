@@ -7,6 +7,7 @@ import { CAP_RADIUS_M, distanceMetres, MAP_CENTER, MAP_RADIUS, METRES_TO_SVG, NO
 import type { Coordinates, MapPoint } from './map/projection';
 import { HEATMAPS, rasterPixels, validateHeatmaps } from './map/heatmaps';
 import features from './map/features.json';
+import { INITIAL_CAMERA, MAX_ZOOM, panBy, wheelAction, zoomAt } from './map/navigation';
 
 interface Props {
   sites: LandingSite[];
@@ -15,6 +16,8 @@ interface Props {
   active: boolean;
   validation: string;
   onSiteAdd: (coordinates: Coordinates, name: string) => void;
+  onSiteRename: (id: string, name: string) => void;
+  onSiteDelete: (id: string) => void;
 }
 function featureAt(coordinates: Coordinates) {
   // Gazetteer diameters give approximate circular footprints, not surveyed boundaries.
@@ -53,16 +56,20 @@ function HeatmapImages({ data, opacity }: { data?: MapHeatmapsResponse; opacity:
     width={2 * MAP_RADIUS} height={2 * MAP_RADIUS} preserveAspectRatio="none" />)}</g>;
 }
 
-export function MapPanel({ sites, constraints, mission, active, validation, onSiteAdd }: Props) {
+export function MapPanel({ sites, constraints, mission, active, validation, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const [criteria, setCriteria] = useState<HeatmapCriterion[]>([]);
   const [opacity, setOpacity] = useState(0.65);
-  const [zoom, setZoom] = useState(1);
+  const [camera, setCamera] = useState(INITIAL_CAMERA);
+  const { zoom } = camera;
+  const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
+  const [panning, setPanning] = useState(false);
   const [hover, setHover] = useState<Coordinates | null>(null);
-  const [selection, setSelection] = useState<{ coordinates: Coordinates; left: number; top: number } | null>(null);
+  const [selection, setSelection] = useState<{ coordinates: Coordinates; left: number; top: number; siteId?: string } | null>(null);
+  const editingSite = selection?.siteId ? sites.find(site => site.id === selection.siteId && site.custom) : undefined;
   const [name, setName] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const [imageError, setImageError] = useState(false);
@@ -82,12 +89,61 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
 
   useEffect(() => { if (selection) nameRef.current?.focus(); }, [selection]);
   useEffect(() => { if (!active) { setSelection(null); setHover(null); } }, [active]);
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || !active) return;
+    let lastPan = -Infinity;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const inverse = matrix.inverse();
+      const anchor = new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse);
+      const pixelScale = Math.hypot(inverse.a, inverse.b);
+      const multiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? svg.clientHeight : 1;
+      const dx = event.deltaX * multiplier, dy = event.deltaY * multiplier;
+      const forceZoom = event.ctrlKey || event.metaKey;
+      const action = !forceZoom && event.timeStamp - lastPan < 180 ? 'pan' : wheelAction(event);
+      if (action === 'pan') {
+        lastPan = event.timeStamp;
+        setCamera(previous => panBy(previous, dx * pixelScale, dy * pixelScale));
+      } else {
+        setCamera(previous => zoomAt(previous, Math.exp(-dy * (forceZoom ? 0.01 : 0.002)), anchor));
+      }
+      setSelection(null);
+      setHover(null);
+    };
+    // Native, non-passive listener prevents page scrolling/browser zoom over the map.
+    svg.addEventListener('wheel', wheel, { passive: false });
+    // Safari exposes trackpad pinch through GestureEvents rather than Ctrl+wheel.
+    let gestureScale = 1;
+    const gestureStart = (event: Event) => { event.preventDefault(); gestureScale = 1; };
+    const gestureChange = (event: Event) => {
+      event.preventDefault();
+      const gesture = event as Event & { scale: number; clientX: number; clientY: number };
+      const matrix = svg.getScreenCTM();
+      if (!matrix || !Number.isFinite(gesture.scale) || gesture.scale <= 0) return;
+      const anchor = new DOMPoint(gesture.clientX, gesture.clientY).matrixTransform(matrix.inverse());
+      const factor = gesture.scale / gestureScale;
+      gestureScale = gesture.scale;
+      setCamera(previous => zoomAt(previous, factor, anchor));
+      setSelection(null);
+      setHover(null);
+    };
+    svg.addEventListener('gesturestart', gestureStart, { passive: false });
+    svg.addEventListener('gesturechange', gestureChange, { passive: false });
+    return () => {
+      svg.removeEventListener('wheel', wheel);
+      svg.removeEventListener('gesturestart', gestureStart);
+      svg.removeEventListener('gesturechange', gestureChange);
+    };
+  }, [active]);
 
-  function choose(coordinates: Coordinates, clientX?: number, clientY?: number) {
+  function choose(coordinates: Coordinates, clientX?: number, clientY?: number, site?: LandingSite) {
     const rect = viewportRef.current?.getBoundingClientRect();
     setSelection({ coordinates, left: rect && clientX !== undefined ? 100 * (clientX - rect.left) / rect.width : 50,
-      top: rect && clientY !== undefined ? 100 * (clientY - rect.top) / rect.height : 40 });
-    setName(featureAt(coordinates)?.name ?? 'Custom landing site');
+      top: rect && clientY !== undefined ? 100 * (clientY - rect.top) / rect.height : 40, siteId: site?.id });
+    setName(site?.name ?? featureAt(coordinates)?.name ?? 'Custom landing site');
     setAnnouncement('');
   }
   function pointerCoordinates(clientX: number, clientY: number) {
@@ -97,6 +153,7 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
     return unproject(point);
   }
   function closeSelection() { setSelection(null); svgRef.current?.focus(); }
+  function stopPanning() { drag.current = null; setPanning(false); }
 
   return <section className="map-panel" aria-label="Lunar south pole map">
     <div className="map-toolbar" role="group" aria-label="Heatmap overlays">
@@ -114,10 +171,10 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
     </div>
     <div className="map-heading"><div><h2>South polar cap</h2><p>80°S–90°S · Polar stereographic · East-positive longitude</p></div>
       <div className="map-zoom" role="group" aria-label="Map zoom">
-        <button className="ct-btn" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => { setZoom(value => value / 2); setSelection(null); }}>−</button>
-        <span>{zoom}×</span>
-        <button className="ct-btn" aria-label="Zoom in" disabled={zoom >= 8} onClick={() => { setZoom(value => value * 2); setSelection(null); }}>+</button>
-        <button className="ct-btn" onClick={() => { setZoom(1); setSelection(null); }}>Reset view</button>
+        <button className="ct-btn" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => { setCamera(previous => zoomAt(previous, 0.5, previous)); setSelection(null); }}>−</button>
+        <span>{Number(zoom.toFixed(1))}×</span>
+        <button className="ct-btn" aria-label="Zoom in" disabled={zoom >= MAX_ZOOM} onClick={() => { setCamera(previous => zoomAt(previous, 2, previous)); setSelection(null); }}>+</button>
+        <button className="ct-btn" onClick={() => { setCamera(INITIAL_CAMERA); setSelection(null); }}>Reset view</button>
       </div>
     </div>
     {validation && <p className="request-error" role="alert">{validation}</p>}
@@ -127,14 +184,38 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
       {' '}<button className="ct-btn" onClick={heatmaps.retry}>Retry overlays</button>
     </p>}
     {!criteria.length && <p className="map-hint">Click the surface to add a site. Enable a heatmap to request mission-dependent data.</p>}
+    <p className="map-hint">Trackpad: pinch to zoom · two-finger scroll to pan. Mouse: wheel to zoom · right-drag to pan. Shift+scroll always pans.</p>
+    <div className="map-site-legend"><span className="map-site-key map-site-key--default">Default sites</span><span className="map-site-key map-site-key--custom">Your sites · click to edit</span></div>
     {imageError && <p className="request-error" role="alert">Some local basemap tiles could not load. Coordinates and grid remain available.</p>}
     <div className="map-viewport" ref={viewportRef}>
-      <svg ref={svgRef} className="polar-map" viewBox={`${MAP_CENTER - halfView} ${MAP_CENTER - halfView} ${2 * halfView} ${2 * halfView}`}
+      <svg ref={svgRef} className={`polar-map${panning ? ' polar-map--panning' : ''}`} viewBox={`${camera.x - halfView} ${camera.y - halfView} ${2 * halfView} ${2 * halfView}`}
         tabIndex={0} role="img" aria-label="Lunar south-pole surface map. Arrow keys move the cursor; Enter opens Add site; Escape closes it."
-        onFocus={() => { setKeyboardFocus(true); setHover(unproject(keyboardPoint)); }} onBlur={() => setKeyboardFocus(false)}
-        onPointerMove={event => setHover(pointerCoordinates(event.clientX, event.clientY))}
+        onFocus={event => { if (event.target === event.currentTarget) { setKeyboardFocus(true); setKeyboardPoint({x: camera.x, y: camera.y}); setHover(unproject(camera)); } }} onBlur={() => setKeyboardFocus(false)}
+        onContextMenu={event => event.preventDefault()}
+        onPointerDown={event => {
+          if (event.button !== 2 && event.button !== 1) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+          setPanning(true);
+          setSelection(null);
+        }}
+        onPointerMove={event => {
+          const previous = drag.current;
+          if (previous && previous.pointerId === event.pointerId) {
+            const inverse = event.currentTarget.getScreenCTM()?.inverse();
+            if (!inverse) return;
+            const from = new DOMPoint(previous.x, previous.y).matrixTransform(inverse);
+            const to = new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse);
+            setCamera(value => panBy(value, from.x - to.x, from.y - to.y));
+            drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+            setHover(null);
+          } else setHover(pointerCoordinates(event.clientX, event.clientY));
+        }}
+        onPointerUp={event => { if (drag.current?.pointerId === event.pointerId) { event.currentTarget.releasePointerCapture(event.pointerId); stopPanning(); } }}
+        onPointerCancel={stopPanning} onLostPointerCapture={stopPanning}
         onPointerLeave={() => setHover(null)}
-        onClick={event => { const coordinates = pointerCoordinates(event.clientX, event.clientY); if (coordinates) choose(coordinates, event.clientX, event.clientY); }}
+        onClick={event => { if (event.button !== 0) return; const coordinates = pointerCoordinates(event.clientX, event.clientY); if (coordinates) choose(coordinates, event.clientX, event.clientY); }}
         onKeyDown={event => {
           if (event.key === 'Escape') { setSelection(null); return; }
           if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); const coordinates = unproject(keyboardPoint); if (coordinates) choose(coordinates); return; }
@@ -169,8 +250,13 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
           })}
           {sites.filter(site => !outside.includes(site)).map(site => {
             const point = project(site);
-            return <g key={site.id} className={`map-waypoint ${site.enabled ? '' : 'map-waypoint--disabled'}`}>
+            return <g key={site.id} className={`map-waypoint ${site.custom ? 'map-waypoint--custom' : 'map-waypoint--default'} ${site.enabled ? '' : 'map-waypoint--disabled'}`}
+              role={site.custom ? 'button' : undefined} tabIndex={site.custom ? 0 : undefined}
+              aria-label={site.custom ? `Edit site ${site.name}` : undefined}
+              onClick={site.custom ? event => { if (event.button !== 0) return; event.stopPropagation(); choose(site, event.clientX, event.clientY, site); } : undefined}
+              onKeyDown={site.custom ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); choose(site, undefined, undefined, site); } } : undefined}>
               <title>{`${site.name}: ${formatCoordinates(site)}${site.enabled ? '' : ' (disabled)'}`}</title>
+              {site.custom && <circle className="map-waypoint-hit" cx={point.x} cy={point.y} r={11 / zoom} />}
               <circle cx={point.x} cy={point.y} r={5 / zoom} />
               <text x={point.x + 8 / zoom} y={point.y - 8 / zoom} fontSize={10 / zoom}>{site.name}</text>
             </g>;
@@ -182,29 +268,33 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
           x={MAP_CENTER + Math.sin(i * Math.PI / 2) * 322} y={MAP_CENTER - Math.cos(i * Math.PI / 2) * 322}
           textAnchor="middle" dominantBaseline="middle" className="map-compass">{label}</text>)}
       </svg>
-      {selection && <form className="map-tooltip" role="dialog" aria-modal="false" aria-label="Add map location to sites"
-        style={{ left: `clamp(12px, ${selection.left}%, calc(100% - 272px))`, top: `clamp(12px, ${selection.top}%, calc(100% - 215px))` }}
+      {selection && <form className="map-tooltip" role="dialog" aria-modal="false" aria-label={editingSite ? 'Edit custom site' : 'Add map location to sites'}
+        style={{ left: `clamp(12px, ${selection.left}%, calc(100% - 272px))`, top: `clamp(12px, ${selection.top}%, calc(100% - ${editingSite ? 255 : 215}px))` }}
         onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeSelection(); } }}
         onSubmit={event => {
           event.preventDefault();
           if (!name.trim()) return;
           const coordinates = { latitude_deg: Number(selection.coordinates.latitude_deg.toFixed(4)),
             longitude_deg: Number(selection.coordinates.longitude_deg.toFixed(4)) };
-          onSiteAdd(coordinates, name.trim());
-          setAnnouncement(`Added ${name.trim()} to Sites. Custom sites are kept for this session.`);
+          if (editingSite) onSiteRename(editingSite.id, name.trim());
+          else onSiteAdd(coordinates, name.trim());
+          setAnnouncement(`${editingSite ? 'Renamed site to' : 'Added'} ${name.trim()}. Custom sites are kept for this session.`);
           closeSelection();
         }}>
-        <strong>Add landing site</strong>
+        <strong>{editingSite ? 'Edit landing site' : 'Add landing site'}</strong>
         <p>{formatCoordinates(selection.coordinates)}</p>
         <label>Site name<input ref={nameRef} className="sb-input" value={name} maxLength={80} required onChange={event => setName(event.target.value)} /></label>
-        <div><button className="ct-btn map-add-button" type="submit" disabled={!name.trim()}>Add to sites</button>
+        <div><button className="ct-btn map-add-button" type="submit" disabled={!name.trim()}>{editingSite ? 'Save name' : 'Add to sites'}</button>
           <button className="ct-btn" type="button" onClick={closeSelection}>Cancel</button></div>
+        {editingSite && <button className="ct-btn map-delete-button" type="button" onClick={() => {
+          onSiteDelete(editingSite.id); setAnnouncement(`Deleted ${editingSite.name} from Sites.`); closeSelection();
+        }}>Delete site</button>}
         <small>Saved for this session</small>
       </form>}
     </div>
     <div className="map-coordinate-bar"><span className="map-coordinate-label">Cursor</span>
       <output className="map-coordinates" aria-label="Cursor latitude and longitude">{formatCoordinates(hover)}</output>
-      <span className="map-hover-feature">{hoverFeature?.name ?? 'No named feature'}</span>
+      <span className="map-hover-feature">{hoverFeature?.name ?? ''}</span>
     </div>
     <p className="map-announcement" role="status">{announcement}</p>
     {outside.length > 0 && <p className="map-hint">{outside.length} sidebar {outside.length === 1 ? 'site lies' : 'sites lie'} outside 80°S–90°S and {outside.length === 1 ? 'is' : 'are'} not plotted.</p>}
