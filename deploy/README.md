@@ -58,11 +58,13 @@ For each environment, create a separate Tailscale **Settings → Trust credentia
 | Setting | Test | Production |
 | --- | --- | --- |
 | Issuer | `https://token.actions.githubusercontent.com` | Same |
-| Subject | `repo:moon-flyers-team/moon-flyers:environment:test` | `repo:moon-flyers-team/moon-flyers:environment:production` |
+| Subject | `repo:moon-flyers-team@356611363/moon-flyers@1457601877:environment:test` | `repo:moon-flyers-team@356611363/moon-flyers@1457601877:environment:production` |
 | Custom claim `ref` | `refs/heads/main` | `refs/tags/v*` |
 | Custom claim `repository_id` | `1457601877` | Same |
 | Permission | **Auth Keys: Write** | Same |
 | Permitted tag | **only** `tag:moon-flyers-ci` | Same |
+
+This repository uses GitHub's **immutable OIDC subject** format, which includes the organization and repository IDs. Do not use the older name-only `repo:OWNER/REPO:environment:NAME` format. Check `GET /repos/moon-flyers-team/moon-flyers/actions/oidc/customization/sub`: its `sub_claim_prefix` is the authoritative prefix; append `:environment:test` or `:environment:production`. If the repository's OIDC policy changes, derive the subject from the new policy rather than copying a generic example.
 
 Copy each identity's non-secret **Client ID** and **Audience** into its matching GitHub environment's variables as `TS_CLIENT_ID` and `TS_AUDIENCE`. Do not put them at repository scope: each environment has a different identity. Keep the GitHub environment restrictions and Tailscale claims in sync. Revisit the subject if the repository is renamed or transferred.
 
@@ -94,6 +96,12 @@ Tags do not change the test deployment. Do not move published tags; create a new
 Deployments are serialized per environment and also protected by a host-side lock. A test build superseded by a newer `main` commit fails before connecting to the tailnet, preventing out-of-order builds from publishing stale code. Different environments can deploy concurrently. This is a small single-host Compose setup, not a zero-downtime release system: brief interruptions are possible during replacement.
 
 ## Operations
+
+### OIDC token exchange returns 403
+
+Open the Tailscale trust-credential details URL from the failed action. Its validation message identifies the rejected claim and, for a subject mismatch, shows the subject actually received from GitHub. Match it exactly, including the immutable IDs and environment suffix. Keep the `ref`, `repository_id`, tag, and Auth Keys scope restrictions unchanged. Do not disable immutable subjects or replace the subject with a broad wildcard to bypass the error.
+
+If Tailscale does not allow editing the identity's subject, create a replacement OIDC identity with the correct subject and the same narrow scopes/claims. Update **both** `TS_CLIENT_ID` and `TS_AUDIENCE` in the matching GitHub environment. Retry the failed jobs after correcting configuration; rebuilding the same images is not necessary. Do not print or share JWTs or access tokens for diagnostics.
 
 On Beelink, inspect a deployment (replace `test` with `production` when needed):
 
