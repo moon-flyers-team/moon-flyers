@@ -4,12 +4,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# The rasterio wheel bundles GDAL, but links against the system libexpat.so.1;
-# python:3.12-slim does not include it. No other GDAL/PROJ system packages are needed.
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends libexpat1 \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt \

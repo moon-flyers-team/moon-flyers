@@ -56,7 +56,7 @@ printf 'smoke %s\\n' "$*" >> "$COMMAND_LOG"
     def terrain_dataset(self, name: str = "dem") -> Path:
         directory = self.home / "moon-flyers" / "data" / "lola" / "v1" / name
         directory.mkdir(parents=True)
-        (directory / "manifest.json").write_text("{}\n")
+        (directory / "calibration.json").write_text("{}\n")
         return directory
 
     def enable_terrain(self, directory: Path | str) -> None:
@@ -192,11 +192,11 @@ printf 'smoke %s\\n' "$*" >> "$COMMAND_LOG"
             self.assertIn("Invalid terrain-directory", result.stderr)
             self.assertFalse(self.log.exists(), value)
 
-    def test_terrain_directory_requires_a_manifest_and_overlay(self) -> None:
+    def test_terrain_directory_requires_calibration_and_overlay(self) -> None:
         dataset = self.terrain_dataset()
-        without_manifest = self.terrain_dataset("empty")
-        (without_manifest / "manifest.json").unlink()
-        for directory, release in ((without_manifest, self.release("first")),
+        without_calibration = self.terrain_dataset("empty")
+        (without_calibration / "calibration.json").unlink()
+        for directory, release in ((without_calibration, self.release("first")),
                                    (dataset, self.release("second", with_terrain_overlay=False))):
             self.enable_terrain(directory)
             result = self.run_release(release)

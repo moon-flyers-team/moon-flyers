@@ -76,25 +76,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ci-terrain
-          docker run --rm --user "$(id -u):$(id -g)" \
-            --mount "type=bind,source=$PWD/backend,target=/src,readonly" \
-            --mount "type=bind,source=$PWD/ci-terrain,target=/out" \
-            --workdir /src --env PYTHONPATH=/src --env HOME=/tmp \
-            --entrypoint python "moon-flyers-backend:$REVISION" -m tests.terrain_fixture /out/dem
-          chmod -R a+rX ci-terrain
-          export LOLA_DATA_DIR="$PWD/ci-terrain/dem" HTTP_PORT="$TERRAIN_PORT"
+          python3 backend/tools/lola_fixture.py ci-terrain/lola_dem
+          export LOLA_DATA_DIR="$PWD/ci-terrain/lola_dem" HTTP_PORT="$TERRAIN_PORT"
           terrain() {
             docker compose --project-name moon-flyers-ci-terrain \
               -f deploy/compose.yaml -f deploy/compose.terrain.yaml "$@"
           }
           terrain up -d --no-build --pull never --wait --wait-timeout 120
           python3 deploy/smoke-test.py "http://127.0.0.1:$TERRAIN_PORT"
-          terrain logs --no-color backend | grep -F 'LOLA dataset validated at /data/lola'
+          terrain logs --no-color backend | grep -F 'LOLA DEM dataset validated at /data/lola'
 
       - name: Container logs on failure
         if: failure()
         env:
-          LOLA_DATA_DIR: ${{ github.workspace }}/ci-terrain/dem
+          LOLA_DATA_DIR: ${{ github.workspace }}/ci-terrain/lola_dem
           HTTP_PORT: "18083"
         run: |
           docker compose -p moon-flyers-ci -f deploy/compose.yaml logs --no-color --tail 100 || true
@@ -104,7 +99,7 @@ jobs:
       - name: Stop smoke-test stacks
         if: always()
         env:
-          LOLA_DATA_DIR: ${{ github.workspace }}/ci-terrain/dem
+          LOLA_DATA_DIR: ${{ github.workspace }}/ci-terrain/lola_dem
           HTTP_PORT: "18083"
         run: |
           docker compose -p moon-flyers-ci -f deploy/compose.yaml down

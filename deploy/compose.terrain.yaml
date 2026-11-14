@@ -1,8 +1,9 @@
-# Optional, release-snapshotted overlay. No public ports or frontend mounts.
+# Optional, release-snapshotted LOLA DEM overlay. No public ports, no writer.
+# The backend reads LOLA_DEM_DIR (src/lunar_horizon_dem.py) from this read-only mount.
 services:
   backend:
     environment:
-      MOON_FLYERS_DEM_DIR: /data/lola
+      LOLA_DEM_DIR: /data/lola
     volumes:
       - type: bind
         source: ${LOLA_DATA_DIR:?Set LOLA_DATA_DIR to a verified dataset dem directory}

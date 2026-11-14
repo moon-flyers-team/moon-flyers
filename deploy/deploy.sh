@@ -39,9 +39,9 @@ printf 'REVISION=%s\nHTTP_PORT=%s\n' "$revision" "$http_port" > "$release_dir/.e
 if [[ -f $root/terrain-directory ]]; then
   terrain_directory=$(<"$root/terrain-directory")
   if [[ ! $terrain_directory =~ ^/[a-zA-Z0-9_./-]+$ \
-        || ! -d $terrain_directory || ! -r $terrain_directory/manifest.json \
+        || ! -d $terrain_directory || ! -r $terrain_directory/calibration.json \
         || ! -f $release_dir/compose.terrain.yaml ]]; then
-    echo "Invalid terrain-directory: need an absolute path without whitespace, a manifest, and terrain overlay" >&2
+    echo "Invalid terrain-directory: need an absolute path without whitespace, a calibration.json, and terrain overlay" >&2
     exit 2
   fi
   printf 'LOLA_DATA_DIR=%s\n' "$terrain_directory" >> "$release_dir/.env"

@@ -98,59 +98,74 @@ Deployments are serialized per environment and also protected by a host-side loc
 
 ## 5. Optional: LOLA terrain dataset
 
-The backend can additionally validate a **host-prepared** LOLA dataset. It is opt-in per
-environment, mounted read-only, and never baked into images or GitHub Actions artifacts.
-**The horizon calculation is still flat**, so mounting data changes no prediction yet; it makes
-validated terrain available for the horizon work that follows.
+The API can validate a **host-provided** LOLA DEM dataset. It is opt-in per environment, mounted
+read-only, and never baked into images, release bundles, or GitHub Actions artifacts.
 
-### Prepare on Beelink (no sudo beyond installing packages)
+**The served horizon is still the mock one** (`services/horizon.py`). Mounting data changes no
+prediction yet: it makes verified terrain available to the horizon model and proves the deploy
+path end to end.
+
+### What the dataset is
+
+`src/lunar_horizon_dem.py` owns the format: eight `LDEM_*.IMG`/`.LBL` pairs (~15.9 GB) plus
+`calibration.json`, which records each polar grid's axis convention. The `lola_dem.rar`
+distribution (3.8 GB) unpacks to exactly that, so no conversion is needed.
+
+### Prepare on Beelink
+
+Unpack or copy the files so that the directory contains all eight IMG/LBL pairs and
+`calibration.json`, then verify it:
 
 ```sh
-sudo apt install -y python3-rasterio python3-gdal gdal-bin curl
-python3 backend/tools/prepare_lola.py prepare
-python3 backend/tools/prepare_lola.py verify
+mkdir -p ~/moon-flyers/data/lola/v1
+# copy lola_dem/{*.IMG,*.LBL,calibration.json} from the unpacked archive into that directory
+cd ~/moon-flyers/src            # a checkout of this branch; needs the backend's numpy
+python3 backend/tools/lola_data.py verify --root ~/moon-flyers/data/lola/v1
 ```
 
-Run it from a checkout of this branch on the Beelink; the tool is not part of release bundles.
-It downloads the eight official LOLA GDR JP2 products (~2.7 GB) from
-`imbrium.mit.edu`, converts them to DEFLATE COGs, and writes
-`~/moon-flyers/data/lola/v1/dem/{8 rasters,manifest.json}`. Sources, PDS labels and the
-archives' AUX files stay in `source/` and `metadata/` for re-verification and are not served.
+`verify` fails loudly instead of warning, and checks:
 
-Preparation is safe to interrupt and to re-run: downloads resume, a converted raster is
-reused only after its metadata and sampled pixels match the source, and `manifest.json` is
-written last. Budget ~25 GB free while preparing. The conversion runs at low priority with two
-`nice -n 10` threads, but disk I/O can still be felt by the live site.
+- every file is present and complete (the label's `LINES`/`LINE_SAMPLES` must match the file size),
+- 16-bit little-endian samples and `SCALING_FACTOR = 0.5` (metres above the 1 737.4 km sphere),
+- the published grid shapes and 5 m/20 m polar pixels,
+- `calibration.json` covers exactly the four polar products with valid variants,
+- polar terrain agrees with the independent global tiles at 83°/88° within 1 km. The
+  2026-11-14 archive measures **0.9–2.5 m median** (14 m worst), which confirms the
+  calibration rather than merely accepting it.
 
-`prepare` refuses to proceed when it finds:
+`--hash` also records SHA-256 over the 15.9 GB (minutes, for transfer verification).
+`--allow-any-shape` exists only for the synthetic CI fixture; never use it for real data.
 
-- a missing GDAL driver (`JP2OpenJPEG`, `GTiff`, `COG`) or too little free space,
-- a download whose byte size differs from the archive index,
-- a raster whose CRS, grid origin, pixel size, height scale or decoded samples are wrong,
-- a polar raster that disagrees with the independent global product by more than 1 km at the
-  same lon/lat (the placement check that metadata alone cannot give you).
+Delete the `.rar` once unpacked: it is not needed to serve. The dataset lives outside
+`~/moon-flyers/test`/`production`, so releases never touch it and rollbacks never move it.
 
 ### Enable per environment
 
-The path is recorded per environment, outside release directories:
-
 ```sh
-printf '%s\n' "$HOME/moon-flyers/data/lola/v1/dem" > "$HOME/moon-flyers/test/terrain-directory"
+printf '%s
+' "$HOME/moon-flyers/data/lola/v1" > "$HOME/moon-flyers/test/terrain-directory"
 bash ~/moon-flyers/test/current/deploy.sh test
 ```
 
-Use `production` for the production environment. `deploy.sh` then snapshots `LOLA_DATA_DIR` into
-that release's `.env`, adds `compose.terrain.yaml`, and mounts the directory read-only at
-`/data/lola`. Because each release records its own path, a rollback keeps using the path that
-release was deployed with.
+(`production` likewise.) `deploy.sh` snapshots the path into that release's `.env`, adds
+`compose.terrain.yaml`, and mounts it read-only at `/data/lola` with `LOLA_DEM_DIR=/data/lola`,
+which is the variable the loader reads. Because the path is snapshotted per release, a rollback
+keeps using the path that release was deployed with.
 
-Disable it by removing `terrain-directory` and redeploying. An invalid or unreadable path,
-a relative path, a path containing whitespace, or a release bundle without
-`compose.terrain.yaml` aborts **before** Docker is touched, so the running site keeps working.
+Disable it by removing `terrain-directory` and redeploying. A relative path, a path with
+whitespace, a directory without `calibration.json`, or a release bundle lacking
+`compose.terrain.yaml` aborts **before** Docker is touched, so the live site keeps running.
 
-Startup validates the manifest, file sizes, metadata and a few decoded samples (not full
-checksums) and refuses to serve if they fail; the deployment then rolls back as usual. Look for
-`LOLA dataset validated at /data/lola` in the backend logs.
+At startup the backend validates the dataset (labels, sizes, calibration, polar/global agreement;
+about 0.4 s on the archive) and refuses to serve if anything fails, so a half-copied or
+mis-calibrated directory causes a normal deploy rollback. Look for
+`LOLA DEM dataset validated at /data/lola` in the backend logs.
+
+### Disk and access notes
+
+- Budget ~16 GB for the dataset plus the usual Docker images and two releases.
+- The mount is read-only and unprivileged; no new ports or Tailscale rules are involved.
+- Do not put the dataset inside a release directory or a Git checkout.
 
 ## Operations
 

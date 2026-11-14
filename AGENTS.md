@@ -63,6 +63,7 @@ when agreed behavior changes.
 | `frontend/tests/mock-pipeline.mjs` | Live HTTP checks through Vite and the mock, using the real frontend client |
 | `frontend/vite.config.ts` | React plugin, `@` alias, dev port, and API proxy |
 | `backend/src/main.py`, `backend/requirements.txt` | FastAPI endpoints and Python runtime dependencies |
+| `backend/src/lunar_horizon_dem.py`, `backend/tools/lola_data.py`, `deploy/compose.terrain.yaml` | LOLA DEM loader/verifier, host dataset checks, and the optional read-only deployment mount |
 | `frontend/src/mock/server.mjs` | Standalone Node HTTP mock API on port 8000 |
 | `frontend/src/mock/api.mjs`, `data.mjs` | Validated mock routes and deterministic generators |
 | `frontend/tests/mock-api.test.mjs` | Mock contract/consistency tests with no server or Python dependency |
@@ -192,7 +193,8 @@ do not require rebuilding the application.
 Next integration work is to replace synthetic calculations with the real backend while keeping
 v0 response shapes stable. Check the UI against the running mock, including slow responses, retries,
 rapid site/constraint changes, best-time selection, and banner layout in a browser. The contributor-added time slider is implemented. Terrain-aware horizons and slope calculations
-remain outside API v0. Coordinate
+remain outside API v0: a verified LOLA DEM dataset can be mounted on the server
+and is checked at startup (`deploy/README.md` section 5), but the API still reports mock terrain. Coordinate
 contract changes across `API.md`, TypeScript types, the client, backend models, and tests.
 
 Preserve the existing dark dashboard, amber sunlight and cyan Earth colors, keyboard-accessible

@@ -1,17 +1,41 @@
 """App setup only. Endpoints live in `routers/`, logic in `services/`."""
 
+from contextlib import asynccontextmanager
+import logging
+import os
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from . import lunar_horizon_dem
 from .routers import compare, health, landing_windows, sites
 from .services import ephemeris
 from .services.errors import (DomainError, EphemerisUnavailableError, InvalidInputError, LimitExceededError,
                               UnknownSiteError)
 
-app = FastAPI(title="Moon Flyers API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Validate an optional host-mounted LOLA dataset before serving.
+
+    Only the deployment overlay sets LOLA_DEM_DIR. Validation is metadata-only here
+    (labels, file sizes, calibration, and the polar/global agreement check) so a bad
+    or half-copied dataset fails the deploy instead of serving wrong terrain.
+    """
+    directory = os.environ.get("LOLA_DEM_DIR")
+    app.state.lola_dem_dir = None
+    if directory:
+        summary = lunar_horizon_dem.verify_dataset(directory)
+        app.state.lola_dem_dir = Path(directory)
+        logging.getLogger(__name__).warning(
+            "LOLA DEM dataset validated at %s (%d products)", directory, len(summary["products"]))
+    yield
+
+
+app = FastAPI(title="Moon Flyers API", lifespan=lifespan)
 
 DATA_SOURCE_HEADER = "X-Moon-Flyers-Data-Source"
 
