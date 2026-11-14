@@ -510,4 +510,4 @@ if __name__ == "__main__":
         for _ in range(2):  # second call shows warm timing
             out = horizon(-89.9, 0.0, max_range_km=50.0, height_above_terrain=2.0, verbose=True)
         print(out)
-        # print({k: v for k, v in out.items() if not isinstance(v, list)})
+        
