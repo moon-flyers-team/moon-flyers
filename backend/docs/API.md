@@ -27,6 +27,14 @@ shape is unchanged. Data is deterministic, varies with site/date, and recomputes
 metrics, fit violations, and timelines from the same generated samples. Custom sites are
 accepted without being stored. Slope remains `null`. The horizon is mock terrain (smooth 0–1.5° hills, fixed per site), not LOLA data.
 
+**The Python backend (`backend/`) now uses real Sun/Earth positions from JPL Horizons** and
+returns `X-Moon-Flyers-Data-Source: horizons` (`mock` if started with
+`MOON_FLYERS_EPHEMERIS=mock`). The terrain is still the mock hills above. Each site costs two
+Horizons calls (about 2 s), so a 7-site `/compare` takes about 25 s: keep loading states visible.
+Limits: 90,000 samples per series (the Horizons maximum), otherwise 422. A
+`timestep_seconds` that isn't whole minutes must divide the requested span exactly, otherwise
+422. If Horizons fails or is unreachable, the response is **502**.
+
 There is a 0.4-second artificial analysis delay so loading states are visible. For slower
 responses, use `MOCK_API_DELAY_SECONDS=3 pnpm mock:api`; set it to `0` to disable the delay.
 Health checks have no artificial delay. Demo requests are limited to 100,000 samples per
