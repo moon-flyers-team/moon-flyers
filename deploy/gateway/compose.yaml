@@ -1,0 +1,46 @@
+name: moon-flyers-gateway
+
+services:
+  funnel:
+    image: tailscale/tailscale:v1.104.7
+    restart: unless-stopped
+    # Reach the app's existing loopback-only ports without changing host routing.
+    # Tailscale itself uses a separate userspace network stack, not the host TUN.
+    network_mode: host
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TS_HOSTNAME: moon-flyers
+      TS_USERSPACE: "true"
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SOCKET: /var/run/tailscale/tailscaled.sock
+      TS_AUTH_ONCE: "true"
+      TS_ACCEPT_DNS: "false"
+      TS_BOOT_TIMEOUT: 30m
+      # Pick a free UDP port instead of competing with the host's tailscaled.
+      TS_TAILSCALED_EXTRA_ARGS: --port=0
+      TS_EXTRA_ARGS: --advertise-tags=tag:moon-flyers-funnel --ssh=false --accept-routes=false
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /var/run/tailscale:rw,noexec,nosuid,size=16m
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale status --json | grep -Eq '\"BackendState\":[[:space:]]*\"Running\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  state:
