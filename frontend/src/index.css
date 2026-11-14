@@ -28,9 +28,11 @@ body {
 }
 
 /* ── Layout ─────────────────────────────────────────── */
+.app-shell { height: 100dvh; display: flex; flex-direction: column; }
 .layout {
   display: flex;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -201,17 +203,19 @@ body {
 }
 
 /* ── App states ─────────────────────────────────────── */
-.mock-banner {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 100;
+.mock-banner, .api-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
   background: #2a1a00;
   border-bottom: 1px solid #503010;
   color: var(--power);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
-  padding: 3px;
-  pointer-events: none;
+  padding: 7px 12px;
 }
 
 /* ── Comparison Table ───────────────────────────────── */
@@ -448,3 +452,13 @@ body {
 }
 .hz-circ--fill  { background: var(--muted); }
 .hz-circ--empty { border: 1.5px solid var(--muted); }
+
+/* API feedback */
+.main { min-width: 0; }
+.request-status { padding: 8px 12px; color: #9999bb; font-size: 12px; }
+.request-error { padding: 9px 12px; color: #ffbc78; background: #2a1a14; overflow-wrap: anywhere; }
+.ct-topbar, .hz-hdr, .hz-legend, .hz-footer { flex-wrap: wrap; }
+.site-select { background: none; border: none; color: inherit; font: inherit; cursor: pointer; text-align: left; padding: 3px 0; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); outline-offset: 3px; }
+.hz-wrap { min-height: 360px; }

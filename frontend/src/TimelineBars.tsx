@@ -1,75 +1,32 @@
 import type { TimeWindow } from './types';
+import { formatUtc } from './time';
 
 interface Props {
   powerWindows?: TimeWindow[];
   commsWindows?: TimeWindow[];
-  missionStart?: string;
-  missionEnd?: string;
+  missionStart: string;
+  missionEnd: string;
 }
-
-function normalise(windows: TimeWindow[], missionStart: string, missionEnd: string) {
-  const start = new Date(missionStart).getTime();
-  const range = new Date(missionEnd).getTime() - start;
-  return windows.map(w => ({
-    left: (new Date(w.start).getTime() - start) / range,
-    width: (new Date(w.end).getTime() - new Date(w.start).getTime()) / range,
-  }));
+export function normalise(windows: TimeWindow[], missionStart: string, missionEnd: string) {
+  const start = Date.parse(missionStart);
+  const end = Date.parse(missionEnd);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+  return windows.flatMap(window => {
+    const left = Math.max(start, Date.parse(window.start_utc));
+    const right = Math.min(end, Date.parse(window.end_utc));
+    if (!Number.isFinite(left) || !Number.isFinite(right) || right <= left) return [];
+    return [{ left: (left - start) / (end - start), width: (right - left) / (end - start), window }];
+  });
 }
-
-function Track({ windows }: { windows?: TimeWindow[]; missionStart?: string; missionEnd?: string; cls: string }) {
-  return (
-    <td>
-      <div className="tl-track">
-        {windows && windows.length > 0 ? null : (
-          <div className="tl-empty" />
-        )}
-      </div>
-    </td>
-  );
-}
-
 export function TimelineBars({ powerWindows, commsWindows, missionStart, missionEnd }: Props) {
-  const hasData = powerWindows && commsWindows && missionStart && missionEnd;
-
-  if (!hasData) {
-    return (
-      <>
-        <td><div className="tl-track tl-track--empty" /></td>
-        <td><div className="tl-track tl-track--empty" /></td>
-      </>
-    );
-  }
-
-  const powerSegs = normalise(powerWindows, missionStart, missionEnd);
-  const commsSegs = normalise(commsWindows, missionStart, missionEnd);
-
-  return (
-    <>
-      <td>
-        <div className="tl-track">
-          {powerSegs.map((seg, i) => (
-            <div
-              key={i}
-              className="tl-seg tl-seg--power"
-              style={{ left: `${seg.left * 100}%`, width: `${seg.width * 100}%` }}
-            />
-          ))}
-        </div>
-      </td>
-      <td>
-        <div className="tl-track">
-          {commsSegs.map((seg, i) => (
-            <div
-              key={i}
-              className="tl-seg tl-seg--comms"
-              style={{ left: `${seg.left * 100}%`, width: `${seg.width * 100}%` }}
-            />
-          ))}
-        </div>
-      </td>
-    </>
-  );
+  return <>{(['power', 'comms'] as const).map(kind => {
+    const windows = kind === 'power' ? powerWindows : commsWindows;
+    const label = kind === 'power' ? 'Sun' : 'Earth';
+    return <td key={kind}><div className={`tl-track${windows ? '' : ' tl-track--empty'}`}
+      role="img" aria-label={`${label}: ${windows ? `${windows.length} visibility windows` : 'data unavailable'}`}>
+      {normalise(windows ?? [], missionStart, missionEnd).map((seg, index) => <div key={index}
+        className={`tl-seg tl-seg--${kind}`} title={`${formatUtc(seg.window.start_utc)} – ${formatUtc(seg.window.end_utc)}`}
+        style={{ left: `${seg.left * 100}%`, width: `${seg.width * 100}%` }} />)}
+    </div></td>;
+  })}</>;
 }
-
-// suppress unused warning on Track until wired up
-void Track;

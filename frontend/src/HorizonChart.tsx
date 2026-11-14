@@ -1,126 +1,79 @@
-import type { HorizonPoint } from './types';
+import { useMemo } from 'react';
+import type { SiteAnalysis, TimeseriesPoint } from './types';
+import { DAY_MS, LUNAR_DAY_EARTH_DAYS, formatUtc } from './time';
 
 interface Props {
   siteName: string;
-  data: HorizonPoint[];
-  loading?: boolean;
+  analysis?: SiteAnalysis;
+  landingUtc: string;
+  loading: boolean;
+  error?: string;
+  onRetry: () => void;
 }
+const VW = 900, VH = 240, ML = 48, MR = 16, MT = 14, MB = 30;
+const CW = VW - ML - MR, CH = VH - MT - MB;
+const COMPASS = ['N (0°)', 'E (90°)', 'S (180°)', 'W (270°)', 'N (360°)'];
+const azToX = (az: number) => ML + az / 360 * CW;
 
-const VW = 900;
-const VH = 200;
-const ML = 44;
-const MT = 8;
-const MB = 28;
-const CW = VW - ML - 6;
-const CH = VH - MT - MB;
-const EL_MAX = 9;
-const EL_MIN = -5;
-const EL_RANGE = EL_MAX - EL_MIN;
-
-function elToY(el: number) {
-  return MT + ((EL_MAX - el) / EL_RANGE) * CH;
+// Break paths at north instead of drawing a spurious line across the chart.
+export function skyPath(data: TimeseriesPoint[], body: 'sun' | 'earth', y: (el: number) => number) {
+  return data.map((point, i) => {
+    const az = point[`${body}_azimuth_deg`];
+    const previous = data[i - 1]?.[`${body}_azimuth_deg`];
+    const command = i === 0 || Math.abs(az - previous) > 180 ? 'M' : 'L';
+    return `${command} ${azToX(az).toFixed(2)},${y(point[`${body}_elevation_deg`]).toFixed(2)}`;
+  }).join(' ');
 }
-function azToX(az: number) {
-  return ML + (az / 360) * CW;
-}
-function toPolyline(data: HorizonPoint[], key: keyof HorizonPoint) {
-  return data.map(p => `${azToX(p.azimuth).toFixed(1)},${elToY(p[key] as number).toFixed(1)}`).join(' ');
-}
-function toTerrainPath(data: HorizonPoint[]) {
-  if (data.length === 0) return '';
-  const bottom = MT + CH;
-  const coords = data.map(p => `L ${azToX(p.azimuth).toFixed(1)},${elToY(p.terrainEl).toFixed(1)}`);
-  const first = `M ${azToX(data[0].azimuth).toFixed(1)},${elToY(data[0].terrainEl).toFixed(1)}`;
-  const last = data[data.length - 1];
-  return `${first} ${coords.slice(1).join(' ')} L ${azToX(last.azimuth).toFixed(1)},${bottom} L ${ML},${bottom} Z`;
-}
+export function HorizonChart({ siteName, analysis, landingUtc, loading, error, onRetry }: Props) {
+  const samples = useMemo(() => {
+    const start = Date.parse(landingUtc);
+    const end = start + LUNAR_DAY_EARTH_DAYS * DAY_MS;
+    return (analysis?.timeseries ?? []).filter(point => {
+      const time = Date.parse(point.time_utc);
+      return time >= start && time <= end;
+    }).sort((a, b) => Date.parse(a.time_utc) - Date.parse(b.time_utc));
+  }, [analysis, landingUtc]);
+  const current = samples[0];
+  const terrain = analysis?.horizon;
+  const elevations = samples.flatMap(point => [point.sun_elevation_deg, point.earth_elevation_deg]);
+  const min = Math.floor(Math.min(-5, ...elevations, ...(terrain?.horizon_elevation_deg ?? [])) - 1);
+  const max = Math.ceil(Math.max(9, ...elevations, ...(terrain?.horizon_elevation_deg ?? [])) + 1);
+  const y = (el: number) => MT + (max - el) / (max - min) * CH;
+  const terrainPoints = terrain?.horizon_azimuth_deg.map((az, i) => `${azToX(az)},${y(terrain.horizon_elevation_deg[i])}`) ?? [];
+  const status = loading ? 'Loading a lunar day of positions. This can take 10–30 seconds…'
+    : !analysis ? 'Select a site to load its horizon.' : !samples.length ? 'No time samples returned for this lunar day.' : '';
 
-const Y_LINES = [8, 6, 4, 2, 0, -2, -4];
-const COMPASS = ['N', 'E', 'S', 'W', 'N'] as const;
-
-export function HorizonChart({ siteName, data, loading = false }: Props) {
-  const sunPt = data.length > 0
-    ? data.reduce((a, b) => (a.sunEl > b.sunEl ? a : b))
-    : null;
-  const earthPt = data.length > 0
-    ? data.reduce((a, b) => (a.earthEl > b.earthEl ? a : b))
-    : null;
-
-  return (
-    <div className="hz-wrap">
-      <div className="hz-hdr">
-        <span className="hz-title">Horizon</span>
-        <span className="hz-site">{siteName}</span>
-        {sunPt && (
-          <span className="hz-legend">
-            <span className="hz-dot hz-dot--sun" />
-            Sun visible {sunPt.sunEl.toFixed(1)}° elevation
-            <span className="hz-dot hz-dot--earth" style={{ marginLeft: 10 }} />
-            {earthPt && `Earth visible ${earthPt.earthEl.toFixed(1)}° elevation`}
-          </span>
-        )}
-      </div>
-
-      <svg viewBox={`0 0 ${VW} ${VH}`} className="hz-svg" preserveAspectRatio="xMidYMid meet">
-        <rect x={ML} y={MT} width={CW} height={CH} fill="#12121e" />
-
-        {Y_LINES.map(el => (
-          <g key={el}>
-            <line
-              x1={ML} y1={elToY(el)} x2={ML + CW} y2={elToY(el)}
-              stroke={el === 0 ? '#303060' : '#1e1e38'}
-              strokeWidth={el === 0 ? 1.5 : 1}
-              strokeDasharray={el === 0 ? '4 3' : undefined}
-            />
-            <text x={ML - 4} y={elToY(el)} textAnchor="end" dominantBaseline="middle" fill="#50507a" fontSize={11}>
-              {el}°
-            </text>
-          </g>
-        ))}
-
-        {COMPASS.map((label, i) => (
-          <text
-            key={`${label}-${i}`}
-            x={ML + (i / (COMPASS.length - 1)) * CW}
-            y={VH - 6}
-            textAnchor="middle"
-            fill="#50507a"
-            fontSize={11}
-          >
-            {label}
-          </text>
-        ))}
-
-        {data.length > 0 && (
-          <>
-            <path d={toTerrainPath(data)} fill="#252535" />
-            <polyline points={toPolyline(data, 'earthEl')} fill="none" stroke="#4fc3f7" strokeWidth={1.8} opacity={0.75} />
-            <polyline points={toPolyline(data, 'sunEl')} fill="none" stroke="#f5a623" strokeWidth={2.2} />
-            {sunPt && <circle cx={azToX(sunPt.azimuth)} cy={elToY(sunPt.sunEl)} r={6} fill="#f5a623" />}
-            {earthPt && <circle cx={azToX(earthPt.azimuth)} cy={elToY(earthPt.earthEl)} r={6} fill="#4fc3f7" />}
-          </>
-        )}
-
-        {data.length === 0 && !loading && (
-          <text x={VW / 2} y={VH / 2} textAnchor="middle" dominantBaseline="middle" fill="#30305a" fontSize={13}>
-            No horizon data — select a site
-          </text>
-        )}
-
-        {loading && (
-          <text x={VW / 2} y={VH / 2} textAnchor="middle" dominantBaseline="middle" fill="#30305a" fontSize={13}>
-            Loading…
-          </text>
-        )}
-      </svg>
-
-      <div className="hz-footer">
-        <span><span className="hz-line hz-line--sun" /> Sun path</span>
-        <span><span className="hz-line hz-line--earth" /> Earth path</span>
-        <span className="hz-muted">over 14 days from landing</span>
-        <span><span className="hz-circ hz-circ--fill" /> visible</span>
-        <span><span className="hz-circ hz-circ--empty" /> below the horizon</span>
-      </div>
+  return <section className="hz-wrap" aria-label="Lunar day horizon" aria-busy={loading}>
+    <div className="hz-hdr"><span className="hz-title">Horizon</span><span className="hz-site">{siteName}</span>
+      {current && <div className="hz-legend">
+        <span>{formatUtc(current.time_utc)}</span>
+        <span><span className="hz-dot hz-dot--sun" />Sun {current.sun_visible ? 'visible' : 'not visible'} · {current.sun_elevation_deg.toFixed(1)}°</span>
+        <span><span className="hz-dot hz-dot--earth" />Earth {current.earth_visible ? 'visible' : 'not visible'} · {current.earth_elevation_deg.toFixed(1)}°</span>
+      </div>}
     </div>
-  );
+    {error ? <div className="request-error" role="alert">Horizon request failed: {error} <button className="ct-btn" onClick={onRetry}>Retry horizon</button></div>
+      : status && <p className="request-status" role="status">{status}</p>}
+    <svg viewBox={`0 0 ${VW} ${VH}`} className="hz-svg" role="img" aria-label={`Sun and Earth azimuth and elevation at ${siteName}${current ? `, ${formatUtc(current.time_utc)}` : ''}`}>
+      <rect x={ML} y={MT} width={CW} height={CH} fill="#12121e" />
+      {Array.from({ length: 6 }, (_, i) => min + i * (max - min) / 5).map(el => <g key={el}>
+        <line x1={ML} y1={y(el)} x2={ML + CW} y2={y(el)} stroke="#262640" />
+        <text x={ML - 5} y={y(el)} textAnchor="end" dominantBaseline="middle" fill="#8989af" fontSize={11}>{el.toFixed(1)}°</text>
+      </g>)}
+      <line x1={ML} y1={y(0)} x2={ML + CW} y2={y(0)} stroke="#62628a" strokeDasharray="4 3" />
+      {COMPASS.map((label, i) => <text key={i} x={ML + i / 4 * CW} y={VH - 8}
+        textAnchor={i === 0 ? 'start' : i === 4 ? 'end' : 'middle'} fill="#8989af" fontSize={11}>{label}</text>)}
+      {terrainPoints.length > 0 && <path d={`M ${ML},${MT + CH} L ${terrainPoints.join(' L ')} L ${ML + CW},${MT + CH} Z`} fill="#303040" />}
+      <path d={skyPath(samples, 'sun', y)} fill="none" stroke="#f5a623" strokeWidth={2} opacity={0.65} />
+      <path d={skyPath(samples, 'earth', y)} fill="none" stroke="#4fc3f7" strokeWidth={2} opacity={0.65} />
+      {current && (['sun', 'earth'] as const).map(body => <circle key={body}
+        cx={azToX(current[`${body}_azimuth_deg`])} cy={y(current[`${body}_elevation_deg`])} r={6}
+        fill={current[`${body}_visible`] ? body === 'sun' ? '#f5a623' : '#4fc3f7' : '#12121e'}
+        stroke={body === 'sun' ? '#f5a623' : '#4fc3f7'} strokeWidth={2} />)}
+    </svg>
+    <div className="hz-footer">
+      <span><span className="hz-line hz-line--sun" />Sun path</span><span><span className="hz-line hz-line--earth" />Earth path</span>
+      <span>● visible · ○ fails horizon clearance</span><span>API v0: flat 0° horizon</span>
+      <span>1 lunar day ≈ 29.53 Earth days from landing</span>
+    </div>
+  </section>;
 }

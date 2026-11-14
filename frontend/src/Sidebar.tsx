@@ -25,6 +25,7 @@ export function Sidebar({
         <Field label="Landing window start (UTC)">
           <input
             type="date"
+            required
             className="sb-input"
             value={mission.windowStart}
             onChange={e => onMissionChange({ ...mission, windowStart: e.target.value })}
@@ -33,6 +34,7 @@ export function Sidebar({
         <Field label="Landing window end (UTC)">
           <input
             type="date"
+            required
             className="sb-input"
             value={mission.windowEnd}
             onChange={e => onMissionChange({ ...mission, windowEnd: e.target.value })}
@@ -44,6 +46,8 @@ export function Sidebar({
               <input
                 type="number"
                 className="sb-input"
+                min={1}
+                step={1}
                 value={mission.daysOnSurface}
                 onChange={e => onMissionChange({ ...mission, daysOnSurface: +e.target.value })}
               />
@@ -56,6 +60,8 @@ export function Sidebar({
                 type="number"
                 className="sb-input"
                 step="0.1"
+                min={0}
+                max={90}
                 value={mission.horizonClearance}
                 onChange={e => onMissionChange({ ...mission, horizonClearance: +e.target.value })}
               />
@@ -72,6 +78,8 @@ export function Sidebar({
               <input
                 type="number"
                 className="sb-input"
+                min={0}
+                max={100}
                 value={power.minSunlight}
                 onChange={e => onPowerChange({ ...power, minSunlight: +e.target.value })}
               />
@@ -83,6 +91,7 @@ export function Sidebar({
               <input
                 type="number"
                 className="sb-input"
+                min={0}
                 value={power.maxNight}
                 onChange={e => onPowerChange({ ...power, maxNight: +e.target.value })}
               />
@@ -99,6 +108,8 @@ export function Sidebar({
               <input
                 type="number"
                 className="sb-input"
+                min={0}
+                max={100}
                 value={comms.minEarthContact}
                 onChange={e => onCommsChange({ ...comms, minEarthContact: +e.target.value })}
               />
@@ -110,6 +121,7 @@ export function Sidebar({
               <input
                 type="number"
                 className="sb-input"
+                min={0}
                 value={comms.maxCommsGap}
                 onChange={e => onCommsChange({ ...comms, maxCommsGap: +e.target.value })}
               />
@@ -125,6 +137,8 @@ export function Sidebar({
             <input
               type="number"
               className="sb-input"
+              min={0}
+              max={90}
               value={terrain.maxSlope}
               onChange={e => onTerrainChange({ ...terrain, maxSlope: +e.target.value })}
             />
@@ -148,7 +162,7 @@ export function Sidebar({
                 />
                 <div>
                   <div className="sb-site-name">{site.name}</div>
-                  <div className="sb-site-coords">{site.lat}°, {site.lon}°</div>
+                  <div className="sb-site-coords">{site.latitude_deg}°, {site.longitude_deg}°</div>
                 </div>
               </label>
             </li>
