@@ -1,8 +1,55 @@
 # Moon Flyers API: draft contract (v0)
 
-**Status:** none of this is built yet. The first version will return correctly shaped **mock
-data** from every endpoint, so you can integrate straight away. Real calculations will then replace
-the mocks with no shape changes.
+**Status:** the v0 contract is implemented by a standalone **synthetic mock API** in
+`frontend/src/mock/`. It runs with Node and requires no Python or changes under `backend/`.
+The real backend (`backend/src/main.py`) remains the original scaffold. Mock data exercises
+the UI and is not NASA ephemeris or terrain data.
+
+## Run the mock API
+
+From the repository root, run these in separate terminals:
+
+```sh
+pnpm mock:api
+pnpm --dir frontend dev
+```
+
+The root command delegates to `pnpm --dir frontend mock:api`, which starts
+`frontend/src/mock/server.mjs` on `http://127.0.0.1:8000`. Open `http://localhost:5173`
+for the frontend. The existing `/api` development proxy points at port 8000. If
+`frontend/.env` sets `VITE_API_URL`, point it at this server and restart Vite.
+Do not run the mock and real backends on the same port simultaneously. No Python environment,
+Python dependencies, or backend files are needed to run or test the mock.
+
+The mock returns `X-Moon-Flyers-Data-Source: mock`, exposed through CORS. The frontend reads
+that header from the catalogue response to show a synthetic-data banner; the catalogue JSON
+shape is unchanged. Data is deterministic, varies with site/date, and recomputes visibility
+metrics, fit violations, and timelines from the same generated samples. Custom sites are
+accepted without being stored. Slope remains `null`, and the horizon is flat. The time slider
+remains deferred to another contributor.
+
+There is a 0.4-second artificial analysis delay so loading states are visible. For slower
+responses, use `MOCK_API_DELAY_SECONDS=3 pnpm mock:api`; set it to `0` to disable the delay.
+Health checks have no artificial delay. Demo requests are limited to 100,000 samples per
+series; landing-time searches allow up to 2,000 candidates and 1,000,000 sampled mission
+points. Larger requests return 422 errors with a `detail` field. Invalid JSON returns 400.
+
+All mock and frontend unit/contract tests run without servers:
+
+```sh
+pnpm --dir frontend test
+```
+
+With both servers running, verify the complete HTTP path and frontend rendering with:
+
+```sh
+pnpm --dir frontend test:mock
+```
+
+This sends real requests through the Vite proxy using the frontend API client, checks all
+analysis endpoints, and renders the returned data in the table and chart. It does not automate
+browser interaction. The mock has no FastAPI `/docs` page; use the endpoint examples below
+and the browser Network panel to inspect requests.
 
 ## Conventions
 - Angles are in degrees. Azimuth is measured clockwise from north (N = 0, E = 90, S = 180, W = 270).

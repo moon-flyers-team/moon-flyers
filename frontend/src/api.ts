@@ -5,14 +5,17 @@ import type {
 
 const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function response(path: string, init: RequestInit = {}): Promise<Response> {
   const res = await fetch(`${BASE}${path}`, init);
   if (!res.ok) {
     const body: unknown = await res.json().catch(() => null);
     const detail = body && typeof body === 'object' && 'detail' in body ? body.detail : null;
     throw new Error(`${res.status} ${typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : res.statusText}`);
   }
-  return res.json() as Promise<T>;
+  return res;
+}
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return (await response(path, init)).json() as Promise<T>;
 }
 function post<T>(path: string, body: unknown, signal?: AbortSignal) {
   return request<T>(path, {
@@ -45,6 +48,13 @@ export interface LandingWindowsParams {
   limit?: number;
 }
 export const api = {
+  getCatalogue: async (signal?: AbortSignal) => {
+    const res = await response('/sites', { signal });
+    return {
+      sites: await res.json() as SiteDefinition[],
+      isMock: res.headers.get('X-Moon-Flyers-Data-Source') === 'mock',
+    };
+  },
   getSites: (signal?: AbortSignal) => request<SiteDefinition[]>('/sites', { signal }),
   getSiteAnalysis: (params: SiteAnalysisParams, signal?: AbortSignal) => {
     const query = new URLSearchParams();
