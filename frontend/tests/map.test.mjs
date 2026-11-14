@@ -5,7 +5,7 @@ import React from 'react';
 import { readFile } from 'node:fs/promises';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-let server, projection, validateHeatmaps, rasterPixels, api, siteReference, MapPanel, MainPanel, navigation;
+let server, projection, validateHeatmaps, rasterPixels, api, siteReference, MapPanel, MainPanel, navigation, isReferenceCriterion, HeatmapLegends;
 const nativeFetch = globalThis.fetch;
 const constraints = { days_on_surface: 14, horizon_clearance_deg: 0.3, min_sun_visible_pct: 60,
   max_darkness_hours: 96, min_earth_visible_pct: 45, max_earth_blackout_hours: 240, max_slope_deg: 8 };
@@ -16,6 +16,8 @@ before(async () => {
     server: { middlewareMode: true, watch: null, hmr: false, ws: false }, appType: 'custom' });
   projection = await server.ssrLoadModule('/src/map/projection.ts');
   navigation = await server.ssrLoadModule('/src/map/navigation.ts');
+  ({ isReferenceCriterion } = await server.ssrLoadModule('/src/map/referenceOverlays.ts'));
+  ({ HeatmapLegends } = await server.ssrLoadModule('/src/map/HeatmapLegends.tsx'));
   ({ validateHeatmaps, rasterPixels } = await server.ssrLoadModule('/src/map/heatmaps.ts'));
   ({ api, siteReference } = await server.ssrLoadModule('/src/api.ts'));
   ({ MapPanel } = await server.ssrLoadModule('/src/MapPanel.tsx'));
@@ -115,6 +117,7 @@ test('map renders the polar grid, real local basemap tiles, disabled and custom 
   assert.match(html,/map-waypoint--disabled/);
   assert.match(html,/1 sidebar site lies outside/);
   assert.match(html,/class="map-coordinates"/);
+  assert.match(html,/<\/svg><div class="map-coordinate-bar">/, 'cursor readout is inside the map viewport after its SVG');
   assert.match(html,/map-waypoint--custom/);
   assert.match(html,/aria-label="Edit site A map site"/);
   assert.doesNotMatch(html,/No named feature/);
@@ -179,4 +182,58 @@ test('bundled topography assets contain all aligned tiles, the official legend a
     const coordinates=layer.path.match(/-?\d+\.\d+/g).map(Number);
     assert.ok(coordinates.every(value=>value>=45 && value<=655),'contours fit the georeferenced cap square');
   }
+});
+
+
+test('only sunlight and Earth visibility use bundled reference layers', () => {
+  assert.equal(isReferenceCriterion('sun_visible_pct'),true);
+  assert.equal(isReferenceCriterion('earth_visible_pct'),true);
+  for (const criterion of ['longest_darkness_hours','longest_earth_blackout_hours','slope_deg']) {
+    assert.equal(isReferenceCriterion(criterion),false);
+  }
+});
+
+test('reference rasters have documented percentage scaling and the same polar extent as the map', async () => {
+  const root=new URL('../public/maps/south-pole/reference/',import.meta.url);
+  const metadata=JSON.parse(await readFile(new URL('metadata.json',root),'utf8'));
+  assert.equal(metadata.data_type,'long_term_reference');
+  assert.equal(metadata.average_period_years,18.6);
+  assert.equal(metadata.reference_radius_m,projection.MOON_RADIUS_M);
+  assert.deepEqual(metadata.bounds_m,[-projection.CAP_RADIUS_M,-projection.CAP_RADIUS_M,projection.CAP_RADIUS_M,projection.CAP_RADIUS_M]);
+  assert.equal(metadata.layers.length,2);
+  for (const layer of metadata.layers) {
+    const png=await readFile(new URL(`${layer.id}.png`,root));
+    assert.equal(png.readUInt32BE(16),metadata.width);
+    assert.equal(png.readUInt32BE(20),metadata.height);
+    assert.equal(png[25],6,'RGBA includes transparent pixels outside the cap');
+    assert.equal(layer.source_scale_m,240);
+    assert.equal(layer.source_scaling_factor,0.00004);
+    assert.equal(layer.visible_disc_definition,'any_fraction');
+    assert.equal(layer.unit,'%');
+    assert.ok(layer.min_pct>=0 && layer.max_pct<=100 && layer.max_pct>layer.min_pct);
+    assert.match(layer.source_sha256,/^[a-f0-9]{64}$/);
+    const label=await readFile(new URL(`${layer.product}.LBL`,root),'utf8');
+    assert.match(label,/CENTER_LATITUDE\s*=\s*-90/);
+    assert.match(label,/SCALING_FACTOR\s*=\s*0.00004/);
+    assert.match(label,/SAMPLE_PROJECTION_OFFSET\s*=\s*3209.5/);
+  }
+});
+
+
+test('every selected heatmap has its own legend with correct units and source, including unavailable layers', () => {
+  const html=renderToStaticMarkup(React.createElement(HeatmapLegends,{
+    references:['sun_visible_pct','earth_visible_pct'],
+    criteria:['longest_darkness_hours','longest_earth_blackout_hours','slope_deg'],
+    status:'Data unavailable',data:{data_source:'mock',layers:[{criterion:'longest_darkness_hours',min:0,max:96,unit:'h'}]},
+  }));
+  assert.equal((html.match(/class="map-heatmap-legend"/g)??[]).length,5);
+  for (const name of ['Sunlight','Earth visibility','Longest night','Comms blackout','Slope']) assert.ok(html.includes(name));
+  assert.match(html,/0%/);
+  assert.match(html,/100%/);
+  assert.match(html,/96 h/);
+  assert.match(html,/Synthetic demo data/);
+  assert.equal((html.match(/Data unavailable/g)??[]).length,2);
+  assert.doesNotMatch(html,/undefined|NaN/);
+  const empty=renderToStaticMarkup(React.createElement(HeatmapLegends,{references:[],criteria:[],status:''}));
+  assert.equal(empty,'');
 });
