@@ -11,7 +11,7 @@ export interface SiteDefinition {
 export type SiteReference = { id: string } | {
   name: string; latitude_deg: number; longitude_deg: number;
 };
-export interface LandingSite extends SiteDefinition { enabled: boolean }
+export interface LandingSite extends SiteDefinition { enabled: boolean; custom?: boolean }
 export interface Constraints {
   days_on_surface: number;
   horizon_clearance_deg: number;
@@ -63,3 +63,31 @@ export interface MissionParams {
 export interface PowerParams { minSunlight: number; maxNight: number }
 export interface CommsParams { minEarthContact: number; maxCommsGap: number }
 export interface TerrainParams { maxSlope: number }
+
+export type HeatmapCriterion = 'sun_visible_pct' | 'earth_visible_pct' | 'longest_darkness_hours'
+  | 'longest_earth_blackout_hours' | 'slope_deg';
+export interface MapHeatmapsParams {
+  projection: 'lunar_south_polar_stereographic';
+  bounds_m: [number, number, number, number];
+  width: number;
+  height: number;
+  window_start_utc: string;
+  window_end_utc: string;
+  constraints: Constraints;
+  criteria: HeatmapCriterion[];
+}
+export interface HeatmapLayer {
+  criterion: HeatmapCriterion;
+  unit: '%' | 'h' | 'deg';
+  min: number;
+  max: number;
+  values: (number | null)[];
+}
+export interface MapHeatmapsResponse {
+  projection: MapHeatmapsParams['projection'];
+  bounds_m: MapHeatmapsParams['bounds_m'];
+  width: number;
+  height: number;
+  data_source: 'mock' | 'real';
+  layers: HeatmapLayer[];
+}

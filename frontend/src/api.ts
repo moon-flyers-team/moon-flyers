@@ -1,6 +1,6 @@
 import type {
   SiteDefinition, SiteReference, SiteAnalysisResponse, ComparisonResult,
-  LandingWindow, Constraints,
+  LandingWindow, Constraints, LandingSite, MapHeatmapsParams, MapHeatmapsResponse,
 } from './types';
 
 const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
@@ -48,7 +48,14 @@ export interface LandingWindowsParams {
   candidate_step_hours?: number;
   limit?: number;
 }
+// Local IDs identify custom sites in React only; the backend needs their coordinates.
+export function siteReference(site: LandingSite): SiteReference {
+  return site.custom ? { name: site.name, latitude_deg: site.latitude_deg, longitude_deg: site.longitude_deg }
+    : { id: site.id };
+}
 export const api = {
+  getMapHeatmaps: (params: MapHeatmapsParams, signal?: AbortSignal) =>
+    post<MapHeatmapsResponse>('/map/heatmaps', params, signal),
   getCatalogue: async (signal?: AbortSignal) => {
     const res = await response('/sites', { signal });
     return {

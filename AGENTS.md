@@ -17,14 +17,15 @@ when agreed behavior changes.
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including
   comparison results, visibility timelines, and an on-demand best-landing-times table.
-- Selected-site analysis fetches a whole lunar-day batch. The time slider was removed at the
-  user's request because another contributor will implement it. The chart currently shows
-  paths across the batch and markers/visibility for its first sample; do not add the slider
-  back unless requested.
+- MainPanel has Profiles and Map tabs. Profiles retains the existing dashboard and the
+  contributor-added time slider; Map shows the 80°S–90°S lunar south-polar cap. Analysis
+  preloads every enabled site over the mission window plus its stay. Scrubbing filters
+  locally; the horizon axis stays fixed across the full loaded site batch.
 - API loading/error messages and retry controls are implemented. The offline banner occupies
   its own layout row above the dashboard and must never cover content.
-- The real backend remains the original FastAPI scaffold in `backend/src/main.py`.
-  `backend/src/positions.py` is a placeholder. Keep `backend/` clear of frontend/mock work.
+- The FastAPI backend now implements the v0 endpoints using synthetic ephemerides and a flat
+  horizon. No backend changes are part of the map feature. The local Podman container
+  `moon-flyers-backend-local` publishes port 8000 for the Vite proxy.
 - The separate mock API lives entirely in `frontend/src/mock/` and implements every v0
   endpoint with deterministic synthetic data. Run `pnpm mock:api`; it uses Node and requires
   no Python environment. `data.mjs` generates consistent samples, metrics, windows, and fit.
@@ -41,14 +42,18 @@ when agreed behavior changes.
 | `frontend/src/main.tsx` | React entry point with StrictMode |
 | `frontend/src/App.tsx` | Mission/constraint state, site catalogue, enabled sites, connection banner |
 | `frontend/src/Sidebar.tsx` | Mission, power, communications, terrain, and site inputs |
-| `frontend/src/MainPanel.tsx` | Landing time, validation, comparison and selected-site analysis requests |
+| `frontend/src/MainPanel.tsx` | Profiles/Map tabs, landing time, validation, comparison and batch analysis requests |
+| `frontend/src/MapPanel.tsx` | Polar map, overlay controls, cursor readout, and click-to-add site dialog |
+| `frontend/src/map/` | Stereographic math, heatmap validation/color ramps, bundled feature catalogue |
+| `frontend/public/maps/south-pole/` | NASA Moon Trek basemap tiles and source/projection metadata |
+| `frontend/tests/map.test.mjs` | Map projection, custom-site requests, heatmap contract, and tab/map rendering |
 | `frontend/src/api.ts` | Shared HTTP client, typed endpoint methods, request payloads, FastAPI error handling |
 | `frontend/src/types.ts` | API response types and UI parameter types |
 | `frontend/src/useRequest.ts` | Debouncing, abort handling, retry state, and suppression of obsolete responses |
 | `frontend/src/time.ts` | UTC helpers and lunar-day constants |
 | `frontend/src/ComparisonTable.tsx`, `FitBadge.tsx` | Backend metrics, fit statuses, and violation indicators |
 | `frontend/src/TimelineBars.tsx` | Visibility intervals clipped to the displayed time range |
-| `frontend/src/HorizonChart.tsx` | Horizon profile, Sun/Earth paths, and first-sample markers; slider deferred |
+| `frontend/src/HorizonChart.tsx` | Horizon profile, Sun/Earth paths, first-sample markers, and stable altitude bounds |
 | `frontend/src/LandingWindows.tsx` | Explicit best-time search and applying a returned landing time |
 | `frontend/src/Field.tsx`, `Section.tsx` | Shared sidebar primitives |
 | `frontend/src/index.css` | Shared visual tokens and component styles |
@@ -56,7 +61,7 @@ when agreed behavior changes.
 | `frontend/tests/api.test.mjs` | Node contract tests and React server-rendering checks |
 | `frontend/tests/mock-pipeline.mjs` | Live HTTP checks through Vite and the mock, using the real frontend client |
 | `frontend/vite.config.ts` | React plugin, `@` alias, dev port, and API proxy |
-| `backend/src/main.py`, `backend/requirements.txt` | Real API scaffold and Python runtime dependencies |
+| `backend/src/main.py`, `backend/requirements.txt` | FastAPI endpoints and Python runtime dependencies |
 | `frontend/src/mock/server.mjs` | Standalone Node HTTP mock API on port 8000 |
 | `frontend/src/mock/api.mjs`, `data.mjs` | Validated mock routes and deterministic generators |
 | `frontend/tests/mock-api.test.mjs` | Mock contract/consistency tests with no server or Python dependency |
@@ -93,7 +98,7 @@ pnpm mock:api
 It uses Node's built-in HTTP server and needs no extra runtime dependencies. The configurable
 analysis delay defaults to 0.4 seconds (`MOCK_API_DELAY_SECONDS`). `API.md` documents setup
 and request examples. Unit/contract tests are included in `pnpm --dir frontend test`.
-The original real backend scaffold is separate and uses `backend/requirements.txt`.
+The separate FastAPI backend uses `backend/requirements.txt`.
 Stop the mock before starting a real backend on port 8000.
 
 Without `VITE_API_URL`, requests use `/api`; the Vite development proxy forwards them to
@@ -119,13 +124,15 @@ the underscore fit statuses: `both_met`, `power_short`, `comms_short`, `neither_
 
 - Site analysis uses `site_id` in the query, or custom `name`, `latitude_deg`, and
   `longitude_deg`. Constraints are flattened into its query parameters.
-- Comparison uses `sites`, `landing_utc`, `window_start_utc`, `window_end_utc`, nested
-  `constraints`, and `timestep_seconds` in a JSON body. Responses follow request-site order;
+- Comparison uses `sites`, `window_start_utc`, `window_end_utc`, nested
+  `constraints`, `candidate_step_hours`, and `timestep_seconds` in a JSON body. Responses follow request-site order;
   the table currently associates them by index.
 - Best-time search uses one `site`, the window bounds, nested `constraints`, and defaults of
   `candidate_step_hours: 6` and `limit: 5`. It runs only when the user requests it.
-- The client supports custom-site request objects; there is no custom-site editor or persistence
-  UI yet. Custom sites belong on the client and must be sent with each request.
+- Map clicks open a named custom-site form. App owns all sites; custom entries are enabled
+  immediately and survive catalogue retries, but are not persisted across browser reloads.
+  `siteReference()` in api.ts sends custom name/coordinates for GET analysis, comparison, and
+  landing windows; their UUIDs are React identities only and must never be sent as server IDs.
 - Send ISO 8601 UTC timestamps with a timezone suffix. Date-only sidebar bounds become
   midnight UTC. Angles are degrees; azimuth runs clockwise from north; longitude is east-positive.
 - Use backend `fit.status` and `fit.violations` for badges and warnings, including communication
@@ -140,19 +147,21 @@ Keep **mission scoring duration** separate from **visualization coverage**:
 
 1. `/compare` and `/landing-windows` receive the user's `days_on_surface` unchanged
    (default 14). Mission constraints are assembled in `MainPanel.tsx`.
-2. Selected-site visualization requests `days_on_surface: 30` with hourly samples
-   (`timestep_seconds: 3600`). This whole-day batch covers the mean lunar solar day of
-   29.5306 Earth days; constants and the NASA reference live in `time.ts`.
-3. `HorizonChart.tsx` sorts and selects returned samples from landing through one mean lunar
-   day. Markers, visibility, and the displayed timestamp currently use its first sample.
-   Another contributor will add time-slider controls. That future slider should select samples
-   locally without issuing requests or changing the mission landing time when scrubbing.
-4. Changing the actual landing time, selected site, or relevant constraints may load a new batch.
-   The comparison's ±6 h buttons change landing time and rerun analysis within the window.
+2. Visualization requests all enabled sites in parallel with the mission window, mission
+   duration, and hourly samples (`timestep_seconds: 3600`). The batch extends through the
+   window end plus the mission stay. Switching sites uses the preloaded data.
+3. `HorizonChart.tsx` selects returned samples from the current time through one mean lunar
+   day. Markers use the first available sample in that slice. The full site batch determines
+   altitude-axis bounds. The slider and ±6 h buttons update the time locally.
+4. Mission dates, enabled sites, or relevant constraints load new batches. Comparison returns
+   `window_metrics`; the table selects the nearest candidate for the current time.
 
 Use each body's own azimuth/elevation and the current sample's `sun_visible`/`earth_visible`
 flags. Do not label peak elevations as current positions or infer visibility from elevation
 alone. Break paths at the 360°/0° seam to avoid lines spanning the chart.
+Calculate the horizon chart's altitude bounds from the entire loaded site timeseries and
+terrain profile, not the displayed lunar-day slice. Scrubbing must keep the scale fixed;
+new site or mission batches may recalculate it.
 
 Memoize request callbacks passed to `useRequest`; callback identity controls its lifecycle.
 The hook debounces by 350 ms (catalogue loading uses zero), aborts superseded requests, and
@@ -181,8 +190,7 @@ do not require rebuilding the application.
 
 Next integration work is to replace synthetic calculations with the real backend while keeping
 v0 response shapes stable. Check the UI against the running mock, including slow responses, retries,
-rapid site/constraint changes, best-time selection, and banner layout in a browser. Time-slider
-implementation is assigned to another contributor. Terrain-aware horizons and slope calculations
+rapid site/constraint changes, best-time selection, and banner layout in a browser. The contributor-added time slider is implemented. Terrain-aware horizons and slope calculations
 remain outside API v0. Coordinate
 contract changes across `API.md`, TypeScript types, the client, backend models, and tests.
 
@@ -190,3 +198,30 @@ Preserve the existing dark dashboard, amber sunlight and cyan Earth colors, keyb
 controls, and the banner's normal document flow. Keep changes scoped to the requested work and
 preserve unrelated working-tree edits. Update this handoff when structure or integration
 decisions change.
+
+## Map handoff
+
+- The map uses spherical lunar south-polar stereographic coordinates, radius 1,737,400 m,
+  central meridian 0°, with 0°E at the top. Limit the surface and cursor picks to 80°S–90°S.
+  Zoom is centred on the pole; Reset view restores the entire cap. Out-of-cap sites remain
+  in the sidebar and Profiles and are counted in a map notice.
+- The 36 local PNGs retain NASA WMTS level-4 tile origins and scale. Source, tile dimensions,
+  projection and catalogue provenance are in `frontend/public/maps/south-pole/README.md`.
+  The basemap is observational imagery with fixed illumination, not a mission simulation.
+- Feature names use a small Moon Trek IAU/USGS catalogue. Cursor hits approximate footprints
+  with catalogue diameters; they are not exact crater boundaries or a complete gazetteer.
+- Heatmaps use the **proposed**, unimplemented `POST /map/heatmaps` contract at the end of
+  root `API.md`. Do not imply the backend already supports it. The toolbar can request
+  sunlight, Earth contact, longest night, comms blackout, and slope. It sends all sidebar
+  constraints plus UTC mission dates, projected extent, and raster dimensions.
+- With no active criteria, no map request is made. Enabled overlays refetch on mission changes
+  while Map is active; useRequest debounces/aborts and immediately hides stale results. Zoom,
+  cursor motion and opacity never fetch. Returning to Map refetches enabled layers.
+- Validate raster alignment, dimensions, layer units and cell counts before drawing. Null
+  cells stay transparent. Mock responses must have a synthetic label. Multiple overlays
+  blend in toolbar order; legends explain each ramp. The current backend returns an explicit
+  unavailable state; do not invent scientific-looking heatmaps as fallback.
+- Tests: `pnpm --dir frontend exec node --test tests/map.test.mjs`. Browser QA covered
+  local imagery, coordinate readout width, custom sites in Profiles, missing endpoint state,
+  intercepted fixture overlay rendering, multi-layer requests, mission updates, and mobile.
+  Full frontend suite still has the previously identified 12 old-contract fixture failures.

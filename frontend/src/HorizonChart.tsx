@@ -44,9 +44,22 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
 
   const current = samples[0];
   const terrain = analysis?.horizon;
-  const elevations = samples.flatMap(point => [point.sun_elevation_deg, point.earth_elevation_deg]);
-  const min = Math.floor(Math.min(-5, ...elevations, ...(terrain?.horizon_elevation_deg ?? [])) - 1);
-  const max = Math.ceil(Math.max(9, ...elevations, ...(terrain?.horizon_elevation_deg ?? [])) + 1);
+  // Use the entire site's batch so scrubbing never changes the altitude scale.
+  const { min, max } = useMemo(() => {
+    let low = -5, high = 9;
+    const include = (elevation: number) => {
+      if (Number.isFinite(elevation)) {
+        low = Math.min(low, elevation);
+        high = Math.max(high, elevation);
+      }
+    };
+    for (const point of analysis?.timeseries ?? []) {
+      include(point.sun_elevation_deg);
+      include(point.earth_elevation_deg);
+    }
+    for (const elevation of analysis?.horizon.horizon_elevation_deg ?? []) include(elevation);
+    return { min: Math.floor(low - 1), max: Math.ceil(high + 1) };
+  }, [analysis]);
   const y = (el: number) => MT + (max - el) / (max - min) * CH;
   const terrainPoints = terrain?.horizon_azimuth_deg.map((az, i) => `${azToX(az)},${y(terrain.horizon_elevation_deg[i])}`) ?? [];
   const status = loading ? 'Loading a lunar day of positions. This can take 10–30 seconds…'

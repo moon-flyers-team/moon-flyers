@@ -5,6 +5,7 @@ import { MainPanel } from './MainPanel';
 import { api } from './api';
 import { mockSites } from './mockData';
 import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams } from './types';
+import type { Coordinates } from './map/projection';
 
 export default function App() {
   const [mission, setMission] = useState<MissionParams>({
@@ -23,11 +24,14 @@ export default function App() {
   const catalogue = useRequest(api.getCatalogue, 0);
   useEffect(() => {
     if (catalogue.data) {
-      setSites(catalogue.data.sites.map(site => ({ ...site, enabled: true })));
+      const catalogueSites = catalogue.data.sites;
+      setSites(previous => [...catalogueSites.map(site => ({ ...site,
+        enabled: previous.find(existing => existing.id === site.id)?.enabled ?? true })),
+        ...previous.filter(site => site.custom)]);
       setUsingMock(false);
       setBackendMock(catalogue.data.isMock);
     } else if (catalogue.error) {
-      setSites(mockSites);
+      setSites(previous => [...mockSites, ...previous.filter(site => site.custom)]);
       setBackendMock(false);
       setUsingMock(true);
     }
@@ -35,6 +39,10 @@ export default function App() {
 
   function toggleSite(id: string) {
     setSites(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s));
+  }
+  function addSite(coordinates: Coordinates, name: string) {
+    setSites(previous => [...previous, { ...coordinates, id: `custom_${crypto.randomUUID()}`,
+      name, group: 'Custom map sites', custom: true, enabled: true }]);
   }
 
   return (
@@ -63,6 +71,7 @@ export default function App() {
           onSiteToggle={toggleSite}
         />
         <MainPanel
+          onSiteAdd={addSite}
           sites={sites}
           power={power}
           comms={comms}

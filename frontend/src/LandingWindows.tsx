@@ -3,18 +3,18 @@ import { api } from './api';
 import { useRequest } from './useRequest';
 import { dateUtc, formatUtc } from './time';
 import { FitBadge } from './FitBadge';
-import type { Constraints } from './types';
+import type { Constraints, SiteReference } from './types';
 
 interface Props {
-  siteId: string; siteName: string; windowStart: string; windowEnd: string;
+  site: SiteReference; siteName: string; windowStart: string; windowEnd: string;
   constraints: Constraints; onSelect: (utc: string) => void;
 }
-export function LandingWindows({ siteId, siteName, windowStart, windowEnd, constraints, onSelect }: Props) {
+export function LandingWindows({ site, siteName, windowStart, windowEnd, constraints, onSelect }: Props) {
   const [requested, setRequested] = useState(false);
   const request = useMemo(() => !requested ? null : (signal: AbortSignal) => api.getLandingWindows({
-    site: { id: siteId }, window_start_utc: dateUtc(windowStart),
+    site, window_start_utc: dateUtc(windowStart),
     window_end_utc: dateUtc(windowEnd), constraints,
-  }, signal), [requested, siteId, windowStart, windowEnd, constraints]);
+  }, signal), [requested, site, windowStart, windowEnd, constraints]);
   const result = useRequest(request);
   return <section className="ct-wrap" aria-label="Best landing times">
     <div className="ct-topbar"><span className="ct-tab">Best landing times · {siteName}</span>

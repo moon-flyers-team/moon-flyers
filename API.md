@@ -2,8 +2,9 @@
 
 **Status:** the v0 contract is implemented by a standalone **synthetic mock API** in
 `frontend/src/mock/`. It runs with Node and requires no Python or changes under `backend/`.
-The real backend (`backend/src/main.py`) remains the original scaffold. Mock data exercises
-the UI and is not NASA ephemeris or terrain data.
+The separate FastAPI backend (`backend/src/main.py`) now also implements the v0 endpoints
+with synthetic ephemerides and a flat horizon. Analysis mock data exercises the UI and is
+not NASA ephemeris or terrain data. Map imagery is an independent observational basemap.
 
 ## Run the mock API
 
@@ -197,3 +198,91 @@ Returns `{"status": "ok"}`.
 
 Questions and change requests are welcome. This is a draft, and it's easier to change before we
 build it.
+
+## Proposed map heatmaps extension (frontend only; awaiting backend implementation)
+
+The Map tab uses this **proposed** endpoint. Neither the current FastAPI backend nor the
+standalone Node mock implements it. Enabling an overlay sends the request; 404/405/501
+show an explicit unavailable message. The frontend generates no substitute heatmap values.
+Backend contributors should agree this contract before implementing it.
+
+### `POST /map/heatmaps`
+
+One batch for all enabled overlay criteria; no request while no overlays are enabled or the
+Map tab is inactive. Sidebar mission dates, power/comms limits, slope limit, mission duration,
+and horizon clearance are sent together. Relevant changes debounce by 350 ms, abort obsolete
+requests, and hide stale overlays. Cursor movement, zoom and opacity adjustments are local.
+Switching back to Map refetches enabled overlays. Sites and the Profiles time cursor do not
+change map requests: the map represents mission-window analysis over the whole cap.
+
+```json
+{
+  "projection": "lunar_south_polar_stereographic",
+  "bounds_m": [-304005.6080198807, -304005.6080198807, 304005.6080198807, 304005.6080198807],
+  "width": 128,
+  "height": 128,
+  "window_start_utc": "2027-08-01T00:00:00Z",
+  "window_end_utc": "2027-10-31T00:00:00Z",
+  "constraints": {
+    "days_on_surface": 14,
+    "horizon_clearance_deg": 0.3,
+    "min_sun_visible_pct": 60,
+    "max_darkness_hours": 96,
+    "min_earth_visible_pct": 45,
+    "max_earth_blackout_hours": 240,
+    "max_slope_deg": 8
+  },
+  "criteria": ["sun_visible_pct", "earth_visible_pct"]
+}
+```
+
+`bounds_m` is `[xmin, ymin, xmax, ymax]` in projected metres, **not geographic degrees**.
+The exact cap radius is `2 × 1737400 × tan(5°)`; use that expression for exact bounds.
+Projection is spherical lunar south-polar stereographic, radius 1,737,400 m, central meridian
+0°, scale true at 90°S, zero false easting/northing. For longitude λ and latitude φ in radians:
+`ρ = 2R × tan(π/4 + φ/2)`, `x = ρ sin λ`, `y = ρ cos λ`.
+The map clips everything north of 80°S. The raster covers the bounding square; cells outside
+the circular cap must be `null`.
+
+Proposed aggregation: each cell is evaluated for candidate landings at six-hour intervals
+across the mission window, with hourly samples for each `days_on_surface` stay. Choose the
+candidate with fewest constraint violations, then highest sunlight %, then highest Earth
+contact %, then earliest landing time. All returned criteria must describe that same candidate
+at that cell. Slope describes the local surface and is independent of candidate time. This
+makes power/comms constraints influence which landing is represented. This aggregation is a
+proposal for backend review; the frontend does not calculate or infer it.
+
+Response (abbreviated example with a 2×2 raster; a real response must match the requested
+128×128 dimensions and extent):
+
+```json
+{
+  "projection": "lunar_south_polar_stereographic",
+  "bounds_m": [-304005.6080198807, -304005.6080198807, 304005.6080198807, 304005.6080198807],
+  "width": 2,
+  "height": 2,
+  "data_source": "mock",
+  "layers": [
+    { "criterion": "sun_visible_pct", "unit": "%", "min": 0, "max": 100,
+      "values": [null, 62.5, 84.2, null] },
+    { "criterion": "earth_visible_pct", "unit": "%", "min": 0, "max": 100,
+      "values": [null, 91.0, 78.5, null] }
+  ]
+}
+```
+
+- Criteria: `sun_visible_pct` / `%`, `earth_visible_pct` / `%`,
+  `longest_darkness_hours` / `h`, `longest_earth_blackout_hours` / `h`, `slope_deg` / `deg`.
+- Return exactly one layer for each requested criterion. No-data or unsupported terrain
+  calculations use `null` cells (including an entirely null slope layer), never invented values.
+- `values` is row-major, **north to south**, west to east, one value per pixel centre:
+  `x = xmin + (column + 0.5) × (xmax − xmin)/width`,
+  `y = ymax − (row + 0.5) × (ymax − ymin)/height`.
+- `min` / `max` are finite display limits in the stated units; equality is allowed for constant
+  fields. Null cells are transparent. Values outside the display limits saturate the color ramp.
+- `data_source` is `mock` or `real`; mock overlays are explicitly labelled synthetic in the UI.
+- The frontend rejects mismatched projection, extent, dimensions, units, incomplete layers,
+  nonfinite values, and incorrect cell counts rather than misaligning a raster.
+- The current client requests 128×128 cells. Backend implementations will likely need batching,
+  caching, or asynchronous jobs before evaluating the entire cap with live ephemerides; these
+  are not implemented by this frontend proposal.

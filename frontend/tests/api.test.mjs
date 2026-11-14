@@ -22,7 +22,8 @@ const point = (time, az = 5, elevation = 1, visible = false) => ({
 });
 
 before(async () => {
-  server = await createServer({ server: { middlewareMode: true, watch: null, hmr: false, ws: false }, appType: 'custom' });
+  server = await createServer({ optimizeDeps: { noDiscovery: true, include: [] },
+    server: { middlewareMode: true, watch: null, hmr: false, ws: false }, appType: 'custom' });
   ({ api } = await server.ssrLoadModule('/src/api.ts'));
   ({ TimelineBars, normalise } = await server.ssrLoadModule('/src/TimelineBars.tsx'));
   ({ HorizonChart, skyPath } = await server.ssrLoadModule('/src/HorizonChart.tsx'));
@@ -171,6 +172,24 @@ test('horizon shows the first lunar-day sample rather than maxima without slider
   assert.doesNotMatch(html, /type="range"/);
   assert.match(html, /2027-08-07 06:00 UTC/);
   assert.equal(calls.length, 0, 'visualization consumes data without fetching');
+});
+
+test('horizon altitude scale stays fixed across the full site batch when scrubbing', () => {
+  const timeseries = [point('2027-08-06T06:00:00Z', 0, -30), point(landing),
+    point('2027-09-06T06:00:00Z', 300, 1), point('2027-10-07T06:00:00Z', 200, 45)];
+  const props = { siteName: site.name, landingUtc: landing, loading: false, onRetry() {},
+    analysis: { timeseries, horizon: { horizon_azimuth_deg: [0, 180, 360],
+      horizon_elevation_deg: [0, 50, 0] }, metrics, fit, windows } };
+  const render = landingUtc => renderToStaticMarkup(React.createElement(HorizonChart, { ...props, landingUtc }));
+  const early = render(landing), late = render('2027-09-06T06:00:00Z');
+  const ticks = html => html.match(/<text[^>]*>-?\d+\.\d°<\/text>/g);
+  assert.equal(ticks(early)?.length, 6);
+  assert.deepEqual(ticks(early), ticks(late));
+  assert.match(early, />-31.0°<\/text>/);
+  assert.match(early, />51.0°<\/text>/, 'terrain outside the body range also fits the scale');
+  const terrainPath = html => html.match(/<path[^>]*fill="#303040"[^>]*>/)?.[0];
+  assert.ok(terrainPath(early));
+  assert.equal(terrainPath(early), terrainPath(late));
 });
 
 test('horizon distinguishes loading, empty samples and backend failures', () => {
