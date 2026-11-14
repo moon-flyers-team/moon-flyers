@@ -51,16 +51,18 @@ Key domain facts:
     `landing_windows.py`. Keep them thin; logic goes in `services/`.
   - `services/`: **one file per piece of logic**. Services never import FastAPI.
     - `catalogue.py`: predefined sites, `resolve_site`.
-    - `ephemeris.py`: Sun/Earth az/el series. **Mock now**; swap to `positions.py` here.
-    - `horizon.py`: `HorizonModel` per site (`for_site`). Flat 0° now; LOLA plugs in here.
+    - `ephemeris.py`: Sun/Earth az/el series from live JPL Horizons (`positions.py`). `MOON_FLYERS_EPHEMERIS=mock`
+      switches to `mock_ephemeris.py` (tests set this in `tests/conftest.py`).
+    - `horizon.py`: `HorizonModel` per site (`for_site`). Mock terrain (`MockTerrainHorizon`, 0–1.5°) now; LOLA plugs in here.
     - `visibility.py`: visible flags, intervals, metrics, fit.
     - `analysis.py`: `SiteSeries` (timeseries, analysis, window metrics, timeline), landing candidates.
     - `ranking.py`: best-landing ordering.
-    - `errors.py`: domain errors (`UnknownSiteError` → 404, `LimitExceededError` → 422), mapped
+    - `errors.py`: domain errors (`UnknownSiteError` → 404, `LimitExceededError`/`InvalidInputError` → 422,
+      `EphemerisUnavailableError` → 502), mapped
       to HTTP in `main.py` only.
   - `schemas.py` also has `SitesQuery`: GET /sites query params as one model that inherits
     `Constraints`, so defaults live in one place.
-  - `positions.py`: a teammate's live JPL Horizons client, not wired in yet.
+  - `positions.py`: a teammate's live JPL Horizons client, wrapped by `services/ephemeris.py`.
   Contract: `docs/API.md`.
 - Run from `backend/` with the **Windows Python** (`py -3.12`), not the MSYS one first on PATH
   (`C:\msys64\mingw64\bin\python.exe`), which has no wheels and fails to build pydantic-core:

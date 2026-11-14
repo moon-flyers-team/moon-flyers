@@ -4,24 +4,24 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
-- **Live JPL Horizons ephemeris is wired in (2026-11-14).** `ephemeris.generate()` calls
-  `positions.positions()`; header is `horizons`. `EPHEMERIS_SOURCE=mock` restores the mock
-  (`tests/conftest.py` sets it so tests stay offline). Horizons failures → 502. A 1-day hourly
-  site request takes about 3 s.
-- 2026-11-14: Horizons returns 503 for concurrent requests. `positions._query_azel` is now
-  serialized, retries 503s, and caches identical queries in memory (needed for reliability,
-  an exception to "no caching"). A cold 7-site default load takes about 30 s; repeats are instant.
-- **The mock API is done and tested (2026-11-14).** All v0 endpoints in `docs/API.md` serve
-  deterministic synthetic data (`src/services/ephemeris.py`). Every response carries `X-Moon-Flyers-Data-Source: mock`.
-  10 pytest tests pass. A 3-month, 7-site `/compare` takes about 0.3 s and returns about 0.7 MB.
+- **Real Sun/Earth positions from JPL Horizons are live (2026-11-14, branch `plug-positions-py`).**
+  `services/ephemeris.py` calls `positions.positions()`; header `X-Moon-Flyers-Data-Source: horizons`.
+  Terrain is still the mock hills. `MOON_FLYERS_EPHEMERIS=mock` switches back to synthetic data
+  (`services/mock_ephemeris.py`), and `tests/conftest.py` sets it, so pytest stays offline.
+  19 tests pass, plus 1 live test opt-in via `MOON_FLYERS_LIVE=1`.
+  Live timing: `GET /sites` (1 site, 3 weeks) ≈ 2.3 s; a 3-month, 7-site `/compare` ≈ 24 s (14 sequential
+  Horizons calls), ≈ 0.7 MB. The frontend's parallel burst (`/compare` + 7 `GET /sites`) ≈ 33 s, all 200.
 
 ## Next up (backend)
+1. Open a PR for `plug-positions-py`. Tell the frontend team: header is now `horizons`,
+   `/compare` takes about 25 s, there's a new 502, and the frontend fires `/compare` plus one `GET /sites`
+   per site in parallel (≈ 28 Horizons calls per param change).
 2. Verify the site coordinates in `services/catalogue.py` (currently approximate, from the frontend mock
    and memory).
 3. Deferred: LOLA terrain. Add a `HorizonModel` class in `services/horizon.py` and return it from
-   `for_site()`; everything else follows.
-4. Not done (user chose to skip): injecting the ephemeris source via FastAPI `Depends`, so tests
-   can stay offline once Horizons is live. Revisit when swapping in Horizons, since the tests will hit the network.
+   `for_site()` instead of `MockTerrainHorizon`; everything else follows.
+4. Possible improvement: interpolated rise/set crossings from the teammate's `origin/sun_earth_visibility_calc`
+   branch (ours count whole sample steps).
 
 ## API contract
 **The source of truth is [API.md](API.md)** (v0, agreed with the frontend team on 2026-11-14).
@@ -31,7 +31,7 @@ Endpoints: `GET /sites` (catalogue, plus single-site `analysis` over the whole w
 
 `docs/API.md` was replaced with the team's new contract on 2026-11-14 (it had been my outdated v0
 draft). Error policy (user decision): **only the HTTP status codes matter**. 400 = malformed JSON,
-404 = unknown `site_id`, 422 = invalid input or request too large. Bodies keep FastAPI's default
+404 = unknown `site_id`, 422 = invalid input or request too large, 502 = JPL Horizons failed or unreachable. Bodies keep FastAPI's default
 `{"detail": ...}`, and we don't promise a body shape.
 
 To raise with the frontend team:
@@ -46,13 +46,16 @@ Implementation choices where API.md is silent:
 - `sun_visibility=false` / `earth_visibility=false` set those timeseries fields to `null`.
   Metrics are still computed.
 - A custom site comes back with `id: null` and `group: "Custom"`. An unknown `site_id` gives 404.
-- Limits: 100k samples per series, 2,000 landing candidates, 1M mission samples, otherwise 422.
+- Limits: 90k samples per series (the Horizons maximum; it rejects more), 2,000 landing candidates, 1M mission samples, otherwise 422.
 - Visible = `elevation − angular_radius ≥ horizon(az) + horizon_clearance_deg`
   (Sun 0.267°, Earth 0.95°).
 - An interval's `end_utc` is the first non-visible sample (or the series end + one step).
 
 ## Decisions
 _(date: decision, then why)_
+- 2026-11-14: Ephemeris source is chosen by env var `MOON_FLYERS_EPHEMERIS` (default Horizons; `mock` for
+  tests/offline), not FastAPI `Depends`. Why: simplest switch, and tests stay offline. Horizons failures → 502,
+  and a step `positions()` can't express → 422.
 - 2026-11-14: **Mock-first.** Ship contract-shaped mock data so the frontend can integrate,
   then swap in real ephemeris. **Ephemeris = live JPL Horizons** (via `src/positions.py`).
 - 2026-11-14: **LOLA terrain is deferred.** The PDF rates it "Very High", but the user's call is
@@ -93,6 +96,8 @@ _(date: decision, then why)_
   there (to verify).
 
 ## Verified facts
+- 2026-11-14: Horizons concurrency limit: about 2 open requests per IP. More → `HTTP 503 Service Temporarily
+  Unavailable` after ≈1 s. Also max 90,000 times per request ("Output length exceeded").
 - 2026-11-14: The Horizons API works for a lunar surface observer. Working query
   (Sun = `COMMAND='10'`, Earth = `'399'`):
   `https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND='10'&EPHEM_TYPE=OBSERVER&CENTER='coord@301'&COORD_TYPE=GEODETIC&SITE_COORD='<E-lon deg>,<lat deg>,<h km>'&START_TIME=...&STOP_TIME=...&STEP_SIZE='6h'&QUANTITIES='4'`
@@ -114,6 +119,16 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-14: Fixed 502s in the UI ("HTTP Error 503" from Horizons). Horizons answers 503 when one IP has
+  more than about 2 requests open (measured: 2 parallel OK, 4 → half fail). `ephemeris.py` now allows at most 2
+  `positions()` calls in flight (process-wide semaphore) and retries 503 with 1/2/4/8 s backoff.
+- 2026-11-14: Swapped in live JPL Horizons via `positions.py` (removed its debug `print`). The mock moved to
+  `services/mock_ephemeris.py`. The adapter makes timestamps UTC, checks Horizons' time grid matches ours,
+  and maps errors to 422/502. Tests: `tests/conftest.py` (forces mock), `tests/test_ephemeris.py`.
+- 2026-11-14: Mock terrain horizon (`MockTerrainHorizon` in `services/horizon.py`): smooth
+  0–1.5° hills seeded by site coordinates, taller near the pole, and it blocks the Sun/Earth.
+  It was first up to 4°, but then the polar rim sites failed on power for every landing, so it was lowered.
+  The test environment (https://moon-flyers.tail644248.ts.net:8443) serves the mock API since PR #4.
 - 2026-11-14: Modifiability/testability pass. Horizon is now a per-site model (`services/horizon.py`).
   Services raise domain errors (`services/errors.py`) that are mapped to HTTP in `main.py`. Logic
   moved out of routers (timeseries and window metrics into `SiteSeries`, ranking into

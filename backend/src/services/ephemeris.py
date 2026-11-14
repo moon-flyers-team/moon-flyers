@@ -1,53 +1,32 @@
 """Sun and Earth azimuth/elevation series for a site.
 
-Live by default: JPL Horizons via `positions.positions()`. Set `EPHEMERIS_SOURCE=mock` for the
-offline mock below: deterministic synthetic values (no network, not NASA data) that behave
-plausibly:
-- the Sun circles the sky once per synodic month; its elevation swings by about the site's
-  colatitude, plus a ±1.54° seasonal term, so polar sites sit near the horizon;
-- Earth hangs near the sub-Earth direction and wobbles with libration (±7°), so near-side polar
-  sites get intermittent contact and far-side sites never see Earth.
+Live data comes from JPL Horizons via the teammate's `positions.positions()`. That is two HTTP
+calls per site per request, with no caching (working over efficient). Angles are for the centre
+of each body, airless, relative to the local horizontal plane of the reference sphere (no terrain).
 
+Set the env var `MOON_FLYERS_EPHEMERIS=mock` for offline synthetic data (`mock_ephemeris.py`).
+The tests do this in `tests/conftest.py`.
 """
 
-import math
 import os
+import threading
+import time
+import urllib.error
 from datetime import datetime, timedelta, timezone
 
 from .. import positions
 from ..schemas import Site
-from .errors import EphemerisUnavailableError, LimitExceededError
+from . import mock_ephemeris
+from .errors import EphemerisUnavailableError, InvalidInputError, LimitExceededError
 
-DATA_SOURCE = "mock" if os.getenv("EPHEMERIS_SOURCE", "horizons") == "mock" else "horizons"
-MAX_SAMPLES = 100_000
+# Sent as the X-Moon-Flyers-Data-Source header: "horizons" or "mock".
+DATA_SOURCE = "mock" if os.environ.get("MOON_FLYERS_EPHEMERIS") == "mock" else "horizons"
+MAX_SAMPLES = 90_000  # Horizons rejects longer tables ("max. is 90000")
+HORIZONS_CONCURRENCY = 2  # Horizons returns 503 beyond about 2 open requests per IP
+RETRY_DELAYS_S = (1, 2, 4, 8)  # backoff between retries after a 503; then one last try
 
-_J2000 = datetime(2000, 1, 1, 12, tzinfo=timezone.utc)
-_SYNODIC_H = 29.530589 * 24
-_ANOMALISTIC_H = 27.554550 * 24
-_DRACONIC_H = 27.212221 * 24
-_ECLIPSE_YEAR_H = 346.62 * 24
-
-
-def _angles(site: Site, t: datetime) -> tuple[float, float, float, float]:
-    h = (t - _J2000).total_seconds() / 3600
-    lat, lon = math.radians(site.latitude_deg), math.radians(site.longitude_deg)
-    colat = 90 - abs(site.latitude_deg)
-
-    syn = 2 * math.pi * h / _SYNODIC_H
-    sun_az = (math.degrees(syn) + site.longitude_deg + 180) % 360
-    sun_el = colat * math.cos(syn + lon) + 1.54 * math.sin(2 * math.pi * h / _ECLIPSE_YEAR_H)
-
-    dist_to_sub_earth = math.degrees(math.acos(math.cos(lat) * math.cos(lon)))
-    lib_lat = 6.7 * math.sin(2 * math.pi * h / _DRACONIC_H)
-    lib_lon = 7.0 * math.sin(2 * math.pi * h / _ANOMALISTIC_H)
-    earth_el = 90 - dist_to_sub_earth + lib_lat + lib_lon * math.sin(lon) * math.cos(lat)
-    earth_az = (-site.longitude_deg + lib_lon) % 360
-
-    return sun_az, sun_el, earth_az, earth_el
-
-
-def sample_count(start: datetime, end: datetime, step_s: int) -> int:
-    return int((end - start).total_seconds() // step_s) + 1
+# Sync endpoints run in FastAPI's thread pool, so a threading semaphore covers the whole process.
+_horizons_slots = threading.BoundedSemaphore(HORIZONS_CONCURRENCY)
 
 
 def generate(site: Site, start: datetime, end: datetime, step_s: int) -> dict:
@@ -55,26 +34,50 @@ def generate(site: Site, start: datetime, end: datetime, step_s: int) -> dict:
 
     Returns {"times": [datetime], "sun_az": [...], "sun_el": [...], "earth_az": [...], "earth_el": [...]}.
     """
-    n = sample_count(start, end, step_s)
+    n = int((end - start).total_seconds() // step_s) + 1
     if n > MAX_SAMPLES:
         raise LimitExceededError(f"request needs {n} samples per series; the limit is {MAX_SAMPLES}")
-    times = [start + timedelta(seconds=i * step_s) for i in range(n)]
-    if DATA_SOURCE == "horizons":
-        return _horizons(site, times, step_s)
-    cols = list(zip(*(_angles(site, t) for t in times)))
-    return {"times": times, "sun_az": list(cols[0]), "sun_el": list(cols[1]),
-            "earth_az": list(cols[2]), "earth_el": list(cols[3])}
+    if DATA_SOURCE == "mock":
+        return mock_ephemeris.generate(site, start, end, step_s)
+    return _horizons(site, start, end, step_s, n)
 
 
-def _horizons(site: Site, times: list[datetime], step_s: int) -> dict:
-    utc = [t.astimezone(timezone.utc).replace(tzinfo=None) for t in times]
+def _naive_utc(t: datetime) -> str:
+    """positions() wants ISO strings without an offset, meaning UTC."""
+    return t.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+def _call_positions(*args) -> dict:
+    """positions() with at most HORIZONS_CONCURRENCY calls in flight, retrying Horizons' 503.
+
+    Horizons answers 503 when one IP has more than about 2 requests open (measured 2026-11-14:
+    2 parallel OK, 4 parallel → half fail). The frontend fires /compare plus one GET /sites per
+    site at once, so without this most of them fail.
+    """
+    for delay in RETRY_DELAYS_S:
+        with _horizons_slots:
+            try:
+                return positions.positions(*args)
+            except urllib.error.HTTPError as e:
+                if e.code != 503:
+                    raise
+        time.sleep(delay)  # outside the slot, so others can proceed
+    with _horizons_slots:
+        return positions.positions(*args)
+
+
+def _horizons(site: Site, start: datetime, end: datetime, step_s: int, n: int) -> dict:
     try:
-        p = positions.positions(site.latitude_deg, site.longitude_deg,
-                                utc[0].isoformat(), utc[-1].isoformat(), step_s)
-    except Exception as e:
+        raw = _call_positions(site.latitude_deg, site.longitude_deg, _naive_utc(start), _naive_utc(end), step_s)
+    except ValueError as e:  # e.g. a non-whole-minute step that doesn't divide the span
+        raise InvalidInputError(str(e)) from e
+    except Exception as e:  # network failure, Horizons error, unparseable table
         raise EphemerisUnavailableError(f"JPL Horizons request failed: {e}") from e
-    if len(p["time_utc"]) != len(times):
+
+    times = [datetime.fromisoformat(t).replace(tzinfo=timezone.utc) for t in raw["time_utc"]]
+    expected = [start + timedelta(seconds=i * step_s) for i in range(n)]
+    if times != expected:
         raise EphemerisUnavailableError(
-            f"JPL Horizons returned {len(p['time_utc'])} samples, expected {len(times)}")
-    return {"times": times, "sun_az": list(p["sun_azimuth_deg"]), "sun_el": list(p["sun_elevation_deg"]),
-            "earth_az": list(p["earth_azimuth_deg"]), "earth_el": list(p["earth_elevation_deg"])}
+            f"Horizons returned {len(times)} samples that don't match the requested {n}-sample time grid")
+    return {"times": times, "sun_az": raw["sun_azimuth_deg"], "sun_el": raw["sun_elevation_deg"],
+            "earth_az": raw["earth_azimuth_deg"], "earth_el": raw["earth_elevation_deg"]}
