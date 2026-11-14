@@ -11,3 +11,11 @@ class UnknownSiteError(DomainError):
 
 class LimitExceededError(DomainError):
     """A request too large to compute (HTTP 422)."""
+
+
+class InvalidInputError(DomainError):
+    """Input that passes schema validation but can't be computed, e.g. an unsupported step (HTTP 422)."""
+
+
+class EphemerisUnavailableError(DomainError):
+    """The upstream ephemeris (JPL Horizons) failed or returned unusable data (HTTP 502)."""

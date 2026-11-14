@@ -37,7 +37,6 @@ def _query_azel(target, lon_deg, lat_deg, alt_km, start, stop, step):
     if "error" in data:
         raise RuntimeError(f"Horizons error: {data['error']}")
     text = data.get("result", "")
-    print(text)
     if "$$SOE" not in text:
         raise RuntimeError(f"Horizons returned no ephemeris table:\n{text[-1500:]}")
 
