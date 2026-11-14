@@ -8,6 +8,7 @@ import type { Coordinates, MapPoint } from './map/projection';
 import { HEATMAPS, rasterPixels, validateHeatmaps } from './map/heatmaps';
 import features from './map/features.json';
 import { INITIAL_CAMERA, MAX_ZOOM, panBy, wheelAction, zoomAt } from './map/navigation';
+import { TopographicContours } from './map/TopographicContours';
 
 interface Props {
   sites: LandingSite[];
@@ -73,6 +74,8 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
   const [name, setName] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [basemap, setBasemap] = useState<'satellite' | 'topography'>('satellite');
+  const [contourError, setContourError] = useState('');
   const [keyboardPoint, setKeyboardPoint] = useState<MapPoint>({ x: MAP_CENTER, y: MAP_CENTER });
   const [keyboardFocus, setKeyboardFocus] = useState(false);
   const hoverFeature = hover ? featureAt(hover) : undefined;
@@ -156,7 +159,17 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
   function stopPanning() { drag.current = null; setPanning(false); }
 
   return <section className="map-panel" aria-label="Lunar south pole map">
-    <div className="map-toolbar" role="group" aria-label="Heatmap overlays">
+    <div className="map-toolbar" role="group" aria-label="Map layers and heatmap overlays">
+      <label className="map-basemap-select"><span className="map-toolbar-title">Layers</span>
+        <select aria-label="Map surface layer" value={basemap} onChange={event => {
+          setBasemap(event.target.value as 'satellite' | 'topography');
+          setImageError(false);
+          setContourError('');
+        }}>
+          <option value="satellite">Satellite imagery</option>
+          <option value="topography">Topography / altitude contours</option>
+        </select>
+      </label>
       <span className="map-toolbar-title">Heatmaps</span>
       {HEATMAPS.map(option => <label className="map-layer-toggle" key={option.criterion}>
         <input type="checkbox" checked={criteria.includes(option.criterion)} onChange={event => {
@@ -186,7 +199,9 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
     {!criteria.length && <p className="map-hint">Click the surface to add a site. Enable a heatmap to request mission-dependent data.</p>}
     <p className="map-hint">Trackpad: pinch to zoom · two-finger scroll to pan. Mouse: wheel to zoom · right-drag to pan. Shift+scroll always pans.</p>
     <div className="map-site-legend"><span className="map-site-key map-site-key--default">Default sites</span><span className="map-site-key map-site-key--custom">Your sites · click to edit</span></div>
+    {basemap === 'topography' && <p className="map-hint">LOLA elevation, relative to the 1,737.4 km lunar reference radius · 500 m contour interval. Shading shows terrain relief.</p>}
     {imageError && <p className="request-error" role="alert">Some local basemap tiles could not load. Coordinates and grid remain available.</p>}
+    {basemap === 'topography' && contourError && <p className="request-error" role="alert">{contourError} The elevation basemap remains available.</p>}
     <div className="map-viewport" ref={viewportRef}>
       <svg ref={svgRef} className={`polar-map${panning ? ' polar-map--panning' : ''}`} viewBox={`${camera.x - halfView} ${camera.y - halfView} ${2 * halfView} ${2 * halfView}`}
         tabIndex={0} role="img" aria-label="Lunar south-pole surface map. Arrow keys move the cursor; Enter opens Add site; Escape closes it."
@@ -229,9 +244,10 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
         <defs><clipPath id={clipId}><circle cx={MAP_CENTER} cy={MAP_CENTER} r={MAP_RADIUS} /></clipPath></defs>
         <circle cx={MAP_CENTER} cy={MAP_CENTER} r={MAP_RADIUS} fill="#252630" />
         <g clipPath={`url(#${clipId})`}>
-          {TILES.map(tile => <image key={`${tile.row}-${tile.column}`} href={`/maps/south-pole/${tile.row}-${tile.column}.png`}
+          {TILES.map(tile => <image key={`${basemap}-${tile.row}-${tile.column}`} href={`/maps/south-pole/${basemap === 'topography' ? 'topography/' : ''}${tile.row}-${tile.column}.png`}
             x={tile.x} y={tile.y} width={tile.size + 0.02} height={tile.size + 0.02} onError={() => setImageError(true)} />)}
           <HeatmapImages data={heatmaps.data} opacity={opacity} />
+          <TopographicContours enabled={active && basemap === 'topography'} onError={setContourError} />
           <g className="map-grid">
             {[-88, -86, -84, -82, -80].map(latitude => <circle key={latitude} cx={MAP_CENTER} cy={MAP_CENTER}
               r={MAP_CENTER - project({ latitude_deg: latitude, longitude_deg: 0 }).y} />)}
@@ -268,6 +284,10 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
           x={MAP_CENTER + Math.sin(i * Math.PI / 2) * 322} y={MAP_CENTER - Math.cos(i * Math.PI / 2) * 322}
           textAnchor="middle" dominantBaseline="middle" className="map-compass">{label}</text>)}
       </svg>
+      {basemap === 'topography' && <figure className="map-topography-legend" aria-label="LOLA elevation scale">
+        <img src="/maps/south-pole/topography/legend.png" width="50" height="150" alt="Elevation in metres: −9126 to 7026, purple lowlands through green and yellow to red highlands" />
+        <figcaption>500 m contours</figcaption>
+      </figure>}
       {selection && <form className="map-tooltip" role="dialog" aria-modal="false" aria-label={editingSite ? 'Edit custom site' : 'Add map location to sites'}
         style={{ left: `clamp(12px, ${selection.left}%, calc(100% - 272px))`, top: `clamp(12px, ${selection.top}%, calc(100% - ${editingSite ? 255 : 215}px))` }}
         onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeSelection(); } }}
@@ -306,7 +326,7 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
           <span>{layer.max.toFixed(1)} {layer.unit}</span><small>{option.direction} · No data: transparent</small></div>;
       })}
     </div>}
-    <footer className="map-attribution">Basemap: <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek · LRO/LROC WAC</a>.
+    <footer className="map-attribution">Basemap: <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek · {basemap === 'topography' ? 'LRO/LOLA elevation' : 'LRO/LROC WAC'}</a>.
       {' '}Names: IAU/USGS via Moon Trek. Feature hover areas approximate catalogue diameters.
       {criteria.length > 1 && ' Overlays blend in toolbar order; enable one for an unambiguous color scale.'}
     </footer>

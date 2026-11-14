@@ -2,6 +2,7 @@ import { before, after, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import React from 'react';
+import { readFile } from 'node:fs/promises';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 let server, projection, validateHeatmaps, rasterPixels, api, siteReference, MapPanel, MainPanel, navigation;
@@ -106,6 +107,9 @@ test('map renders the polar grid, real local basemap tiles, disabled and custom 
   const html=renderToStaticMarkup(React.createElement(MapPanel,{sites,constraints,mission,active:false,validation:'',onSiteAdd(){},onSiteRename(){},onSiteDelete(){}}));
   assert.equal((html.match(/href="\/maps\/south-pole\//g)??[]).length,36);
   assert.match(html,/map-grid/);
+  assert.match(html,/aria-label="Map surface layer"/);
+  assert.match(html,/Satellite imagery/);
+  assert.match(html,/Topography \/ altitude contours/);
   assert.match(html,/Shackleton/);
   assert.match(html,/A map site/);
   assert.match(html,/map-waypoint--disabled/);
@@ -150,4 +154,29 @@ test('wheel gestures distinguish pinch, smooth pan, mouse ticks and explicit Shi
   assert.equal(wheelAction({...event,deltaY:2,deltaMode:1}),'zoom');
   assert.equal(wheelAction({...event,deltaY:-12,ctrlKey:true}),'zoom');
   assert.equal(wheelAction({...event,shiftKey:true}),'pan');
+});
+
+
+test('bundled topography assets contain all aligned tiles, the official legend and real 500 m contours', async () => {
+  const root=new URL('../public/maps/south-pole/topography/',import.meta.url);
+  for (let row=5;row<=10;row++) for (let column=5;column<=10;column++) {
+    const png=await readFile(new URL(`${row}-${column}.png`,root));
+    assert.equal(png.subarray(1,4).toString(),'PNG');
+    assert.equal(png.readUInt32BE(16),256);
+    assert.equal(png.readUInt32BE(20),256);
+  }
+  const legend=await readFile(new URL('legend.png',root));
+  assert.equal(legend.readUInt32BE(16),50);
+  assert.equal(legend.readUInt32BE(20),150);
+  const contours=JSON.parse(await readFile(new URL('contours.json',root),'utf8'));
+  assert.equal(contours.interval_m,500);
+  assert.equal(contours.reference_radius_m,1737400);
+  assert.deepEqual(contours.dem_size,[768,768]);
+  assert.ok(contours.layers.length>20);
+  for (const layer of contours.layers) {
+    assert.equal(Math.abs(layer.elevation_m%500),0);
+    assert.match(layer.path,/^M/);
+    const coordinates=layer.path.match(/-?\d+\.\d+/g).map(Number);
+    assert.ok(coordinates.every(value=>value>=45 && value<=655),'contours fit the georeferenced cap square');
+  }
 });

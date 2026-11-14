@@ -218,7 +218,14 @@ decisions change.
   Renaming/deleting updates Sidebar and Profiles too; coordinates and local IDs stay stable
   on rename. Both add/edit tooltips dismiss when navigating the map. Unnamed feature
   readouts are blank, with a fixed-width coordinate field.
-- The 36 local PNGs retain NASA WMTS level-4 tile origins and scale. Source, tile dimensions,
+- The Layers dropdown switches between local LROC satellite imagery and LOLA topography
+  with 500 m elevation contours and an official elevation legend. Each basemap has 36 PNGs
+  with identical NASA WMTS level-4 tile origins and scale. Switching layers preserves the
+  camera, sites and overlay settings and does not call the analysis backend. Contours load
+  lazily from a local JSON asset and use non-scaling strokes while navigating.
+  `frontend/scripts/generate-contours.py` regenerates them from a real georeferenced LOLA DEM
+  crop with temporary scientific Python dependencies; Python is not a frontend runtime dependency.
+  The 36 PNGs per basemap retain NASA WMTS level-4 tile origins and scale. Source, tile dimensions,
   projection and catalogue provenance are in `frontend/public/maps/south-pole/README.md`.
   The basemap is observational imagery with fixed illumination, not a mission simulation.
 - Feature names use a small Moon Trek IAU/USGS catalogue. Cursor hits approximate footprints
