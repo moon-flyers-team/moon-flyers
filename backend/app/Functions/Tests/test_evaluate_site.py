@@ -1,5 +1,8 @@
 import unittest
-from physics.evaluate_site import evaluate_site
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from Functions.evaluate_site import evaluate_site
 
 TS = ['2027-08-01T00:00:00Z','2027-08-01T06:00:00Z',
       '2027-08-01T12:00:00Z','2027-08-01T18:00:00Z']
