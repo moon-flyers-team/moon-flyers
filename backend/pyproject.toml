@@ -1,0 +1,14 @@
+# Tool config only (the app is not packaged). Run from backend/.
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# Basic correctness only: pyflakes (undefined names, typos, unused imports/variables)
+# plus pycodestyle errors. No style nitpicks.
+select = ["F", "E"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
