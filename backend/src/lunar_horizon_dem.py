@@ -344,6 +344,8 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
         verbose: print diagnostics and timing.
 
     Returns dict:
+        latitude_deg, longitude_deg: the inputs, echoed back unchanged (a check
+            that the result belongs to the requested site).
         horizon_azimuth_deg: [0.0 .. 359.0], north=0, east=90.
         horizon_elevation_deg: same length; elevation of the terrain relative to
             the plane perpendicular to the vector to the Moon's centre,
@@ -418,6 +420,8 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
               f"elevation {t3 - t2:.3f} | total {t3 - t0:.3f}")
 
     return {
+        "latitude_deg": latitude_deg,
+        "longitude_deg": longitude_deg,
         "horizon_azimuth_deg": [float(i) for i in range(360)],
         "horizon_elevation_deg": [float(v) for v in prof],
         "altitude_m": float(alt),
