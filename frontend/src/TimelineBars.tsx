@@ -16,7 +16,7 @@ function normalise(windows: TimeWindow[], missionStart: string, missionEnd: stri
   }));
 }
 
-function Track({ windows, cls }: { windows?: TimeWindow[]; missionStart?: string; missionEnd?: string; cls: string }) {
+function Track({ windows }: { windows?: TimeWindow[]; missionStart?: string; missionEnd?: string; cls: string }) {
   return (
     <td>
       <div className="tl-track">
