@@ -1,13 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ComparisonTable } from './ComparisonTable';
 import { HorizonChart } from './HorizonChart';
-import { LandingWindows } from './LandingWindows';
-import { TimeSlider } from './TimeSlider';
 import { api, siteReference } from './api';
 import { MapPanel } from './MapPanel';
 import type { Coordinates } from './map/projection';
 import { useRequest } from './useRequest';
-import { dateUtc, DAY_MS, landingWindowError } from './time';
+import { dateUtc, landingWindowError } from './time';
 import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints, SiteAnalysisResponse } from './types';
 
 interface Props {
@@ -28,7 +26,6 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
   const enabled = useMemo(() => sites.filter(site => site.enabled), [sites]);
   const selectedSite = enabled.find(site => site.id === selectedId) ?? enabled[0];
   const siteId = selectedSite?.id;
-  const selectedReference = useMemo(() => selectedSite ? siteReference(selectedSite) : undefined, [selectedSite]);
 
   useEffect(() => {
     if (mission.windowStart) setLandingUtc(`${mission.windowStart}T06:00:00Z`);
@@ -47,7 +44,6 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
   const start = Date.parse(dateUtc(mission.windowStart));
   const end = Date.parse(dateUtc(mission.windowEnd));
   const dateError = landingWindowError(mission.windowStart, mission.windowEnd);
-  const validDates = !dateError;
   const validConstraints = Object.values(constraints).every(value => Number.isFinite(value) && value >= 0)
     && Number.isInteger(mission.daysOnSurface) && mission.daysOnSurface >= 1
     && power.minSunlight <= 100 && comms.minEarthContact <= 100
@@ -74,9 +70,6 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       )),
     [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
   const horizons = useRequest(horizonsRequest);
-  const timelineEnd = validDates && validConstraints
-    ? new Date(end + mission.daysOnSurface * DAY_MS).toISOString() : '';
-
   function canShift(hours: number) {
     const next = Date.parse(landingUtc) + hours * 3_600_000;
     return !validation && next >= start && next <= end;
@@ -105,27 +98,18 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
           }}>{name === 'profiles' ? 'Profiles' : 'Map'}</button>)}
       </div>
       <div className="main-body" id="panel-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden={tab !== 'profiles'}>
-        {!dateError && validation && <div className="request-error" role="alert">{validation}</div>}
-        <TimeSlider
-          missionStart={dateUtc(mission.windowStart)}
-          missionEnd={dateUtc(mission.windowEnd)}
-          value={landingUtc}
-          onChange={setLandingUtc}
-          disabled={!!validation}
-        />
+        {validation && <div className="request-error" role="alert">{validation}</div>}
         <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} landingTime={landingUtc}
           onTimeShift={shiftTime} onTimeSeek={setLandingUtc} canShiftBack={canShift(-6)} canShiftForward={canShift(6)}
-          missionStart={dateUtc(mission.windowStart)} missionEnd={timelineEnd}
+          missionStart={dateUtc(mission.windowStart)}
+          sliderEnd={dateUtc(mission.windowEnd)} disabled={!!validation}
           loading={comparison.loading} error={comparison.error} onRetry={comparison.retry} />
         <div className="bottom-row">
           <HorizonChart siteName={selectedSite?.name ?? '—'}
             analysis={siteId ? horizons.data?.get(siteId)?.analysis : undefined} landingUtc={landingUtc}
             loading={horizons.loading} error={horizons.error} onRetry={horizons.retry} />
         </div>
-        {siteId && selectedReference && !validation && <LandingWindows key={JSON.stringify([siteId, mission.windowStart, mission.windowEnd, constraints])}
-          site={selectedReference} siteName={selectedSite.name} windowStart={mission.windowStart}
-          windowEnd={mission.windowEnd} constraints={constraints} onSelect={setLandingUtc} />}
       </div>
       <div className="main-body map-body" id="panel-map" role="tabpanel" aria-labelledby="tab-map" hidden={tab !== 'map'}>
         <MapPanel sites={sites} constraints={constraints} mission={mission} active={tab === 'map'}

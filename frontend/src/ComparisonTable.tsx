@@ -1,7 +1,10 @@
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { FitBadge } from './FitBadge';
 import { TimelineBars } from './TimelineBars';
-import { formatUtc } from './time';
 import type { LandingSite, ComparisonResult, Constraints, Metrics, WindowMetricsEntry } from './types';
+
+const THREE_MONTHS_MS = 91 * 86_400_000;
+const STEP_MS = 6 * 3_600_000;
 
 function NumCell({ value, warn, unit = '' }: { value?: number | null; warn: boolean; unit?: string }) {
   return <td className={warn ? 'warn' : ''}>
@@ -9,6 +12,7 @@ function NumCell({ value, warn, unit = '' }: { value?: number | null; warn: bool
     {value == null ? '—' : `${value}${unit}`}
   </td>;
 }
+
 interface Props {
   sites: LandingSite[];
   results?: ComparisonResult[];
@@ -21,41 +25,146 @@ interface Props {
   canShiftBack: boolean;
   canShiftForward: boolean;
   missionStart: string;
-  missionEnd: string;
+  sliderEnd: string;
+  disabled?: boolean;
   loading: boolean;
   error?: string;
   onRetry: () => void;
 }
+
 export function ComparisonTable({ sites, results, constraints: c, selectedId, onSelect,
-  landingTime, onTimeShift, onTimeSeek, canShiftBack, canShiftForward, missionStart, missionEnd,
+  landingTime, onTimeShift, onTimeSeek, canShiftBack, canShiftForward,
+  missionStart, sliderEnd, disabled,
   loading, error, onRetry }: Props) {
+
+  const startMs     = useMemo(() => Date.parse(missionStart), [missionStart]);
+  const sliderEndMs = useMemo(() => Date.parse(sliderEnd),    [sliderEnd]);
+
+  const [viewStartMs, setViewStartMs] = useState(() => startMs);
+
+  useEffect(() => { setViewStartMs(startMs); }, [startMs]);
+
+  useEffect(() => {
+    const landingMs = Date.parse(landingTime);
+    if (!Number.isFinite(landingMs)) return;
+    setViewStartMs(prev => {
+      const prevEnd = Math.min(prev + THREE_MONTHS_MS, sliderEndMs);
+      if (landingMs >= prev && landingMs <= prevEnd) return prev;
+      const offset = Math.max(0, Math.floor((landingMs - startMs) / THREE_MONTHS_MS));
+      return startMs + offset * THREE_MONTHS_MS;
+    });
+  }, [landingTime, startMs, sliderEndMs]);
+
+  const viewEndMs = Math.min(viewStartMs + THREE_MONTHS_MS, sliderEndMs);
+  const viewStart = useMemo(() => new Date(viewStartMs).toISOString(), [viewStartMs]);
+  const viewEnd   = useMemo(() => new Date(viewEndMs).toISOString(),   [viewEndMs]);
+
+  const canGoPrev = viewStartMs > startMs;
+  const canGoNext = viewEndMs  < sliderEndMs;
+
+  function goPrev() { setViewStartMs(ms => Math.max(startMs, ms - THREE_MONTHS_MS)); }
+  function goNext() { setViewStartMs(ms => Math.min(sliderEndMs - THREE_MONTHS_MS, ms + THREE_MONTHS_MS)); }
+
+  // Custom inline slider
+  const sliderRef      = useRef<HTMLDivElement>(null);
+  const sliderDragging = useRef(false);
+
+  const thumbPct = useMemo(() => {
+    const start   = Date.parse(viewStart);
+    const end     = Date.parse(viewEnd);
+    const landing = Date.parse(landingTime);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !Number.isFinite(landing)) return null;
+    return Math.max(0, Math.min(100, (landing - start) / (end - start) * 100));
+  }, [viewStart, viewEnd, landingTime]);
+
+  const ticks = useMemo(() => {
+    const start = Date.parse(viewStart);
+    const end   = Date.parse(viewEnd);
+    const result: { pct: number; label: string }[] = [];
+    const d = new Date(start);
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    while (d.getTime() < end) {
+      result.push({
+        pct: ((d.getTime() - start) / (end - start)) * 100,
+        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      });
+      d.setUTCMonth(d.getUTCMonth() + 1);
+    }
+    return result;
+  }, [viewStart, viewEnd]);
+
+  function seekSlider(clientX: number) {
+    if (!sliderRef.current) return;
+    const rect  = sliderRef.current.getBoundingClientRect();
+    const pct   = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const start = Date.parse(viewStart);
+    const end   = Date.parse(viewEnd);
+    onTimeSeek(new Date(Math.round((start + pct * (end - start)) / STEP_MS) * STEP_MS).toISOString());
+  }
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) { if (sliderDragging.current) seekSlider(e.clientX); }
+    function onUp()  { sliderDragging.current = false; }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [viewStart, viewEnd, onTimeSeek]);
+
   return <section className="ct-wrap" aria-label="Site comparison" aria-busy={loading}>
     <div className="ct-topbar">
-      <span className="ct-tab">Comparison · {c.days_on_surface} days on surface</span>
-      <div className="ct-time"><span className="ct-time-label">Landing</span>
+      <span className="ct-tab">Comparison</span>
+      <div className="ct-time">
+        <span className="ct-time-label">Landing (UTC)</span>
         <button className="ct-btn" disabled={!canShiftBack} onClick={() => onTimeShift(-6)}>−6 h</button>
-        <span className="ct-time-val">{formatUtc(landingTime)}</span>
+        <span className="ct-time-val">{landingTime.slice(0, 10)} {landingTime.slice(11, 16)}</span>
         <button className="ct-btn" disabled={!canShiftForward} onClick={() => onTimeShift(6)}>+6 h</button>
       </div>
     </div>
     {loading && <p className="request-status" role="status">Comparing sites. This can take 10–30 seconds…</p>}
     {error && <div className="request-error" role="alert">Comparison failed: {error} <button className="ct-btn" onClick={onRetry}>Retry comparison</button></div>}
     <div className="ct-scroll"><table className="ct">
-      <thead><tr>
-        <th rowSpan={2} className="ct-left">Site</th><th rowSpan={2}>Fit</th>
+      <thead>
+      <tr>
+        <th rowSpan={2} className="ct-left">Site</th>
+        <th rowSpan={2}>Fit</th>
         <th colSpan={2} className="ct-grp ct-grp--power"><span className="grp-dot grp-dot--power" /> Power (Sun)</th>
         <th colSpan={2} className="ct-grp ct-grp--comms"><span className="grp-dot grp-dot--comms" /> Comms (Earth)</th>
         <th rowSpan={2}>Terrain<span className="th-sub">Slope max {c.max_slope_deg}°</span></th>
-        <th rowSpan={2}>Windows</th>
-      </tr><tr>
+        <th rowSpan={2} className="ct-slider-cell">
+          <div className="ts-wrapper">
+            <div className="ts-controls-row">
+              <button className="ct-btn ts-nav-btn" disabled={!canGoPrev} onClick={goPrev}>◀</button>
+              <div
+                ref={sliderRef}
+                className={`ts-custom-track${disabled ? ' ts-custom-track--disabled' : ''}`}
+                onMouseDown={e => { sliderDragging.current = true; seekSlider(e.clientX); }}
+              >
+                {thumbPct !== null && <div className="ts-thumb" style={{ left: `${thumbPct}%` }} />}
+              </div>
+              <button className="ct-btn ts-nav-btn" disabled={!canGoNext} onClick={goNext}>▶</button>
+            </div>
+            <div className="ts-ticks-inset">
+              {ticks.map(t => (
+                <div key={t.label} className="ts-tick" style={{ left: `${t.pct}%` }}>
+                  <div className="ts-tick-mark" />
+                  <span className="ts-tick-label">{t.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </th>
+      </tr>
+      <tr>
         <th>Sunlight<span className="th-sub">min {c.min_sun_visible_pct}%</span></th>
         <th>Longest night<span className="th-sub">max {c.max_darkness_hours} h</span></th>
         <th>Earth contact<span className="th-sub">min {c.min_earth_visible_pct}%</span></th>
         <th>Longest gap<span className="th-sub">max {c.max_earth_blackout_hours} h</span></th>
-      </tr></thead>
-      <tbody>{!sites.length && <tr><td colSpan={8} className="ct-empty">No sites selected</td></tr>}
+      </tr>
+      </thead>
+      <tbody>
+        {!sites.length && <tr><td colSpan={8} className="ct-empty">No sites selected</td></tr>}
         {sites.map((site, index) => {
-          // The contract guarantees response order, including custom sites without IDs.
           const result = results?.[index];
           const entry: WindowMetricsEntry | undefined = result?.window_metrics.find(
             e => e.landing_utc === landingTime
@@ -71,11 +180,10 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             <NumCell value={metrics?.longest_earth_blackout_hours} warn={warn('longest_earth_blackout_hours')} unit=" h" />
             <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
             <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
-              missionStart={missionStart} missionEnd={missionEnd} landingUtc={landingTime} onChange={onTimeSeek} />
+              missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={onTimeSeek} />
           </tr>;
         })}
       </tbody>
     </table></div>
-    {results && <p className="request-status">Visibility windows: {formatUtc(missionStart)} to {formatUtc(missionEnd)}. Terrain slope is unavailable in API v0.</p>}
   </section>;
 }

@@ -7,9 +7,10 @@ interface Props {
   value: string;        // ISO UTC e.g. '2027-08-07T06:00:00Z'
   onChange: (iso: string) => void;
   disabled?: boolean;
+  showDate?: boolean;   // show the date/time label row; default true
 }
 
-export function TimeSlider({ missionStart, missionEnd, value, onChange, disabled }: Props) {
+export function TimeSlider({ missionStart, missionEnd, value, onChange, disabled, showDate = true }: Props) {
   const startMs = useMemo(() => Date.parse(missionStart), [missionStart]);
   const endMs   = useMemo(() => Date.parse(missionEnd),   [missionEnd]);
   const totalH  = (endMs - startMs) / 3_600_000;
@@ -38,10 +39,12 @@ export function TimeSlider({ missionStart, missionEnd, value, onChange, disabled
 
   return (
     <div className="ts-wrap">
-      <div className="ts-date">
-        <span className="ts-date-label">Landing (UTC)</span>
-        <span className="ts-time">{value ? formatUtc(value) : '—'}</span>
-      </div>
+      {showDate && (
+        <div className="ts-date">
+          <span className="ts-date-label">Landing (UTC)</span>
+          <span className="ts-time">{value ? formatUtc(value) : '—'}</span>
+        </div>
+      )}
 
       <div className="ts-track-wrap">
         <input
@@ -54,15 +57,15 @@ export function TimeSlider({ missionStart, missionEnd, value, onChange, disabled
           onChange={handleSlider}
           disabled={disabled}
         />
+      </div>
 
-        <div className="ts-ticks">
-          {ticks.map(t => (
-            <div key={t.label} className="ts-tick" style={{ left: `${t.pct}%` }}>
-              <div className="ts-tick-mark" />
-              <span className="ts-tick-label">{t.label}</span>
-            </div>
-          ))}
-        </div>
+      <div className="ts-ticks">
+        {ticks.map(t => (
+          <div key={t.label} className="ts-tick" style={{ left: `${t.pct}%` }}>
+            <div className="ts-tick-mark" />
+            <span className="ts-tick-label">{t.label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

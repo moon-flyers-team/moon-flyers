@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { TimeWindow } from './types';
 import { formatUtc } from './time';
 
@@ -29,22 +29,6 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
   const tracksRef = useRef<HTMLDivElement>(null);
   const dragging  = useRef(false);
 
-  const ticks = useMemo(() => {
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return [];
-    const result: { pct: number; label: string }[] = [];
-    const d = new Date(startMs);
-    d.setUTCDate(1);
-    d.setUTCMonth(d.getUTCMonth() + 1);
-    while (d.getTime() < endMs) {
-      result.push({
-        pct: (d.getTime() - startMs) / (endMs - startMs) * 100,
-        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
-      });
-      d.setUTCMonth(d.getUTCMonth() + 1);
-    }
-    return result;
-  }, [startMs, endMs]);
-
   const markerPct = landingUtc && Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
     ? Math.max(0, Math.min(100, (Date.parse(landingUtc) - startMs) / (endMs - startMs) * 100))
     : null;
@@ -69,11 +53,6 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
   return (
     <td>
       <div className="tl-wrap">
-        <div className="tl-ticks">
-          {ticks.map(t => (
-            <span key={t.label} className="tl-tick-label" style={{ left: `${t.pct}%` }}>{t.label}</span>
-          ))}
-        </div>
         <div
           ref={tracksRef}
           className={`tl-tracks${onChange ? ' tl-tracks--interactive' : ''}`}
