@@ -97,15 +97,17 @@ optional, and the defaults match the mock UI:
 ## Data loading strategy
 
 The frontend loads heavyweight analysis data **only** on:
-1. App start (site catalogue).
-2. Any mission parameter change (window, constraints).
+1. App start (site catalogue via `GET /sites` with no parameters).
+2. Any mission parameter change (window dates, constraints).
 3. A site being toggled on or off.
+
+On events 2–3, the frontend fires **one `POST /compare`** for all enabled sites and **one `GET /sites` per enabled site** in parallel to pre-load every horizon dataset.
 
 The time slider **never** triggers an API call. It slices pre-loaded data client-side:
 - `ComparisonTable` looks up the `window_metrics` entry whose `landing_utc` matches the slider.
-- `HorizonChart` filters `timeseries` to the one lunar day starting at the slider position.
+- `HorizonChart` filters the pre-loaded `timeseries` to the one lunar day starting at the slider position — switching sites is instant.
 
-## 1. `GET /sites`: the sites sidebar, and the horizon chart for one site
+## 1. `GET /sites`: the sites catalogue and per-site horizon data
 
 *Without parameters* it returns the predefined catalogue:
 ```json
@@ -113,13 +115,13 @@ The time slider **never** triggers an API call. It slices pre-loaded data client
    "latitude_deg": -86.0, "longitude_deg": 0.0, "notes": "..." }]
 ```
 
-*With analysis parameters* it also returns `analysis` for the selected site, which feeds the
-horizon chart.
+*With analysis parameters* it also returns `analysis` for one site, which feeds the horizon
+chart. The frontend calls this **once per enabled site in parallel** on mission params change
+or site toggle — not on slider moves, and not only for the selected site.
 - Choose the site with `site_id=malapert_massif`. For a custom site, send `name`, `latitude_deg`
   and `longitude_deg` instead.
 - Also send `window_start_utc`, `window_end_utc`, any constraint fields, `timestep_seconds`
   (default 3600), and `sun_visibility` / `earth_visibility` (default true).
-- **Called once per site selection or mission params change, not on slider moves.**
 
 Example request:
 ```
