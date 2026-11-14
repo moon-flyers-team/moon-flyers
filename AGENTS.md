@@ -55,7 +55,8 @@ when agreed behavior changes.
 | `frontend/src/TimelineBars.tsx` | Visibility intervals clipped to the displayed time range |
 | `frontend/src/HorizonChart.tsx` | Horizon profile, Sun/Earth paths, first-sample markers, and stable altitude bounds |
 | `frontend/src/LandingWindows.tsx` | Explicit best-time search and applying a returned landing time |
-| `frontend/src/Field.tsx`, `Section.tsx` | Shared sidebar primitives |
+| `frontend/src/Field.tsx`, `Section.tsx` | Shared sidebar primitives; section actions stay outside collapse buttons |
+| `frontend/src/DateField.tsx` | UTC date inputs with browser-native calendar controls and error associations |
 | `frontend/src/index.css` | Shared visual tokens and component styles |
 | `frontend/src/mockData.ts` | Example catalogue used when the catalogue request fails |
 | `frontend/tests/api.test.mjs` | Node contract tests and React server-rendering checks |
@@ -245,3 +246,26 @@ decisions change.
   local imagery, coordinate readout width, custom sites in Profiles, missing endpoint state,
   intercepted fixture overlay rendering, multi-layer requests, mission updates, and mobile.
   Full frontend suite still has the previously identified 12 old-contract fixture failures.
+
+## Sidebar site entry and calendars
+
+- The Sites section's `+ Add` action opens a manual name/decimal-coordinate form, including
+  when the section is collapsed. Section header actions are sibling controls, never buttons
+  nested in the section-collapse button. Empty/whitespace names, missing/nonfinite numbers,
+  latitude outside −90…90 and longitude outside −180…180 cannot be submitted. Decimal
+  precision is preserved; do not round manually entered coordinates to the map click precision.
+- Sidebar and Map both call App's `addSite`, so manual sites immediately appear in Profiles
+  and on the map where inside the cap. Out-of-cap coordinates remain valid for Profiles.
+  Entries use local UUIDs, custom coordinate payloads, and session-only storage, just like
+  map-created sites. Cancel/Escape discards the form and returns focus to its Add button.
+- `DateField` keeps `YYYY-MM-DD` mission values and the browser-native `type="date"`
+  calendar inside each input. Do not add a second external calendar button or custom calendar.
+  The shared `landingWindowError()` helper in time.ts requires real calendar dates and an
+  end date strictly later than the start date. Equal dates are invalid for the backend.
+- Date errors appear once, prominently at the top of Mission Planner above its date fields;
+  both inputs have aria-invalid and describe that alert. Profiles and Map suppress duplicate
+  date notices but use the same validation to block comparisons, site analysis, best-time
+  searches, and heatmaps. Obsolete requests are aborted and stale data hidden by useRequest.
+- `frontend/tests/dates.test.mjs` covers equality, reversed/missing/invalid dates, leap days,
+  alert placement, native-only date controls, and disabled time controls. Browser checks
+  verify no invalid API calls, both tabs, and recovery when a valid range is restored.

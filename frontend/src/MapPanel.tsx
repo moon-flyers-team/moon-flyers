@@ -16,6 +16,7 @@ interface Props {
   mission: MissionParams;
   active: boolean;
   validation: string;
+  showValidation?: boolean;
   onSiteAdd: (coordinates: Coordinates, name: string) => void;
   onSiteRename: (id: string, name: string) => void;
   onSiteDelete: (id: string) => void;
@@ -57,7 +58,7 @@ function HeatmapImages({ data, opacity }: { data?: MapHeatmapsResponse; opacity:
     width={2 * MAP_RADIUS} height={2 * MAP_RADIUS} preserveAspectRatio="none" />)}</g>;
 }
 
-export function MapPanel({ sites, constraints, mission, active, validation, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
+export function MapPanel({ sites, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -190,7 +191,7 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
         <button className="ct-btn" onClick={() => { setCamera(INITIAL_CAMERA); setSelection(null); }}>Reset view</button>
       </div>
     </div>
-    {validation && <p className="request-error" role="alert">{validation}</p>}
+    {showValidation && validation && <p className="request-error" role="alert">{validation}</p>}
     {heatmaps.loading && <p className="request-status" role="status">Calculating overlays for the current mission settings…</p>}
     {heatmaps.error && <p className="request-error" role="alert">
       {/^(404|405|501)\b/.test(heatmaps.error) ? 'Heatmaps unavailable: the backend does not yet implement POST /map/heatmaps.' : `Heatmap request failed: ${heatmaps.error}`}

@@ -583,3 +583,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); out
   .main-body { overflow: visible; }
   .polar-map { min-height: 330px; }
 }
+
+/* Sidebar manual sites and landing-window calendars */
+.sb-section-heading { display: flex; align-items: center; }
+.sb-section-heading .sb-hdr { flex: 1; min-width: 0; width: auto; }
+.sb-section-action { padding-right: 10px; flex-shrink: 0; }
+.sb-add-site { color: var(--comms); padding: 3px 7px; }
+.sb-site-form { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border-hi); border-radius: 4px; background: var(--bg-surf); }
+.sb-site-form label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #aaaac4; }
+.sb-site-form p, .sb-site-form small { font-size: 10px; color: #9292b3; }
+.sb-form-actions { display: flex; gap: 7px; }
+.sb-form-actions button { padding: 4px 8px; }
+.sb-site-announcement { font-size: 11px; color: #9ed6b9; }
+/* The browser supplies the calendar control inside each date input. */
+.sb-date-field input { color-scheme: dark; }
+.sb-date-field input[aria-invalid="true"] { border-color: #ff7979; }
+.sb-mission-error { padding: 10px; border: 1px solid #ff7979; border-left-width: 4px; border-radius: 4px; background: #3b151b; color: #ffd2d2; }
+.sb-mission-error strong { display: block; margin-bottom: 4px; font-size: 12px; }
+.sb-mission-error p { font-size: 11px; line-height: 1.5; }
