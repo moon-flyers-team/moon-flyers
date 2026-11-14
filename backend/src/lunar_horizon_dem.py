@@ -576,7 +576,7 @@ def calibrate(data_dir=DATA_DIR):
         print(f"global check ({la}, {lo}): median |dh| {np.nanmedian(np.abs(dh)):.1f} m, "
               f"p95 {np.nanpercentile(np.abs(dh), 95):.1f} m over {len(h)} points")
     print("calibration saved")
-
+#
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "demo"
