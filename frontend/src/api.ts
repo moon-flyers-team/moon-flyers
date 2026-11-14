@@ -25,7 +25,8 @@ function post<T>(path: string, body: unknown, signal?: AbortSignal) {
 }
 export interface SiteAnalysisParams {
   site: SiteReference;
-  landing_utc: string;
+  window_start_utc: string;
+  window_end_utc: string;
   constraints: Constraints;
   timestep_seconds?: number;
   sun_visibility?: boolean;
@@ -33,10 +34,10 @@ export interface SiteAnalysisParams {
 }
 export interface CompareParams {
   sites: SiteReference[];
-  landing_utc: string;
   window_start_utc: string;
   window_end_utc: string;
   constraints: Constraints;
+  candidate_step_hours?: number;
   timestep_seconds?: number;
 }
 export interface LandingWindowsParams {
@@ -60,7 +61,8 @@ export const api = {
     const query = new URLSearchParams();
     const site = 'id' in params.site ? { site_id: params.site.id } : params.site;
     const fields = {
-      ...site, ...params.constraints, landing_utc: params.landing_utc,
+      ...site, ...params.constraints,
+      window_start_utc: params.window_start_utc, window_end_utc: params.window_end_utc,
       timestep_seconds: params.timestep_seconds ?? 3600,
       sun_visibility: params.sun_visibility ?? true,
       earth_visibility: params.earth_visibility ?? true,

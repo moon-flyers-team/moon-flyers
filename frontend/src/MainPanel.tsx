@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { ComparisonTable } from './ComparisonTable';
 import { HorizonChart } from './HorizonChart';
 import { LandingWindows } from './LandingWindows';
+import { TimeSlider } from './TimeSlider';
 import { api } from './api';
 import { useRequest } from './useRequest';
-import { dateUtc, DAY_MS, LUNAR_DAY_FETCH_DAYS } from './time';
+import { dateUtc, DAY_MS } from './time';
 import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints } from './types';
 
 interface Props {
@@ -45,21 +46,20 @@ export function MainPanel({ sites, power, comms, terrain, mission }: Props) {
     && mission.horizonClearance <= 90 && terrain.maxSlope <= 90;
   const validation = !validDates ? 'Choose a valid landing window with the end on or after the start.'
     : !validConstraints ? 'Use positive whole mission days, percentages from 0–100, angles from 0–90°, and nonnegative time limits.' : '';
-  const validLanding = Number.isFinite(Date.parse(landingUtc)) && Date.parse(landingUtc) >= start && Date.parse(landingUtc) <= end;
-
-  const compareRequest = useMemo(() => validation || !validLanding || !enabled.length ? null
+  const compareRequest = useMemo(() => validation || !enabled.length ? null
     : (signal: AbortSignal) => api.compare({
-      sites: enabled.map(site => ({ id: site.id })), landing_utc: landingUtc,
+      sites: enabled.map(site => ({ id: site.id })),
       window_start_utc: dateUtc(mission.windowStart), window_end_utc: dateUtc(mission.windowEnd),
-      constraints,
-    }, signal), [validation, validLanding, enabled, landingUtc, mission.windowStart, mission.windowEnd, constraints]);
+      constraints, candidate_step_hours: 6,
+    }, signal), [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
   const comparison = useRequest(compareRequest);
 
-  const horizonRequest = useMemo(() => validation || !validLanding || !siteId ? null
+  const horizonRequest = useMemo(() => validation || !siteId ? null
     : (signal: AbortSignal) => api.getSiteAnalysis({
-      site: { id: siteId }, landing_utc: landingUtc,
-      constraints: { ...constraints, days_on_surface: LUNAR_DAY_FETCH_DAYS },
-    }, signal), [validation, validLanding, siteId, landingUtc, constraints]);
+      site: { id: siteId },
+      window_start_utc: dateUtc(mission.windowStart), window_end_utc: dateUtc(mission.windowEnd),
+      constraints,
+    }, signal), [validation, siteId, mission.windowStart, mission.windowEnd, constraints]);
   const horizon = useRequest(horizonRequest);
   const timelineEnd = validDates && validConstraints
     ? new Date(end + mission.daysOnSurface * DAY_MS).toISOString() : '';
@@ -82,13 +82,20 @@ export function MainPanel({ sites, power, comms, terrain, mission }: Props) {
       </div>
       <div className="main-body">
         {validation && <div className="request-error" role="alert">{validation}</div>}
+        <TimeSlider
+          missionStart={dateUtc(mission.windowStart)}
+          missionEnd={dateUtc(mission.windowEnd)}
+          value={landingUtc}
+          onChange={setLandingUtc}
+          disabled={!!validation}
+        />
         <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} landingTime={landingUtc}
           onTimeShift={shiftTime} canShiftBack={canShift(-6)} canShiftForward={canShift(6)}
           missionStart={dateUtc(mission.windowStart)} missionEnd={timelineEnd}
           loading={comparison.loading} error={comparison.error} onRetry={comparison.retry} />
         <div className="bottom-row">
-          <HorizonChart key={`${siteId}-${landingUtc}`} siteName={selectedSite?.name ?? '—'}
+          <HorizonChart key={siteId} siteName={selectedSite?.name ?? '—'}
             analysis={horizon.data?.analysis} landingUtc={landingUtc}
             loading={horizon.loading} error={horizon.error} onRetry={horizon.retry} />
         </div>

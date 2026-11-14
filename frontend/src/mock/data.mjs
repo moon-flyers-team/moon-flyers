@@ -84,8 +84,8 @@ function fitFor(metrics, constraints) {
   return { status: power && comms ? 'neither_met' : power ? 'power_short' : comms ? 'comms_short' : 'both_met',
     violations: checks.filter(([, failed]) => failed).map(([name]) => name) };
 }
-export function analyze(site, start, constraints, timestep = 3600, sun = true, earth = true) {
-  const end = start + constraints.days_on_surface * DAY_MS;
+export function analyze(site, start, constraints, timestep = 3600, sun = true, earth = true, end = undefined) {
+  end = end ?? (start + constraints.days_on_surface * DAY_MS);
   const points = timeseries(site, start, end, constraints, timestep, sun, earth);
   const windows = Object.fromEntries(['sun', 'earth'].map(body => [body, visibilityWindows(points, body)]));
   const [sunlight, darkness] = windowMetrics(windows.sun, start, end);

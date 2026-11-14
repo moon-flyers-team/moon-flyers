@@ -52,8 +52,9 @@ export interface SiteAnalysis {
   fit: Fit;
 }
 export interface SiteAnalysisResponse extends SiteDefinition { analysis: SiteAnalysis }
+export interface WindowMetricsEntry { landing_utc: string; metrics: Metrics; fit: Fit }
 export interface ComparisonResult {
-  site: SiteDefinition; metrics: Metrics; fit: Fit; timeline: VisibilityWindows;
+  site: SiteDefinition; window_metrics: WindowMetricsEntry[]; timeline: VisibilityWindows;
 }
 export interface LandingWindow { rank: number; landing_utc: string; metrics: Metrics; fit: Fit }
 export interface MissionParams {
