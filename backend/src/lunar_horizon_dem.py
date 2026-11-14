@@ -67,6 +67,15 @@ VARIANTS = [(sw, sx, sy) for sw in (False, True) for sx in (1, -1) for sy in (1,
 STEP_MIN_M = 20.0
 STEP_FRAC = 0.02
 
+# Slope: fitted over a baseline (diameter of a ring of 8 DEM samples around the
+# site) of max(SLOPE_MIN_BASELINE_M, SLOPE_BASELINE_PIXELS * pixel size of the
+# finest grid at the site). That is 20 m on the 5 m polar grid, 40 m on the
+# 20 m grid and about 237 m on the 118 m global grid. Below ~2 pixels the slope
+# would only reflect the interpolation between pixels, not the terrain.
+SLOPE_MIN_BASELINE_M = 20.0
+SLOPE_BASELINE_PIXELS = 2.0
+SLOPE_FLAT_DEG = 0.01  # below this the downslope azimuth is reported as None
+
 
 # --------------------------------------------------------------------------
 # Geometry helpers
@@ -157,6 +166,13 @@ class _CylGrid:
             raise RuntimeError(f"{self.name}: raster shape does not match its lat/lon bounds")
         self.lat_min, self.lat_max, self.lon_min, self.lon_max = lat_min, lat_max, lon_min, lon_max
 
+    def pixel_size(self, lat, lon):
+        """North-south pixel size in metres if this tile covers the point, else None."""
+        lon = lon % 360.0
+        if (self.lat_min <= lat <= self.lat_max) and (self.lon_min <= lon < self.lon_max):
+            return MOON_RADIUS_M * math.pi / 180.0 / self.ppd
+        return None
+
     def sample(self, lat, lon):
         out = np.full(lat.shape, np.nan)
         lon = lon % 360.0
@@ -188,6 +204,10 @@ class _PolarGrid:
         if scale is None or abs(scale / geom - 1.0) > 0.05:
             scale = geom
         self.scale = scale
+
+    def pixel_size(self, lat, lon):
+        """Pixel size in metres if this grid covers the point, else None."""
+        return self.scale if self.sign * lat >= self.lat_limit else None
 
     def sample(self, lat, lon):
         out = np.full(lat.shape, np.nan)
@@ -229,6 +249,14 @@ class DEM:
             self.grids.append(_CylGrid(os.path.join(data_dir, name), la0, la1, lo0, lo1))
         self.last_counts = {}
 
+    def pixel_size(self, lat, lon):
+        """Pixel size (m) of the finest grid covering the point, or None."""
+        for g in self.grids:
+            px = g.pixel_size(lat, lon)
+            if px is not None:
+                return px
+        return None
+
     def sample(self, lat, lon):
         lat, lon = np.asarray(lat, dtype=np.float64), np.asarray(lon, dtype=np.float64)
         shape = lat.shape
@@ -269,6 +297,36 @@ def _ray_distances(min_range_m, max_range_m):
     return np.array(s)
 
 
+def _site_slope(dem, lat0, lon0, baseline_m):
+    """Slope and downslope azimuth at the site from the DEM.
+
+    Heights are sampled on a ring of 8 points (every 45 degrees) of diameter
+    baseline_m around the site, and a plane is least-squares fitted through
+    them. The plane's gradient (dh/dEast, dh/dNorth) gives the slope angle;
+    the downslope azimuth is the direction of -gradient, which is also the
+    horizontal part of the surface normal. Azimuth: north = 0, east = 90.
+    Returns (slope_deg, slope_az_deg); slope_az_deg is None on flat ground and
+    both are None if the ring is not fully covered by the DEM."""
+    east, north, up = _frame(lat0, lon0)
+    r = baseline_m / 2.0
+    az = np.radians(np.arange(0.0, 360.0, 45.0))
+    dirs = np.sin(az)[:, None] * east + np.cos(az)[:, None] * north
+    theta = r / MOON_RADIUS_M
+    u = np.cos(theta) * up + np.sin(theta) * dirs
+    lat = np.degrees(np.arcsin(np.clip(u[:, 2], -1.0, 1.0)))
+    lon = np.degrees(np.arctan2(u[:, 1], u[:, 0]))
+    h = dem.sample(lat, lon)
+    if np.isnan(h).any():
+        return None, None
+    x, y = r * np.sin(az), r * np.cos(az)  # east, north offsets (m); both sum to zero
+    g_east = float((h * x).sum() / (x * x).sum())
+    g_north = float((h * y).sum() / (y * y).sum())
+    slope = math.degrees(math.atan(math.hypot(g_east, g_north)))
+    if slope < SLOPE_FLAT_DEG:
+        return slope, None
+    return slope, round(math.degrees(math.atan2(-g_east, -g_north)), 6) % 360.0
+
+
 def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
             height_above_terrain=0.0, min_range_m=20.0, verbose=False, dem=None):
     """Terrain horizon seen from a lunar surface site.
@@ -294,6 +352,13 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
             reference sphere (does NOT include height_above_terrain).
         horizon_gap_fraction: fraction of azimuths with no valid terrain samples
             (interpolated); normally 0.0 with a DEM.
+        slope_deg: terrain slope at the site, degrees from horizontal, fitted
+            over a baseline of 20 m to ~237 m depending on the DEM resolution
+            at the site (see SLOPE_* constants). Computed from the DEM, not
+            measured by the instrument.
+        slope_az_deg: azimuth of the downslope direction (horizontal part of
+            the surface normal), north = 0, east = 90. None on flat ground
+            (slope below 0.01 degrees) where it is undefined.
     """
     if not -90.0 <= latitude_deg <= 90.0:
         raise ValueError("latitude_deg must be within -90..90")
@@ -336,10 +401,17 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
     if gap.any():
         idx = np.arange(360)
         prof[gap] = np.interp(idx[gap], idx[~gap], prof[~gap], period=360)
+    grids_used = dict(dem.last_counts)
+    px = dem.pixel_size(lat0, lon0) if hasattr(dem, "pixel_size") else None
+    baseline = max(SLOPE_MIN_BASELINE_M, SLOPE_BASELINE_PIXELS * (px or 0.0))
+    slope, slope_az = _site_slope(dem, lat0, lon0, baseline)
     t3 = time.perf_counter()
 
     if verbose:
-        print(f"altitude: {alt:.1f} m   samples: {h.size}   grids used: {dem.last_counts}")
+        print(f"altitude: {alt:.1f} m   samples: {h.size}   grids used: {grids_used}")
+        print("slope: " + ("n/a" if slope is None else f"{slope:.2f} deg, downslope azimuth "
+              f"{'undefined' if slope_az is None else f'{slope_az:.1f} deg'} "
+              f"(baseline {baseline:.0f} m)"))
         print(f"empty azimuths: {int(gap.sum())}/360")
         print(f"horizon elevation: min {prof.min():.2f}  max {prof.max():.2f} deg")
         print(f"timing (s): geometry {t1 - t0:.3f} | DEM lookup {t2 - t1:.3f} | "
@@ -350,6 +422,8 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
         "horizon_elevation_deg": [float(v) for v in prof],
         "altitude_m": float(alt),
         "horizon_gap_fraction": float(gap.mean()),
+        "slope_deg": None if slope is None else float(slope),
+        "slope_az_deg": None if slope_az is None else float(slope_az),
     }
 
 
@@ -509,5 +583,4 @@ if __name__ == "__main__":
     else:
         for _ in range(2):  # second call shows warm timing
             out = horizon(-89.9, 0.0, max_range_km=50.0, height_above_terrain=2.0, verbose=True)
-        print(out)
-        
+        print({k: v for k, v in out.items() if not isinstance(v, list)})
