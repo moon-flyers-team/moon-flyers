@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useRequest } from './useRequest';
 import { Sidebar } from './Sidebar';
 import { MainPanel } from './MainPanel';
 import { api } from './api';
@@ -18,44 +19,51 @@ export default function App() {
   const [sites, setSites] = useState<LandingSite[]>([]);
   const [usingMock, setUsingMock] = useState(false);
 
+  const catalogue = useRequest(api.getSites, 0);
   useEffect(() => {
-    api.getSites()
-      .then(setSites)
-      .catch(() => {
-        setSites(mockSites);
-        setUsingMock(true);
-      });
-  }, []);
+    if (catalogue.data) {
+      setSites(catalogue.data.map(site => ({ ...site, enabled: true })));
+      setUsingMock(false);
+    } else if (catalogue.error) {
+      setSites(mockSites);
+      setUsingMock(true);
+    }
+  }, [catalogue.data, catalogue.error]);
 
   function toggleSite(id: string) {
     setSites(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s));
   }
 
   return (
-    <div className="layout">
+    <div className="app-shell">
+      {catalogue.loading && <div className="api-banner" role="status">Loading site catalogue…</div>}
       {usingMock && (
-        <div className="mock-banner">Mock data — API offline</div>
+        <div className="mock-banner" role="alert">
+          <span>API unavailable — showing example sites. Analysis requires the backend. {catalogue.error}</span>
+          <button className="ct-btn" onClick={catalogue.retry} disabled={catalogue.loading}>Retry connection</button>
+        </div>
       )}
-      <Sidebar
-        mission={mission}
-        power={power}
-        comms={comms}
-        terrain={terrain}
-        sites={sites}
-        onMissionChange={setMission}
-        onPowerChange={setPower}
-        onCommsChange={setComms}
-        onTerrainChange={setTerrain}
-        onSiteToggle={toggleSite}
-      />
-      <MainPanel
-        sites={sites}
-        power={power}
-        comms={comms}
-        terrain={terrain}
-        missionStart={mission.windowStart}
-        missionEnd={mission.windowEnd}
-      />
+      <div className="layout">
+        <Sidebar
+          mission={mission}
+          power={power}
+          comms={comms}
+          terrain={terrain}
+          sites={sites}
+          onMissionChange={setMission}
+          onPowerChange={setPower}
+          onCommsChange={setComms}
+          onTerrainChange={setTerrain}
+          onSiteToggle={toggleSite}
+        />
+        <MainPanel
+          sites={sites}
+          power={power}
+          comms={comms}
+          terrain={terrain}
+          mission={mission}
+        />
+      </div>
     </div>
   );
 }
