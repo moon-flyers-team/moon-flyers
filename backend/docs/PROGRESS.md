@@ -159,6 +159,12 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-14: Measured request cost of the DEM horizon (mock ephemeris, real 15.9 GB archive,
+  `TestClient`, so no HTTP overhead): `/compare` for 7 sites over 3 months is 0.88 s with a cold
+  DEM cache and 0.18 s warm, versus 0.21 s for the mock hills; `/sites` for one site is 21-36 ms.
+  Per site the first skyline costs roughly 30-95 ms (memory-mapped rasters, page cache cold), and
+  repeats are free. Against ~24 s of live Horizons latency that is negligible; using real terrain
+  is not a latency problem.
 - 2026-11-14: **The API serves real terrain** when a dataset is mounted: `DemHorizon` in
   `services/horizon.py` plus `tests/test_horizon_dem.py` (mock without the variable, DEM profile
   through `/sites` with it, cache reuse, flat fallback). Real-data check: `/sites` 200 in 0.01 s.
