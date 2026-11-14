@@ -4,23 +4,23 @@
 
 | Event | Environment | Public URL | Loopback origin |
 | --- | --- | --- | --- |
-| Merge/push to `main` | `test` | https://beelink.tail644248.ts.net:8443 | `127.0.0.1:18081` |
-| Push a `v*` tag on a commit already in `main` | `production` | https://beelink.tail644248.ts.net | `127.0.0.1:18080` |
+| Merge/push to `main` | `test` | https://moon-flyers.tail644248.ts.net:8443 | `127.0.0.1:18081` |
+| Push a `v*` tag on a commit already in `main` | `production` | https://moon-flyers.tail644248.ts.net | `127.0.0.1:18080` |
 | Pull request targeting `main` | Build/smoke test only | None | Temporary GitHub runner |
 
-No domain purchase, Cloudflare, public SSH, self-hosted GitHub runner, or container registry is needed. HTTPS terminates at Tailscale Funnel. Both environments are **public**, including the test site; URLs are not authentication. Funnel has non-configurable bandwidth limits. A single Beelink remains a single point of failure.
+No domain purchase, Cloudflare, public SSH, self-hosted GitHub runner, or container registry is needed. HTTPS terminates at a dedicated Tailscale Funnel container. Its separate `moon-flyers` device identity gives the website a project-specific name without renaming Beelink or touching its system Tailscale daemon/SSH. GitHub's `BEELINK_HOST` remains the SSH destination; `PUBLIC_HOST` identifies the website. Both environments are **public**, including the test site; URLs are not authentication. Funnel has non-configurable bandwidth limits. A single Beelink remains a single point of failure.
 
 Each environment runs its own nginx/frontend and FastAPI/backend containers and Docker network. Only nginx is published, on loopback. The frontend image builds with `VITE_API_URL=/api`; nginx strips `/api` before forwarding to FastAPI. FastAPI is launched with root path `/api`, including for `/api/docs`. Local Vite development keeps the existing `/api` proxy.
 
 ## 1. Tailscale access policy (tailnet administrator)
 
-Beelink must already be logged in to Tailscale. The observed DNS name is `beelink.tail644248.ts.net`; adjust the workflow variables and URLs if it changes.
+Beelink must already be logged in to Tailscale as `beelink.tail644248.ts.net`. Preserve that identity for existing SSH and other services. The separate gateway registers as `moon-flyers.tail644248.ts.net` (confirm the actual assigned name after login).
 
 Open **Tailscale admin console → Access controls**. `tailscale-policy.hujson` is a complete example for a new tailnet. For an existing tailnet, merge its tags, CI network grant, SSH rules, and Funnel node attribute into your policy; do not overwrite unrelated access rules.
 
 Important:
 
-- CI nodes use `tag:moon-flyers-ci`; Beelink uses `tag:moon-flyers-server`.
+- CI nodes use `tag:moon-flyers-ci`; Beelink uses `tag:moon-flyers-server`; the dedicated website gateway uses `tag:moon-flyers-funnel` with Funnel permission but no CI SSH grant.
 - The CI grant allows only TCP 22 to the deployment server; the SSH rule permits only the local `maxence` account, without interactive reauthentication.
 - Remove/narrow any existing `src: ["*"]` allow-all network rules that would also grant CI access to the rest of your tailnet. Rules are additive: a narrow grant does not override a broad allow rule. The example retains broad network access for human members, not tagged CI nodes.
 - Tagging Beelink changes it from a user-owned to a tagged device. Existing `autogroup:self` SSH rules no longer apply to it; the example adds a maintenance rule for administrators. LAN OpenSSH access is unaffected.
@@ -38,12 +38,9 @@ Connect through the existing LAN SSH connection:
 ```sh
 ssh -4 maxence@beelink.local
 sudo tailscale set --ssh
-sudo tailscale funnel --bg --https=443 http://127.0.0.1:18080
-sudo tailscale funnel --bg --https=8443 http://127.0.0.1:18081
-tailscale funnel status
 ```
 
-The first Funnel command may display an authorization URL to enable HTTPS/Funnel for the tailnet. Open it and approve, then retry if requested. Background Funnel mappings persist across reboots. They will return an upstream error until the first deployment starts the matching containers. No router port forwarding is needed.
+For the public website, follow **[gateway/README.md](gateway/README.md)** to start the independent gateway Compose project and authorize its separate Tailscale device. It proxies to the app's existing loopback ports and retains its identity in a named Docker volume. Do not rename the host or enable Tailscale SSH in the gateway. No router port forwarding is needed. Existing system Funnel mappings can remain during migration; this setup does not reset or remove unrelated routes.
 
 Docker Engine and Compose v2.26+ must be available, `maxence` must be able to run Docker without sudo, and Python 3, `tar`, and `flock` must be installed. These were present during initial inspection. No deployment daemon needs installing. Release directories are created under `~/moon-flyers/` by the workflow.
 
@@ -70,7 +67,11 @@ Copy each identity's non-secret **Client ID** and **Audience** into its matching
 
 The CI identity can create ephemeral CI-tagged nodes; it must not be able to issue server-tagged nodes or manage other tailnet settings. `id-token: write` is granted only to the deployment job. Pull-request build jobs cannot obtain deployment identities.
 
-Optional repository variables (defaults are already set in the workflow): `BEELINK_HOST=beelink.tail644248.ts.net`, `BEELINK_USER=maxence`.
+Repository variables:
+
+- `BEELINK_HOST=beelink.tail644248.ts.net`: private SSH destination (existing default).
+- `BEELINK_USER=maxence`: SSH user (existing default).
+- `PUBLIC_HOST=moon-flyers.tail644248.ts.net`: dedicated gateway's public DNS name, without scheme/port. Set this after the gateway is authorized and verified. If omitted, the workflow falls back to `BEELINK_HOST` for compatibility with the original host-based Funnel setup.
 
 Protect `main` and restrict creation/update of `v*` tags to trusted releasers. An environment approval gate for production is optional; otherwise a trusted tag push publishes automatically. Do not move published tags.
 
@@ -110,7 +111,7 @@ cd ~/moon-flyers/test/current
 docker compose -p moon-flyers-test --env-file .env -f compose.yaml ps
 docker compose -p moon-flyers-test --env-file .env -f compose.yaml logs --tail 100
 python3 smoke-test.py http://127.0.0.1:18081
-tailscale funnel status
+docker compose -f ~/moon-flyers/gateway/compose.yaml exec -T funnel tailscale funnel status
 ```
 
 Manual rollback to the previous successful release, using the same health checks and lock:
@@ -121,12 +122,13 @@ bash ~/moon-flyers/test/previous/deploy.sh test
 
 Workflow artifacts expire after seven days. Beelink retains image archives, image tags, release directories, and the `current`/`previous` symlinks; there is deliberately no automatic Docker pruning that might affect other projects. Monitor disk usage and remove older, unused releases/images manually, keeping current and previous releases. Container logs rotate at 10 MB × 3 files per container.
 
-Funnel can be turned off per port without deleting containers or other mappings:
+Stop the dedicated website gateway without affecting Beelink SSH, the app containers, or the system daemon's existing Funnel mappings:
 
 ```sh
-sudo tailscale funnel --https=443 off
-sudo tailscale funnel --https=8443 off
+docker compose -f ~/moon-flyers/gateway/compose.yaml stop funnel
 ```
+
+See [gateway/README.md](gateway/README.md) for gateway restart, state retention, and troubleshooting. Keep its identity volume out of release archives and never remove it casually: it contains device credentials.
 
 The containers run unprivileged with read-only root filesystems and temporary `/tmp`. There are currently no persistent application data volumes; do not add stateful features without designing persistence, backups, and rollback-compatible migrations. Backend configuration/secrets are not provisioned by this scaffold deployment. If needed later, keep them on the host, outside release artifacts, and do not put secrets in Vite build variables (which are public).
 

@@ -44,8 +44,11 @@ jobs:
             exit 1
           fi
 
-      - name: Test deployment promotion and rollback
+      - name: Test deployment promotion, rollback, and gateway routing
         run: python3 -m unittest discover -s deploy -p 'test_*.py' -v
+
+      - name: Validate standalone gateway configuration
+        run: docker compose -f deploy/gateway/compose.yaml config --quiet
 
       - name: Build backend
         run: docker build --tag "moon-flyers-backend:$REVISION" backend
@@ -107,6 +110,7 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     env:
       DEPLOY_HOST: ${{ vars.BEELINK_HOST || 'beelink.tail644248.ts.net' }}
+      PUBLIC_HOST: ${{ vars.PUBLIC_HOST || vars.BEELINK_HOST || 'beelink.tail644248.ts.net' }}
       DEPLOY_USER: ${{ vars.BEELINK_USER || 'maxence' }}
       DEPLOY_ENV: ${{ needs.build.outputs.target }}
     steps:
@@ -152,6 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
+          [[ "$PUBLIC_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]]
           [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
           case "$DEPLOY_ENV" in
@@ -165,7 +170,7 @@ jobs:
           tailscale ssh "$DEPLOY_USER@$DEPLOY_HOST" \
             "umask 077; mkdir -p '$release' && tar -xzf - -C '$release' && bash '$release/deploy.sh' '$DEPLOY_ENV'" \
             < artifact/release.tar.gz
-          url="https://$DEPLOY_HOST$suffix"
+          url="https://$PUBLIC_HOST$suffix"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           printf '### %s deployed\n\nCommit: `%s`\n\n%s\n' "$DEPLOY_ENV" "$GITHUB_SHA" "$url" >> "$GITHUB_STEP_SUMMARY"
 

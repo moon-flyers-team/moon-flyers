@@ -5,6 +5,7 @@
   "tagOwners": {
     "tag:moon-flyers-ci": ["autogroup:admin", "autogroup:owner"],
     "tag:moon-flyers-server": ["autogroup:admin", "autogroup:owner"],
+    "tag:moon-flyers-funnel": ["autogroup:admin", "autogroup:owner"],
   },
   "grants": [
     {
@@ -40,6 +41,11 @@
   ],
   "nodeAttrs": [
     {
+      "target": ["tag:moon-flyers-funnel"],
+      "attr": ["funnel"],
+    },
+    {
+      // Retain existing host Funnel URLs during migration; SSH is independent.
       "target": ["tag:moon-flyers-server"],
       "attr": ["funnel"],
     },
