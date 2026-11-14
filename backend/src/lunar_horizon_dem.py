@@ -344,8 +344,9 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
         verbose: print diagnostics and timing.
 
     Returns dict:
-        latitude_deg, longitude_deg: the inputs, echoed back unchanged (a check
-            that the result belongs to the requested site).
+        latitude_deg, longitude_deg, height_above_terrain: the inputs, echoed
+            back unchanged (a check that the result belongs to the requested
+            site and observer height).
         horizon_azimuth_deg: [0.0 .. 359.0], north=0, east=90.
         horizon_elevation_deg: same length; elevation of the terrain relative to
             the plane perpendicular to the vector to the Moon's centre,
@@ -422,6 +423,7 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
     return {
         "latitude_deg": latitude_deg,
         "longitude_deg": longitude_deg,
+        "height_above_terrain": height_above_terrain,
         "horizon_azimuth_deg": [float(i) for i in range(360)],
         "horizon_elevation_deg": [float(v) for v in prof],
         "altitude_m": float(alt),
@@ -576,7 +578,7 @@ def calibrate(data_dir=DATA_DIR):
         print(f"global check ({la}, {lo}): median |dh| {np.nanmedian(np.abs(dh)):.1f} m, "
               f"p95 {np.nanpercentile(np.abs(dh), 95):.1f} m over {len(h)} points")
     print("calibration saved")
-#
+
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "demo"
