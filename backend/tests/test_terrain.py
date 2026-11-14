@@ -110,6 +110,17 @@ def test_polar_and_geographic_products_are_not_interchangeable(tmp_path, invento
         terrain_data.inspect_raster(path, cylindrical)
 
 
+def test_affine_math_needs_no_matmul_operator():
+    """Debian's Affine 2.4 has no __matmul__, so placement math must be explicit."""
+
+    class Affine24:
+        a, b, c, d, e, f = 2.0, 0.0, 10.0, 0.0, -2.0, 20.0
+
+    assert terrain_data.transform_xy(Affine24(), 3, 4) == (16.0, 12.0)
+    real = rasterio.Affine(2.0, 0.0, 10.0, 0.0, -2.0, 20.0)
+    assert terrain_data.transform_xy(real, 3, 4) == (16.0, 12.0)
+
+
 def test_cog_conversion_preserves_scale_pixels_and_mask(tmp_path, inventory):
     product = inventory[0]
     source, output = tmp_path / "source.tif", tmp_path / "output.tif"

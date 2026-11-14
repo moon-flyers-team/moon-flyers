@@ -107,6 +107,17 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def transform_xy(transform, x, y):
+    """Apply an affine transform with plain arithmetic.
+
+    Debian's python3-affine is still 2.4, whose Affine has no ``__matmul__``, so
+    ``transform @ (x, y)`` fails there while working with the wheels' Affine 3.x.
+    Works for scalars and numpy arrays.
+    """
+    return (transform.a * x + transform.b * y + transform.c,
+            transform.d * x + transform.e * y + transform.f)
+
+
 def _lunar_sphere(crs) -> None:
     if crs is None:
         raise ValueError("missing CRS")
@@ -143,7 +154,7 @@ def inspect_raster(path: Path, product: Product, *, tiled: bool = False) -> dict
         if tiled and not ds.profile.get("tiled", False):
             raise ValueError(f"{path.name}: output must be tiled")
 
-        x, y = t @ (ds.width / 2, ds.height / 2)
+        x, y = transform_xy(t, ds.width / 2, ds.height / 2)
         lon, lat = transform(ds.crs, LONLAT_SPHERE, [x], [y])
         lon_error = abs((lon[0] - product.centre_lon + 180) % 360 - 180)
         if abs(lat[0] - product.centre_lat) > 0.01 or (not product.projected and lon_error > 0.01):
@@ -159,7 +170,7 @@ def inspect_raster(path: Path, product: Product, *, tiled: bool = False) -> dict
         # on and is reproduced by the container's own GDAL at startup.
         pixel_lonlat = []
         for col, row in ((0, 0), (ds.width / 2, ds.height / 2), (ds.width - 1, ds.height - 1)):
-            cx, cy = t @ (col + 0.5, row + 0.5)
+            cx, cy = transform_xy(t, col + 0.5, row + 0.5)
             clon, clat = transform(ds.crs, LONLAT_SPHERE, [cx], [cy])
             pixel_lonlat.append([round(clon[0], 9), round(clat[0], 9)])
         return {

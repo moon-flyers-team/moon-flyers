@@ -59,7 +59,7 @@ def write_raster(path: Path, product: terrain_data.Product, value_at=None) -> No
         ds.offsets = (0.0,)
         if value_at is not None:
             rows, cols = np.mgrid[0:product.height, 0:product.width]
-            xs, ys = ds.transform @ (cols + 0.5, rows + 0.5)
+            xs, ys = terrain_data.transform_xy(ds.transform, cols + 0.5, rows + 0.5)
             lons, lats = transform(ds.crs, terrain_data.LONLAT_SPHERE, xs.ravel(), ys.ravel())
             altitude = np.array([value_at(lon, lat) for lon, lat in zip(lons, lats)])
             raw = np.rint(altitude / terrain_data.HEIGHT_SCALE).astype("int16")
