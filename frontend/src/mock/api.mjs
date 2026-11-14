@@ -80,29 +80,37 @@ function route(method, url, body) {
     const step = number(query.timestep_seconds, 3600, 'timestep_seconds', 1, Infinity, true);
     const sun = boolean(query.sun_visibility, true, 'sun_visibility');
     const earth = boolean(query.earth_visibility, true, 'earth_visibility');
-    if (!['site_id', 'name', 'latitude_deg', 'longitude_deg', 'landing_utc'].some(key => key in query)) return sites;
-    const landing = timestamp(query.landing_utc, 'landing_utc');
+    if (!['site_id', 'name', 'latitude_deg', 'longitude_deg', 'window_start_utc'].some(key => key in query)) return sites;
+    const wStart = timestamp(query.window_start_utc, 'window_start_utc');
+    const wEnd = timestamp(query.window_end_utc, 'window_end_utc');
+    if (wEnd < wStart) fail('window_end_utc must be on or after window_start_utc');
     const hasCustom = ['name', 'latitude_deg', 'longitude_deg'].some(key => key in query);
     if ('site_id' in query && hasCustom) fail('Choose site_id or custom coordinates, not both');
     const site = siteFrom('site_id' in query ? { id: query.site_id } : {
       name: query.name, latitude_deg: query.latitude_deg, longitude_deg: query.longitude_deg,
     });
-    seriesLimit(landing, landing + c.days_on_surface * DAY_MS, step);
-    return { ...site, analysis: analyze(site, landing, c, step, sun, earth) };
+    const totalEnd = wEnd + c.days_on_surface * DAY_MS;
+    seriesLimit(wStart, totalEnd, step);
+    return { ...site, analysis: analyze(site, wStart, c, step, sun, earth, totalEnd) };
   }
   if (method === 'POST' && url.pathname === '/compare') {
-    const { start, end, c } = windowBody(body, ['sites', 'landing_utc', 'timestep_seconds']);
-    const landing = timestamp(body.landing_utc, 'landing_utc');
+    const { start, end, c } = windowBody(body, ['sites', 'candidate_step_hours', 'timestep_seconds']);
+    const candidateStep = number(body.candidate_step_hours, 6, 'candidate_step_hours', Number.MIN_VALUE);
     const step = number(body.timestep_seconds, 3600, 'timestep_seconds', 1, Infinity, true);
     if (!Array.isArray(body.sites) || !body.sites.length) fail('sites must contain at least one site');
     const timelineEnd = end + c.days_on_surface * DAY_MS;
+    const count = Math.floor((end - start) / (candidateStep * 3_600_000)) + 1;
+    if (count > 2000 || count * (c.days_on_surface * 24 + 1) > 1_000_000) fail('Demo request too large; shorten the window or increase candidate_step_hours.');
     seriesLimit(start, timelineEnd, step);
-    seriesLimit(landing, landing + c.days_on_surface * DAY_MS, step);
     return body.sites.map(reference => {
       const site = siteFrom(reference);
-      const analysis = analyze(site, landing, c, step);
+      const window_metrics = Array.from({ length: count }, (_, i) => {
+        const landing = start + i * candidateStep * 3_600_000;
+        const a = analyze(site, landing, c);
+        return { landing_utc: utc(landing), metrics: a.metrics, fit: a.fit };
+      });
       const points = timeseries(site, start, timelineEnd, c, step);
-      return { site, metrics: analysis.metrics, fit: analysis.fit,
+      return { site, window_metrics,
         timeline: Object.fromEntries(['sun', 'earth'].map(name => [name, visibilityWindows(points, name)])) };
     });
   }

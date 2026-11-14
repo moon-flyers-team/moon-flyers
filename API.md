@@ -25,8 +25,7 @@ The mock returns `X-Moon-Flyers-Data-Source: mock`, exposed through CORS. The fr
 that header from the catalogue response to show a synthetic-data banner; the catalogue JSON
 shape is unchanged. Data is deterministic, varies with site/date, and recomputes visibility
 metrics, fit violations, and timelines from the same generated samples. Custom sites are
-accepted without being stored. Slope remains `null`, and the horizon is flat. The time slider
-remains deferred to another contributor.
+accepted without being stored. Slope remains `null`, and the horizon is flat.
 
 There is a 0.4-second artificial analysis delay so loading states are visible. For slower
 responses, use `MOCK_API_DELAY_SECONDS=3 pnpm mock:api`; set it to `0` to disable the delay.
@@ -95,6 +94,17 @@ optional, and the defaults match the mock UI:
 
 ---
 
+## Data loading strategy
+
+The frontend loads heavyweight analysis data **only** on:
+1. App start (site catalogue).
+2. Any mission parameter change (window, constraints).
+3. A site being toggled on or off.
+
+The time slider **never** triggers an API call. It slices pre-loaded data client-side:
+- `ComparisonTable` looks up the `window_metrics` entry whose `landing_utc` matches the slider.
+- `HorizonChart` filters `timeseries` to the one lunar day starting at the slider position.
+
 ## 1. `GET /sites`: the sites sidebar, and the horizon chart for one site
 
 *Without parameters* it returns the predefined catalogue:
@@ -107,12 +117,13 @@ optional, and the defaults match the mock UI:
 horizon chart.
 - Choose the site with `site_id=malapert_massif`. For a custom site, send `name`, `latitude_deg`
   and `longitude_deg` instead.
-- Also send `landing_utc`, any constraint fields, `timestep_seconds` (default 3600), and
-  `sun_visibility` / `earth_visibility` (default true).
+- Also send `window_start_utc`, `window_end_utc`, any constraint fields, `timestep_seconds`
+  (default 3600), and `sun_visibility` / `earth_visibility` (default true).
+- **Called once per site selection or mission params change, not on slider moves.**
 
 Example request:
 ```
-GET /sites?site_id=malapert_massif&landing_utc=2027-08-07T06:00:00Z&days_on_surface=14
+GET /sites?site_id=malapert_massif&window_start_utc=2027-08-01T00:00:00Z&window_end_utc=2027-10-31T00:00:00Z&days_on_surface=14
 ```
 Response:
 ```json
@@ -126,31 +137,39 @@ Response:
                  "earth": [{ "start_utc": "...", "end_utc": "..." }] },
     "metrics": { "...": "..." }, "fit": { "...": "..." } } }
 ```
-- `timeseries` covers the stay, from landing to landing + `days_on_surface`, at one point per
-  `timestep_seconds`. Use it for the Sun and Earth paths and the "Sun visible 1.2°" markers.
+- `timeseries` spans from `window_start_utc` to `window_end_utc + days_on_surface`, at one point
+  per `timestep_seconds`. The client filters it to a one-lunar-day window starting at the slider
+  position to show Sun and Earth paths without re-fetching.
 - `horizon` is the horizon profile. **For now it's a flat 0° line.** The real terrain profile comes
   later in the same shape.
 
 ## 2. `POST /compare`: the comparison table and the timeline bars
+
+**Called once per mission params change or site toggle, not on slider moves.**
 ```json
 {
   "sites": [{ "id": "shackleton_rim" },
             { "name": "My site", "latitude_deg": -89.2, "longitude_deg": 45.0 }],
-  "landing_utc": "2027-08-07T06:00:00Z",
   "window_start_utc": "2027-08-01T00:00:00Z",
   "window_end_utc": "2027-10-31T00:00:00Z",
   "constraints": { "...": "..." },
+  "candidate_step_hours": 6,
   "timestep_seconds": 3600
 }
 ```
 Response, one entry per site in the order you sent them:
 ```json
-[{ "site": { "...": "..." }, "metrics": { "...": "..." }, "fit": { "...": "..." },
+[{ "site": { "...": "..." },
+   "window_metrics": [
+     { "landing_utc": "2027-08-01T00:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } },
+     { "landing_utc": "2027-08-01T06:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }
+   ],
    "timeline": { "sun":   [{ "start_utc": "...", "end_utc": "..." }],
                  "earth": [{ "start_utc": "...", "end_utc": "..." }] } }]
 ```
-- `metrics` and `fit` are for a mission landing at `landing_utc`. The ±6 h buttons simply resend
-  the request with a new `landing_utc`.
+- `window_metrics` pre-computes metrics and fit for every `candidate_step_hours` step in the
+  window. The frontend looks up the entry matching the slider's current `landing_utc` to update
+  the table instantly without a new request. The ±6 h buttons shift the slider position only.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
 

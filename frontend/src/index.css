@@ -269,7 +269,8 @@ body {
   letter-spacing: 0.5px;
 }
 
-.ct-scroll { overflow-x: auto; }
+.ct-scroll { overflow-x: auto; overflow-y: auto; max-height: 220px; }
+.ct thead { position: sticky; top: 0; z-index: 1; }
 
 .ct {
   width: 100%;
@@ -345,10 +346,31 @@ body {
 .badge--orange { color: var(--orange); background: rgba(255,152,0,.12); }
 
 /* timeline bars */
+.tl-wrap { min-width: 160px; }
+
+.tl-ticks {
+  position: relative;
+  height: 13px;
+}
+.tl-tick-label {
+  position: absolute;
+  font-size: 9px;
+  color: var(--dim);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tl-tracks {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .tl-track {
   position: relative;
   height: 8px;
-  min-width: 90px;
   background: var(--border);
   border-radius: 2px;
   overflow: hidden;
@@ -363,6 +385,15 @@ body {
 }
 .tl-seg--power { background: var(--power); }
 .tl-seg--comms { background: var(--comms); }
+
+.tl-marker {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1.5px;
+  background: rgba(190, 190, 210, 0.55);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 
 /* ── Bottom row ─────────────────────────────────────── */
 .bottom-row {
