@@ -169,19 +169,49 @@ printf 'smoke %s\\n' "$*" >> "$COMMAND_LOG"
         commands = self.log.read_text()
         self.assertIn(f"-f {release}/compose.yaml -f {release}/compose.terrain.yaml up", commands)
 
-    def test_terrain_rollback_does_not_inherit_new_host_configuration(self) -> None:
+    def test_rollback_restores_the_previous_release_dataset_path(self) -> None:
+        """A rollback keeps the dataset path that release was deployed with.
+
+        Each release records its own path, so removing or changing the host
+        `terrain-directory` afterwards must not move an older release onto a
+        different dataset - or drop the mount it was deployed with.
+        """
         first = self.release("first")
         second = self.release("second", "b" * 40)
-        self.enable_terrain(self.terrain_dataset())
+        third = self.release("third", "c" * 40)
+        first_dataset = self.terrain_dataset("v1")
+        second_dataset = self.terrain_dataset("v2")
+        self.enable_terrain(first_dataset)
         self.assertEqual(self.run_release(first).returncode, 0)
+        self.enable_terrain(second_dataset)
         self.assertEqual(self.run_release(second).returncode, 0)
-        # Disabling terrain must not be applied retroactively to the previous release.
+
+        # The host configuration disappears; the next release fails and rolls back to `second`.
         (self.root / "terrain-directory").unlink()
         self.log.write_text("")
-        result = self.run_release(second, FAIL_SMOKE="1")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn(f"-f {second}/compose.yaml -f {second}/compose.terrain.yaml", self.log.read_text())
-        self.assertIn(f"-f {first}/compose.yaml -f {first}/compose.terrain.yaml", self.log.read_text())
+        result = self.run_release(third, FAIL_RELEASE=str(third))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(
+            (second / ".env").read_text(),
+            f"REVISION={'b' * 40}\nHTTP_PORT=18081\nLOLA_DATA_DIR={second_dataset}\n")
+        commands = self.log.read_text()
+        self.assertIn(f"--env-file {second}/.env -f {second}/compose.yaml "
+                      f"-f {second}/compose.terrain.yaml up", commands)
+        self.assertIn(f"--env-file {third}/.env -f {third}/compose.yaml up", commands)
+        self.assertNotIn(str(first_dataset), commands)
+
+    def test_redeploying_a_release_resnapshots_the_host_configuration(self) -> None:
+        """Re-running deploy.sh on a release directory re-records the current host config."""
+        release = self.release("first")
+        self.enable_terrain(self.terrain_dataset())
+        self.assertEqual(self.run_release(release).returncode, 0)
+        self.assertIn("LOLA_DATA_DIR=", (release / ".env").read_text())
+
+        (self.root / "terrain-directory").unlink()
+        self.log.write_text("")
+        self.assertEqual(self.run_release(release).returncode, 0)
+        self.assertNotIn("LOLA_DATA_DIR", (release / ".env").read_text())
+        self.assertNotIn("compose.terrain.yaml", self.log.read_text())
 
     def test_invalid_terrain_directory_is_rejected_before_docker(self) -> None:
         release = self.release("first")
