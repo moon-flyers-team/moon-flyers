@@ -21,6 +21,8 @@ def calculate_visibility_margin(
     azimuth wrap (359 -> 0). Do not pass a DEM missing angular sectors as though
     it were a complete skyline.
     """
+    # Convert lists to numeric arrays so the same formula applies to every timestamp.
+    # Body arrays follow time; horizon arrays follow compass direction.
     az = np.asarray(body_azimuth_deg, dtype=float)
     el = np.asarray(body_elevation_deg, dtype=float)
     haz = np.asarray(horizon_azimuth_deg, dtype=float)
@@ -28,6 +30,7 @@ def calculate_visibility_margin(
     rad = np.asarray(body_angular_radius_deg, dtype=float)
     clearance = float(horizon_clearance_deg)
 
+    # Reject missing/misaligned data instead of silently treating it as blocked or visible.
     if az.ndim != 1 or az.size == 0 or el.shape != az.shape:
         raise ValueError("Body azimuth/elevation must be nonempty equal-length 1D arrays")
     if haz.ndim != 1 or haz.size < 2 or hel.shape != haz.shape:
@@ -41,6 +44,8 @@ def calculate_visibility_margin(
     if np.any((el < -90) | (el > 90)):
         raise ValueError("Body elevations must be within [-90, 90] degrees")
 
+    # Sort the skyline around the compass. 0° and 360° describe the same direction;
+    # duplicates are allowed only when their elevations agree.
     normalized = np.mod(haz, 360)
     order = np.argsort(normalized)
     sorted_az, sorted_el = normalized[order], hel[order]
@@ -50,7 +55,9 @@ def calculate_visibility_margin(
     for a, j in zip(unique_az, first):
         if not np.allclose(sorted_el[sorted_az == a], sorted_el[j], rtol=0, atol=1e-9):
             raise ValueError("Conflicting elevations at duplicate horizon azimuth")
+    # Interpolate terrain at each body azimuth, including across north (359° → 0°).
     skyline = np.interp(np.mod(az, 360), unique_az, sorted_el[first], period=360)
+    # Bottom of disc minus terrain minus safety clearance: zero is the pass boundary.
     return (el - rad - skyline - clearance).tolist()
 
 

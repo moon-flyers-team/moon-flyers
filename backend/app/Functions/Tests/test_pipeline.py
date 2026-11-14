@@ -15,6 +15,7 @@ from Functions.suitability import evaluate_fit
 
 class CalculationPipelineTests(unittest.TestCase):
     def test_disc_clearance_to_windows_metrics_and_fit(self):
+        """Check the complete chain against hand-calculated answers, including threshold equality."""
         stamps = ['2027-08-01T00:00:00Z', '2027-08-01T01:00:00Z']
         end = '2027-08-01T02:00:00Z'
         # Radius .2 + required clearance .3 = .5 degrees.
@@ -23,6 +24,7 @@ class CalculationPipelineTests(unittest.TestCase):
         common = dict(body_azimuth_deg=[0, 90], horizon_azimuth_deg=[0, 90, 180, 270],
                       horizon_elevation_deg=[0, 0, 0, 0], body_angular_radius_deg=.2,
                       horizon_clearance_deg=.3)
+        # Stage 1: translate angles into signed clearance and visibility flags.
         margins, flags = {}, {}
         for body, elevation in [('sun', [1.5, -.5]), ('earth', [-.5, 1.5])]:
             inputs = dict(common, body_elevation_deg=elevation)
@@ -30,10 +32,12 @@ class CalculationPipelineTests(unittest.TestCase):
             flags[body] = calculate_visibility(**inputs)
         self.assertEqual(margins, {'sun': [1, -1], 'earth': [-1, 1]})
         self.assertEqual(flags, {'sun': [True, False], 'earth': [False, True]})
+        # Stage 2: convert the crossings into continuous UTC intervals.
         self.assertEqual(extract_visibility_windows(stamps, flags['sun'], end, margins['sun']),
                          [{'start_utc': stamps[0], 'end_utc': '2027-08-01T00:30:00Z'}])
         self.assertEqual(extract_visibility_windows(stamps, flags['earth'], end, margins['earth']),
                          [{'start_utc': '2027-08-01T00:30:00Z', 'end_utc': end}])
+        # Stage 3: measure visible duration and outages; then check requirements.
         metrics = calculate_metrics(stamps, flags['sun'], flags['earth'], end,
                                    sun_clearance_margin_deg=margins['sun'],
                                    earth_clearance_margin_deg=margins['earth'])

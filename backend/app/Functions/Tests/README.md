@@ -8,7 +8,7 @@ python3 -m venv .venv
 .venv/bin/python -m unittest discover -s backend/app/Functions/Tests -v
 ```
 
-Expected: 14 tests, all `OK`.
+Expected: 25 tests, all `OK`.
 
 `test_core.py` checks individual functions: whole-disc clearance, horizon wrapping,
 interpolated crossings, visibility intervals, percentages, longest outages, missing
@@ -41,3 +41,19 @@ The API layer should orchestrate these functions; keep calculation logic here:
 
 These tests verify calculation behavior using known inputs. They do not validate
 real ephemerides, terrain accuracy, HTTP endpoints, or browser behavior.
+
+## Teammate terrain sample
+
+`fixtures/horizon_example.json` preserves the terrain dictionary provided in
+`message.txt`. `test_horizon_example.py` checks its full 360-sample coverage,
+visibility with negative and positive skyline elevations, and interpolation across
+359°/0°. Controlled body angles are used; the supplied file has no ephemerides.
+
+Pass only `horizon_azimuth_deg` and `horizon_elevation_deg` to the visibility
+functions, alongside body angles, angular radius, and clearance. `altitude_m` is
+observer metadata for the ephemeris provider, not slope. `horizon_gap_fraction`
+is quality metadata: this sample reports zero gaps. The visibility function does
+not inspect it; the caller must reject or explicitly handle incomplete skylines.
+The producer should confirm clockwise-from-north azimuths and the same local
+horizontal reference as the body's elevations. Negative skyline angles are valid
+if that is the producer's convention and should not be clamped to zero.
