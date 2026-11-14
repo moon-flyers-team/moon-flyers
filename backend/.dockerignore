@@ -1,5 +1,7 @@
-.venv
+.venv*
 venv
+.python
+data
 __pycache__
 *.py[cod]
 .env*

@@ -7,7 +7,11 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-.venv/
+.venv*/
+.python/
+# Downloaded terrain and preparation scratch files (never release artifacts)
+/data/
+/backend/data/
 venv/
 env/
 *.egg

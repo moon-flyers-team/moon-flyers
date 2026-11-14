@@ -34,11 +34,28 @@ if [[ -L $root/current ]]; then
 fi
 printf 'REVISION=%s\nHTTP_PORT=%s\n' "$revision" "$http_port" > "$release_dir/.env"
 
+# Opt-in per environment. Snapshot the absolute dataset path into this release so
+# rollback does not pick up later host configuration changes. Never source shell.
+if [[ -f $root/terrain-directory ]]; then
+  terrain_directory=$(<"$root/terrain-directory")
+  if [[ ! $terrain_directory =~ ^/[a-zA-Z0-9_./-]+$ \
+        || ! -d $terrain_directory || ! -r $terrain_directory/calibration.json \
+        || ! -f $release_dir/compose.terrain.yaml ]]; then
+    echo "Invalid terrain-directory: need an absolute path without whitespace, a calibration.json, and terrain overlay" >&2
+    exit 2
+  fi
+  printf 'LOLA_DATA_DIR=%s\n' "$terrain_directory" >> "$release_dir/.env"
+fi
+
 compose() {
   local directory=$1
   shift
+  local overlays=()
+  if grep -q '^LOLA_DATA_DIR=' "$directory/.env"; then
+    overlays=(-f "$directory/compose.terrain.yaml")
+  fi
   docker compose --project-name "moon-flyers-$environment" \
-    --env-file "$directory/.env" -f "$directory/compose.yaml" "$@"
+    --env-file "$directory/.env" -f "$directory/compose.yaml" "${overlays[@]}" "$@"
 }
 
 # Never pull mutable tags or build on the production host.
