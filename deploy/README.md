@@ -101,9 +101,10 @@ Deployments are serialized per environment and also protected by a host-side loc
 The API can validate a **host-provided** LOLA DEM dataset. It is opt-in per environment, mounted
 read-only, and never baked into images, release bundles, or GitHub Actions artifacts.
 
-**The served horizon is still the mock one** (`services/horizon.py`). Mounting data changes no
-prediction yet: it makes verified terrain available to the horizon model and proves the deploy
-path end to end.
+With the dataset mounted, `services/horizon.py` serves the real terrain horizon (cached per
+site, 22-69 ms on the archive). Environments without `LOLA_DEM_DIR` keep the mock hills, so the
+data is strictly opt-in. `metrics.slope_deg` is still reported as `null`: the DEM computes a
+slope, but exposing it changes the API contract and is left to the contract owner.
 
 ### What the dataset is
 

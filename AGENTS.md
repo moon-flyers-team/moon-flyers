@@ -194,7 +194,8 @@ Next integration work is to replace synthetic calculations with the real backend
 v0 response shapes stable. Check the UI against the running mock, including slow responses, retries,
 rapid site/constraint changes, best-time selection, and banner layout in a browser. The contributor-added time slider is implemented. Terrain-aware horizons and slope calculations
 remain outside API v0: a verified LOLA DEM dataset can be mounted on the server
-and is checked at startup (`deploy/README.md` section 5), but the API still reports mock terrain. Coordinate
+and is checked at startup (`deploy/README.md` section 5). With it mounted the API reports real
+terrain horizons; without it, the mock hills. `slope_deg` is still `null`. Coordinate
 contract changes across `API.md`, TypeScript types, the client, backend models, and tests.
 
 Preserve the existing dark dashboard, amber sunlight and cyan Earth colors, keyboard-accessible

@@ -11,7 +11,11 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
   `deploy.sh` mounts it read-only per environment (`LOLA_DEM_DIR=/data/lola`) and startup refuses a
   broken dataset. Real timings at the site: 22-69 ms per `horizon()` call, and
   `tests/test_calculation_data.py -k live_terrain` passes against live JPL in 1.5 s.
-  **The served horizon is still `MockTerrainHorizon`**; wiring it is the next step.
+  **The API now serves that terrain horizon.** `services/horizon.py` returns a `DemHorizon`
+  built from `lunar_horizon_dem.horizon()` whenever `LOLA_DEM_DIR` is set, cached per site
+  (22-69 ms per site; `/sites` with mock ephemeris answers in 0.01 s). Without the variable it
+  keeps `MockTerrainHorizon`, so existing deployments are unchanged. At (-89.9, 0) the skyline
+  runs -3.2 to +23.8 deg and the first hourly sample is in shadow.
 - **Real Sun/Earth positions from JPL Horizons are live (2026-11-14, branch `plug-positions-py`).**
   `services/ephemeris.py` calls `positions.positions()`; header `X-Moon-Flyers-Data-Source: horizons`.
   Terrain is still the mock hills. `MOON_FLYERS_EPHEMERIS=mock` switches back to synthetic data
@@ -21,11 +25,12 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
   Horizons calls), ≈ 0.7 MB. The frontend's parallel burst (`/compare` + 7 `GET /sites`) ≈ 33 s, all 200.
 
 ## Next up (backend)
-1. Wire real terrain: add a `HorizonModel` in `services/horizon.py` that calls
-   `lunar_horizon_dem.horizon(lat, lon)` when `LOLA_DEM_DIR` is set (and the site is covered),
-   caching the 360-value profile per site, else keep `MockTerrainHorizon`. This changes
-   user-visible output, so agree the `slope_deg` contract with the frontend first
-   (`metrics.slope_deg` is currently `null`). The horizon costs 22-69 ms per site.
+1. Agree the `slope_deg` contract with the frontend: the DEM already returns slope and
+   downslope azimuth, but `visibility.metrics()` hardcodes `slope_deg=None` and `fit()` ignores
+   `max_slope_deg`. Decide whether slope violations should affect `fit.status` before wiring it.
+2. Check the terrain defaults against the team's PDF: `horizon()` uses `max_range_km=50`,
+   `min_range_m=20`, `height_above_terrain=0`; catalogue sites are rim/massif sites, so the
+   observer height and clearance conventions deserve a review.
 1. Open a PR for `plug-positions-py`. Tell the frontend team: header is now `horizons`,
    `/compare` takes about 25 s, there's a new 502, and the frontend fires `/compare` plus one `GET /sites`
    per site in parallel (≈ 28 Horizons calls per param change).
@@ -52,6 +57,9 @@ To raise with the frontend team:
   scaffold. There are now two mocks (theirs in Node, ours in Python), so agree which one they use.
 - Site ids and list: ours (7 sites in `services/catalogue.py`) were invented. Their mock UI shows 10.
 - The Node mock's 0.4 s artificial delay isn't in the Python mock.
+- With LOLA terrain mounted, horizon elevations reach about -3 to +24 deg; the mock hills
+  stayed within 0-1.5 deg. Check the chart's y-axis range, clearance labels and any
+  hard-coded 0 deg assumptions against real profiles.
 
 Implementation choices where API.md is silent:
 - `GET /sites` analysis: `timeseries`/`windows` span window_start → window_end + days.
@@ -77,6 +85,11 @@ _(date: decision, then why)_
   wrong scaling/sample type, non-published grids, bad calibration keys, and polar/global
   disagreement > 1 km. Startup runs the same checks (0.4 s) so a bad mount rolls the deploy back;
   SHA-256 stays in the CLI (`--hash`) because reading 15.9 GB does not belong in a boot.
+- 2026-11-14: **The DEM horizon is opt-in and cached per site.** `for_site()` reads
+  `LOLA_DEM_DIR` at call time, keeps one `DEM` per directory (memory-mapped) and one 360-value
+  skyline per rounded coordinate. An uncovered coordinate or unreadable DEM falls back to a flat
+  horizon with a warning instead of failing the request; startup has already refused broken
+  datasets. `slope_deg` stays `null` until the contract question is settled.
 - 2026-11-14: **Fixtures must not be mirror-symmetric in longitude.** A synthetic DEM that varies
   only as `cos(lon)` cannot distinguish axis variants 0 and 2 (lon negated); the fixture adds a
   `sin(2*lon)` term, and a test proves a wrong variant is caught by the cross-check.
@@ -146,6 +159,9 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-14: **The API serves real terrain** when a dataset is mounted: `DemHorizon` in
+  `services/horizon.py` plus `tests/test_horizon_dem.py` (mock without the variable, DEM profile
+  through `/sites` with it, cache reuse, flat fallback). Real-data check: `/sites` 200 in 0.01 s.
 - 2026-11-14: **Dataset provisioning, verification and read-only mount** (branch
   `feat/beelink-lola-terrain`, rebased onto `main`): `lunar_horizon_dem.verify_dataset()` (labels,
   sizes, scaling, published shapes, calibration, polar/global cross-check),
