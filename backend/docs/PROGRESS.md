@@ -10,7 +10,7 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
   (`services/mock_ephemeris.py`), and `tests/conftest.py` sets it, so pytest stays offline.
   19 tests pass, plus 1 live test opt-in via `MOON_FLYERS_LIVE=1`.
   Live timing: `GET /sites` (1 site, 3 weeks) ≈ 2.3 s; a 3-month, 7-site `/compare` ≈ 24 s (14 sequential
-  Horizons calls), ≈ 0.7 MB.
+  Horizons calls), ≈ 0.7 MB. The frontend's parallel burst (`/compare` + 7 `GET /sites`) ≈ 33 s, all 200.
 
 ## Next up (backend)
 1. Open a PR for `plug-positions-py`. Tell the frontend team: header is now `horizons`,
@@ -96,6 +96,8 @@ _(date: decision, then why)_
   there (to verify).
 
 ## Verified facts
+- 2026-11-14: Horizons concurrency limit: about 2 open requests per IP. More → `HTTP 503 Service Temporarily
+  Unavailable` after ≈1 s. Also max 90,000 times per request ("Output length exceeded").
 - 2026-11-14: The Horizons API works for a lunar surface observer. Working query
   (Sun = `COMMAND='10'`, Earth = `'399'`):
   `https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND='10'&EPHEM_TYPE=OBSERVER&CENTER='coord@301'&COORD_TYPE=GEODETIC&SITE_COORD='<E-lon deg>,<lat deg>,<h km>'&START_TIME=...&STOP_TIME=...&STEP_SIZE='6h'&QUANTITIES='4'`
@@ -117,6 +119,9 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-14: Fixed 502s in the UI ("HTTP Error 503" from Horizons). Horizons answers 503 when one IP has
+  more than about 2 requests open (measured: 2 parallel OK, 4 → half fail). `ephemeris.py` now allows at most 2
+  `positions()` calls in flight (process-wide semaphore) and retries 503 with 1/2/4/8 s backoff.
 - 2026-11-14: Swapped in live JPL Horizons via `positions.py` (removed its debug `print`). The mock moved to
   `services/mock_ephemeris.py`. The adapter makes timestamps UTC, checks Horizons' time grid matches ours,
   and maps errors to 422/502. Tests: `tests/conftest.py` (forces mock), `tests/test_ephemeris.py`.

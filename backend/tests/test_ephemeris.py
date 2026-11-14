@@ -1,6 +1,10 @@
 """The Horizons adapter in services/ephemeris.py, offline (fake positions()) plus one opt-in live call."""
 
 import os
+import threading
+import time
+import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -64,6 +68,49 @@ def test_unsupported_step_is_invalid_input(live_mode):
 def test_sample_limit_is_checked_before_any_request(live_mode):
     with pytest.raises(LimitExceededError):
         ephemeris.generate(SITE, START, START + timedelta(days=400), 60)
+
+
+def test_horizons_503_is_retried(live_mode, monkeypatch):
+    monkeypatch.setattr(ephemeris, "RETRY_DELAYS_S", (0, 0))
+    ok = fake_positions([f"2027-08-01T0{h}:00:00" for h in range(4)])
+    calls = []
+
+    def flaky(*args):
+        calls.append(1)
+        if len(calls) < 3:
+            raise urllib.error.HTTPError("u", 503, "Service Temporarily Unavailable", None, None)
+        return ok(*args)
+    monkeypatch.setattr(ephemeris.positions, "positions", flaky)
+    assert len(ephemeris.generate(SITE, START, END, 3600)["times"]) == 4
+    assert len(calls) == 3
+
+
+def test_horizons_503_gives_up_as_upstream_error(live_mode, monkeypatch):
+    monkeypatch.setattr(ephemeris, "RETRY_DELAYS_S", (0, 0))
+
+    def down(*args):
+        raise urllib.error.HTTPError("u", 503, "Service Temporarily Unavailable", None, None)
+    monkeypatch.setattr(ephemeris.positions, "positions", down)
+    with pytest.raises(EphemerisUnavailableError):
+        ephemeris.generate(SITE, START, END, 3600)
+
+
+def test_at_most_two_horizons_calls_in_flight(live_mode, monkeypatch):
+    ok = fake_positions([f"2027-08-01T0{h}:00:00" for h in range(4)])
+    lock, state = threading.Lock(), {"now": 0, "peak": 0}
+
+    def slow(*args):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+        return ok(*args)
+    monkeypatch.setattr(ephemeris.positions, "positions", slow)
+    with ThreadPoolExecutor(8) as ex:
+        list(ex.map(lambda _: ephemeris.generate(SITE, START, END, 3600), range(8)))
+    assert state["peak"] == ephemeris.HORIZONS_CONCURRENCY
 
 
 @pytest.mark.skipif(os.environ.get("MOON_FLYERS_LIVE") != "1", reason="hits JPL Horizons; set MOON_FLYERS_LIVE=1")

@@ -30,7 +30,9 @@ accepted without being stored. Slope remains `null`. The horizon is mock terrain
 **The Python backend (`backend/`) now uses real Sun/Earth positions from JPL Horizons** and
 returns `X-Moon-Flyers-Data-Source: horizons` (`mock` if started with
 `MOON_FLYERS_EPHEMERIS=mock`). The terrain is still the mock hills above. Each site costs two
-Horizons calls (about 2 s), so a 7-site `/compare` takes about 25 s: keep loading states visible.
+Horizons calls (about 2 s), and Horizons allows only about 2 requests in flight per IP, so the
+backend queues them. The usual burst (one 7-site `/compare` plus 7 `GET /sites`, 3 months) finishes in
+about 35 s: `GET /sites` responses arrive within 3–13 s, `/compare` last. Keep loading states visible.
 Limits: 90,000 samples per series (the Horizons maximum), otherwise 422. A
 `timestep_seconds` that isn't whole minutes must divide the requested span exactly, otherwise
 422. If Horizons fails or is unreachable, the response is **502**.
