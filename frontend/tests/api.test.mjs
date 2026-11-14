@@ -49,6 +49,15 @@ test('catalogue and health use parameter-free GET requests', async () => {
   assert.equal(calls[0].init.method, undefined);
 });
 
+test('catalogue metadata identifies a mock server without changing the site response format', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify([site]), {
+    headers: { 'X-Moon-Flyers-Data-Source': 'mock' },
+  });
+  assert.deepEqual(await api.getCatalogue(), { sites: [site], isMock: true });
+  capture([site]);
+  assert.deepEqual(await api.getCatalogue(), { sites: [site], isMock: false });
+});
+
 test('site analysis serializes every constraint and requests a whole lunar day in one batch', async () => {
   const calls = capture({ ...site, analysis: {} });
   const signal = new AbortController().signal;

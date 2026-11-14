@@ -23,11 +23,14 @@ when agreed behavior changes.
   back unless requested.
 - API loading/error messages and retry controls are implemented. The offline banner occupies
   its own layout row above the dashboard and must never cover content.
-- The backend is still a FastAPI scaffold: only `/` and `/health` exist in
-  `backend/src/main.py`. `backend/src/positions.py` is a placeholder. Analysis endpoints
-  and real astronomical calculations are not implemented in this checkout.
-- Offline fallback data contains example site metadata only. Do not present invented analysis
-  metrics as backend results. Until endpoints exist, analysis panels show errors/unavailable data.
+- The real backend remains the original FastAPI scaffold in `backend/src/main.py`.
+  `backend/src/positions.py` is a placeholder. Keep `backend/` clear of frontend/mock work.
+- The separate mock API lives entirely in `frontend/src/mock/` and implements every v0
+  endpoint with deterministic synthetic data. Run `pnpm mock:api`; it uses Node and requires
+  no Python environment. `data.mjs` generates consistent samples, metrics, windows, and fit.
+- The frontend identifies mock responses via `X-Moon-Flyers-Data-Source: mock` and labels
+  them explicitly. Offline fallback data still contains example site metadata only. Do not
+  present synthetic results as scientific predictions.
 
 ## Project structure
 
@@ -51,11 +54,17 @@ when agreed behavior changes.
 | `frontend/src/index.css` | Shared visual tokens and component styles |
 | `frontend/src/mockData.ts` | Example catalogue used when the catalogue request fails |
 | `frontend/tests/api.test.mjs` | Node contract tests and React server-rendering checks |
+| `frontend/tests/mock-pipeline.mjs` | Live HTTP checks through Vite and the mock, using the real frontend client |
 | `frontend/vite.config.ts` | React plugin, `@` alias, dev port, and API proxy |
-| `backend/src/main.py`, `backend/requirements.txt` | FastAPI application and Python dependencies |
+| `backend/src/main.py`, `backend/requirements.txt` | Real API scaffold and Python runtime dependencies |
+| `frontend/src/mock/server.mjs` | Standalone Node HTTP mock API on port 8000 |
+| `frontend/src/mock/api.mjs`, `data.mjs` | Validated mock routes and deterministic generators |
+| `frontend/tests/mock-api.test.mjs` | Mock contract/consistency tests with no server or Python dependency |
 
-Keep frontend implementation inside `frontend/` and backend implementation inside `backend/`.
-The root `package.json` is a placeholder, not the frontend application or a configured workspace.
+Keep frontend implementation inside `frontend/` and real backend implementation inside `backend/`.
+All mock/demo API source belongs in `frontend/src/mock/`, and its tests belong in `frontend/tests/`.
+Do not add mock code, Python environments, or generated test files under `backend/`.
+The root `package.json` provides the `mock:api` convenience script; it is not the frontend application or a configured workspace.
 Use the existing component files and shared helpers before introducing another abstraction or
 moving files. Keep frontend dependency and lockfile changes together in `frontend/`.
 
@@ -74,12 +83,18 @@ The frontend declares pnpm 9.15.0 in its `packageManager` field. Vite serves dev
 port 5173. The build checks both application and Vite-config TypeScript, then bundles the app.
 Keep the two type checks; the earlier project-reference configuration failed to build.
 
-For the backend, using an activated Python virtual environment:
+For the standalone mock API:
 
 ```sh
-python -m pip install -r backend/requirements.txt
-python -m uvicorn src.main:app --app-dir backend --reload --port 8000
+pnpm mock:api
+# Equivalent: pnpm --dir frontend mock:api
 ```
+
+It uses Node's built-in HTTP server and needs no extra runtime dependencies. The configurable
+analysis delay defaults to 0.4 seconds (`MOCK_API_DELAY_SECONDS`). `API.md` documents setup
+and request examples. Unit/contract tests are included in `pnpm --dir frontend test`.
+The original real backend scaffold is separate and uses `backend/requirements.txt`.
+Stop the mock before starting a real backend on port 8000.
 
 Without `VITE_API_URL`, requests use `/api`; the Vite development proxy forwards them to
 `http://localhost:8000` and removes `/api`. Alternatively, set `VITE_API_URL` in
@@ -96,6 +111,7 @@ the underscore fit statuses: `both_met`, `power_short`, `comms_short`, `neither_
 | Client method | HTTP request | Use |
 | --- | --- | --- |
 | `getSites` | `GET /sites` without parameters | Catalogue only |
+| `getCatalogue` | `GET /sites` without parameters | App catalogue plus mock header metadata; same server response shape |
 | `getSiteAnalysis` | `GET /sites?...` | Selected site, time series, horizon, metrics, windows, fit |
 | `compare` | `POST /compare` | Enabled sites, mission metrics, and visibility timeline bars |
 | `getLandingWindows` | `POST /landing-windows` | Ranked candidate landing times |
@@ -146,19 +162,25 @@ The hook does not cache earlier site/date batches across requests.
 
 ## Checks and remaining work
 
-The preceding implementation passed `pnpm --dir frontend test` (12 tests) and
-`pnpm --dir frontend build`. Tests cover payloads, custom-site serialization, UTC values,
-API failures, abort propagation, timeline clipping, fit/violation rendering, first-sample markers,
-and chart path wrapping. They use Node's test runner, Vite SSR module loading, and React
-server rendering; they do not replace browser interaction tests or live backend validation.
+Verification commands are `pnpm --dir frontend test` and `pnpm --dir frontend build`.
+Tests cover payloads, custom-site serialization, UTC values, API failures, abort propagation,
+timeline clipping, fit/violation rendering, first-sample markers, and chart path wrapping.
+Frontend component tests use Vite SSR and React server rendering. Mock API tests exercise its
+request handler directly, including cross-endpoint consistency, custom sites, validation, fit
+ranking, CORS, and the default frontend request window. The mock needs no Python tests or dependencies.
+
+With both servers running, `pnpm --dir frontend test:mock` checks real HTTP requests through
+Vite and renders mock responses in the frontend components. After moving the mock to the
+frontend, all 24 tests, the production build, and the live HTTP pipeline check passed. Browser
+interaction still needs manual review.
 
 For frontend integration changes, rerun these commands and update focused contract tests when
 behavior changes. `pnpm --dir frontend lint` exists, but there is currently no ESLint config;
 do not report lint as passing without configuring and running it. Documentation-only edits
 do not require rebuilding the application.
 
-Next integration work is to implement the documented backend endpoints, initially with
-contract-shaped mocks, then verify the full UI against them. Check slow responses, retries,
+Next integration work is to replace synthetic calculations with the real backend while keeping
+v0 response shapes stable. Check the UI against the running mock, including slow responses, retries,
 rapid site/constraint changes, best-time selection, and banner layout in a browser. Time-slider
 implementation is assigned to another contributor. Terrain-aware horizons and slope calculations
 remain outside API v0. Coordinate

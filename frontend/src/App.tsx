@@ -19,13 +19,16 @@ export default function App() {
   const [sites, setSites] = useState<LandingSite[]>([]);
   const [usingMock, setUsingMock] = useState(false);
 
-  const catalogue = useRequest(api.getSites, 0);
+  const [backendMock, setBackendMock] = useState(false);
+  const catalogue = useRequest(api.getCatalogue, 0);
   useEffect(() => {
     if (catalogue.data) {
-      setSites(catalogue.data.map(site => ({ ...site, enabled: true })));
+      setSites(catalogue.data.sites.map(site => ({ ...site, enabled: true })));
       setUsingMock(false);
+      setBackendMock(catalogue.data.isMock);
     } else if (catalogue.error) {
       setSites(mockSites);
+      setBackendMock(false);
       setUsingMock(true);
     }
   }, [catalogue.data, catalogue.error]);
@@ -37,6 +40,9 @@ export default function App() {
   return (
     <div className="app-shell">
       {catalogue.loading && <div className="api-banner" role="status">Loading site catalogue…</div>}
+      {backendMock && !usingMock && (
+        <div className="api-banner" role="status">Mock backend — synthetic demo data for interface testing</div>
+      )}
       {usingMock && (
         <div className="mock-banner" role="alert">
           <span>API unavailable — showing example sites. Analysis requires the backend. {catalogue.error}</span>
