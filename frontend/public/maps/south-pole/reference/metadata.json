@@ -1,0 +1,38 @@
+{
+  "projection": "lunar_south_polar_stereographic",
+  "reference_radius_m": 1737400,
+  "bounds_m": [
+    -304005.6080198807,
+    -304005.6080198807,
+    304005.6080198807,
+    304005.6080198807
+  ],
+  "width": 1024,
+  "height": 1024,
+  "average_period_years": 18.6,
+  "data_type": "long_term_reference",
+  "layers": [
+    {
+      "id": "sunlight",
+      "product": "AVGVISIB_65S_240M_201608",
+      "source_scale_m": 240.0,
+      "source_scaling_factor": 4e-05,
+      "source_sha256": "4b983fb1340c7b625a36d253e881874271c330083d2fdcc7277dc2f8ac24a438",
+      "min_pct": 0.0,
+      "max_pct": 77.11428833007812,
+      "visible_disc_definition": "any_fraction",
+      "unit": "%"
+    },
+    {
+      "id": "earth-visibility",
+      "product": "AVGVISIB_65S_240M_201608_EARTH",
+      "source_scale_m": 240.0,
+      "source_scaling_factor": 4e-05,
+      "source_sha256": "b194b9a1ce0dacdb00dbdc546b99850656c206ba0e13956178831f72cc65d73e",
+      "min_pct": 0.0,
+      "max_pct": 100.0,
+      "visible_disc_definition": "any_fraction",
+      "unit": "%"
+    }
+  ]
+}

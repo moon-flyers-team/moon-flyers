@@ -202,9 +202,17 @@ build it.
 ## Proposed map heatmaps extension (frontend only; awaiting backend implementation)
 
 The Map tab uses this **proposed** endpoint. Neither the current FastAPI backend nor the
-standalone Node mock implements it. Enabling an overlay sends the request; 404/405/501
+standalone Node mock implements it. Enabling a mission-dependent overlay sends the request; 404/405/501
 show an explicit unavailable message. The frontend generates no substitute heatmap values.
 Backend contributors should agree this contract before implementing it.
+
+The current toolbar's Sunlight and Earth contact checkboxes instead display bundled NASA
+LOLA **long-term reference averages**. They do not call this endpoint or change with mission
+settings. Both can be overlaid together using transparency. Other heatmap checkboxes
+(longest night, communications blackout and slope) use the proposed endpoint below. The
+contract continues to describe future mission-dependent Sun/Earth maps too; the reference
+products are not interchangeable with those outputs, particularly their any-disc visibility
+criterion. Source metadata lives in `frontend/public/maps/south-pole/README.md`.
 
 ### `POST /map/heatmaps`
 

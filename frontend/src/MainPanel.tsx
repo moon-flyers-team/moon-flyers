@@ -5,7 +5,7 @@ import { api, siteReference } from './api';
 import { MapPanel } from './MapPanel';
 import type { Coordinates } from './map/projection';
 import { useRequest } from './useRequest';
-import { dateUtc } from './time';
+import { dateUtc, landingWindowError } from './time';
 import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints, SiteAnalysisResponse } from './types';
 
 interface Props {
@@ -28,7 +28,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
   const siteId = selectedSite?.id;
 
   useEffect(() => {
-    if (mission.windowStart) setLandingUtc(`${mission.windowStart}T${mission.windowStart === mission.windowEnd ? '00' : '06'}:00:00Z`);
+    if (mission.windowStart) setLandingUtc(`${mission.windowStart}T06:00:00Z`);
   }, [mission.windowStart, mission.windowEnd]);
 
   const constraints = useMemo<Constraints>(() => ({
@@ -43,12 +43,12 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
 
   const start = Date.parse(dateUtc(mission.windowStart));
   const end = Date.parse(dateUtc(mission.windowEnd));
-  const validDates = Number.isFinite(start) && Number.isFinite(end) && end >= start;
+  const dateError = landingWindowError(mission.windowStart, mission.windowEnd);
   const validConstraints = Object.values(constraints).every(value => Number.isFinite(value) && value >= 0)
     && Number.isInteger(mission.daysOnSurface) && mission.daysOnSurface >= 1
     && power.minSunlight <= 100 && comms.minEarthContact <= 100
     && mission.horizonClearance <= 90 && terrain.maxSlope <= 90;
-  const validation = !validDates ? 'Choose a valid landing window with the end on or after the start.'
+  const validation = dateError ? dateError
     : !validConstraints ? 'Use positive whole mission days, percentages from 0–100, angles from 0–90°, and nonnegative time limits.' : '';
   const compareRequest = useMemo(() => validation || !enabled.length ? null
     : (signal: AbortSignal) => api.compare({
@@ -113,7 +113,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       </div>
       <div className="main-body map-body" id="panel-map" role="tabpanel" aria-labelledby="tab-map" hidden={tab !== 'map'}>
         <MapPanel sites={sites} constraints={constraints} mission={mission} active={tab === 'map'}
-          validation={validation} onSiteAdd={onSiteAdd} onSiteRename={onSiteRename} onSiteDelete={onSiteDelete} />
+          validation={validation} showValidation={!dateError} onSiteAdd={onSiteAdd} onSiteRename={onSiteRename} onSiteDelete={onSiteDelete} />
       </div>
     </main>
   );

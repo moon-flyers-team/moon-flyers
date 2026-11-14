@@ -43,7 +43,7 @@ when agreed behavior changes.
 | `frontend/src/App.tsx` | Mission/constraint state, site catalogue, enabled sites, connection banner |
 | `frontend/src/Sidebar.tsx` | Mission, power, communications, terrain, and site inputs |
 | `frontend/src/MainPanel.tsx` | Profiles/Map tabs, landing time, validation, comparison and batch analysis requests |
-| `frontend/src/MapPanel.tsx` | Polar map, overlay controls, cursor readout, and click-to-add site dialog |
+| `frontend/src/MapPanel.tsx` | Polar map, overlay controls, floating cursor readout, reference layers, and click-to-add site dialog |
 | `frontend/src/map/` | Stereographic math, heatmap validation/color ramps, bundled feature catalogue |
 | `frontend/public/maps/south-pole/` | NASA Moon Trek basemap tiles and source/projection metadata |
 | `frontend/tests/map.test.mjs` | Map projection, custom-site requests, heatmap contract, and tab/map rendering |
@@ -55,7 +55,8 @@ when agreed behavior changes.
 | `frontend/src/TimelineBars.tsx` | Visibility intervals clipped to the displayed time range |
 | `frontend/src/HorizonChart.tsx` | Horizon profile, Sun/Earth paths, first-sample markers, and stable altitude bounds |
 | `frontend/src/LandingWindows.tsx` | Explicit best-time search and applying a returned landing time |
-| `frontend/src/Field.tsx`, `Section.tsx` | Shared sidebar primitives |
+| `frontend/src/Field.tsx`, `Section.tsx` | Shared sidebar primitives; section actions stay outside collapse buttons |
+| `frontend/src/DateField.tsx` | UTC date inputs with browser-native calendar controls and error associations |
 | `frontend/src/index.css` | Shared visual tokens and component styles |
 | `frontend/src/mockData.ts` | Example catalogue used when the catalogue request fails |
 | `frontend/tests/api.test.mjs` | Node contract tests and React server-rendering checks |
@@ -245,3 +246,72 @@ decisions change.
   local imagery, coordinate readout width, custom sites in Profiles, missing endpoint state,
   intercepted fixture overlay rendering, multi-layer requests, mission updates, and mobile.
   Full frontend suite still has the previously identified 12 old-contract fixture failures.
+
+## Sidebar site entry and calendars
+
+- The Sites section's `+ Add` action opens a manual name/decimal-coordinate form, including
+  when the section is collapsed. Section header actions are sibling controls, never buttons
+  nested in the section-collapse button. Empty/whitespace names, missing/nonfinite numbers,
+  latitude outside −90…90 and longitude outside −180…180 cannot be submitted. Decimal
+  precision is preserved; do not round manually entered coordinates to the map click precision.
+- Sidebar and Map both call App's `addSite`, so manual sites immediately appear in Profiles
+  and on the map where inside the cap. Out-of-cap coordinates remain valid for Profiles.
+  Entries use local UUIDs, custom coordinate payloads, and session-only storage, just like
+  map-created sites. Cancel/Escape discards the form and returns focus to its Add button.
+- `DateField` keeps `YYYY-MM-DD` mission values and the browser-native `type="date"`
+  calendar inside each input. Do not add a second external calendar button or custom calendar.
+  The shared `landingWindowError()` helper in time.ts requires real calendar dates and an
+  end date strictly later than the start date. Equal dates are invalid for the backend.
+- Date errors appear once, prominently at the top of Mission Planner above its date fields;
+  both inputs have aria-invalid and describe that alert. Profiles and Map suppress duplicate
+  date notices but use the same validation to block comparisons, site analysis, best-time
+  searches, and heatmaps. Obsolete requests are aborted and stale data hidden by useRequest.
+- `frontend/tests/dates.test.mjs` covers equality, reversed/missing/invalid dates, leap days,
+  alert placement, native-only date controls, and disabled time controls. Browser checks
+  verify no invalid API calls, both tabs, and recovery when a valid range is restored.
+
+## Published reference overlays and cursor readout
+
+- The Sunlight and Earth contact toolbar checkboxes display bundled, real NASA LOLA long-term
+  averages from `frontend/public/maps/south-pole/reference/`. Their projection matches the
+  map and their meaning is documented in the local README and official PDS labels. They are
+  independent of mission dates and constraints and remain viewable with invalid mission dates.
+  Do not pass their values to the mission scoring table or claim mission-dependent results.
+- Both reference layers can be enabled simultaneously. They alpha-blend in sunlight then
+  Earth-visibility order; the toolbar opacity applies to each image. Separate legends show
+  0–100% ramps and a note explains combined colors and the any-disc visibility definition.
+  Backend mission overlays render above them and retain independent request/error states.
+- `map/referenceOverlays.ts` identifies these two criteria. Keep their selection state separate
+  from backend criteria so toggling a reference layer never refetches analysis. The remaining
+  three criteria still use the unimplemented `POST /map/heatmaps` contract.
+- `frontend/scripts/generate-reference-overlays.py` creates the colorized PNGs from the real
+  little-endian INT16 IMG files and PDS label scaling. It crops/resamples to the cap, masks
+  outside-cap/no-data pixels, and records source checksums. Original large IMG files remain
+  outside the repo. Scientific Python dependencies are only for offline regeneration.
+- The fixed-width cursor box is positioned inside `.map-viewport` at bottom-right with a
+  stable name line, blank for unnamed features. It ignores pointer events so map gestures
+  pass through. The topographic elevation legend sits at top-right to avoid overlapping it.
+
+## Heatmap presentation
+
+- Any selected reference or mission heatmap hides all basemap imagery, terrain contours,
+  and the elevation legend, including while loading, unavailable, or opacity is zero.
+  A neutral surface remains with the coordinate grid, feature names, sites, and cursor box.
+  The Layers dropdown remembers the user's choice; clearing the last heatmap restores it
+  without resetting the camera. Topographic contour requests stop while the basemap is hidden.
+- `map/HeatmapLegends.tsx` renders one legend per selected criterion in a top-left map card.
+  Reference scales are 0–100%; mission scales use the response's units and bounds. Pending,
+  invalid and unavailable mission data show a status instead of invented numeric limits.
+  Distinguish reference averages, synthetic responses and actual mission outputs.
+- Legends scroll within a bounded height on small maps, leaving the bottom-right cursor box
+  unobscured. Keep individual labels and ranges visible when multiple maps are enabled.
+
+## Map label sizing and introductory text
+
+- Feature, waypoint, latitude-grid and compass labels use inverse-zoom font sizes and
+  `strokeWidth={2 / zoom}` so outlines stay constant in screen pixels. Do not override these
+  label stroke widths with a fixed CSS pixel value: that scales with the SVG viewBox and
+  produces thick outlines when zoomed in. Browser checks verified 1× through 16×.
+- Group pre-map notices/help in `.map-preamble`, with a 3px gap and 1.25 line height. Keep
+  navigation hints and site color keys on a wrapping row, and keep reference-data caveats
+  concise while preserving their long-term/any-disc meaning. Errors remain conspicuous.

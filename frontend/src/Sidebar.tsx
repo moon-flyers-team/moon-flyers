@@ -1,5 +1,9 @@
+import { useId, useRef, useState } from 'react';
 import { Section } from './Section';
 import { Field } from './Field';
+import { DateField } from './DateField';
+import { landingWindowError } from './time';
+import type { Coordinates } from './map/projection';
 import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams } from './types';
 
 interface Props {
@@ -13,33 +17,42 @@ interface Props {
   onCommsChange: (c: CommsParams) => void;
   onTerrainChange: (t: TerrainParams) => void;
   onSiteToggle: (id: string) => void;
+  onSiteAdd: (coordinates: Coordinates, name: string) => void;
 }
 
 export function Sidebar({
   mission, power, comms, terrain, sites,
-  onMissionChange, onPowerChange, onCommsChange, onTerrainChange, onSiteToggle,
+  onMissionChange, onPowerChange, onCommsChange, onTerrainChange, onSiteToggle, onSiteAdd,
 }: Props) {
+  const formId = useId();
+  const dateErrorId = useId();
+  const dateError = landingWindowError(mission.windowStart, mission.windowEnd);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [adding, setAdding] = useState(false);
+  const [siteName, setSiteName] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
+  const [announcement, setAnnouncement] = useState('');
+  const validCoordinates = latitude.trim() !== '' && longitude.trim() !== ''
+    && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))
+    && Number(latitude) >= -90 && Number(latitude) <= 90 && Number(longitude) >= -180 && Number(longitude) <= 180;
+  function closeForm() {
+    setAdding(false); setSiteName(''); setLatitude(''); setLongitude('');
+    addButtonRef.current?.focus();
+  }
   return (
     <aside className="sidebar">
       <Section title="Mission Planner">
-        <Field label="Landing window start (UTC)">
-          <input
-            type="date"
-            required
-            className="sb-input"
-            value={mission.windowStart}
-            onChange={e => onMissionChange({ ...mission, windowStart: e.target.value })}
-          />
-        </Field>
-        <Field label="Landing window end (UTC)">
-          <input
-            type="date"
-            required
-            className="sb-input"
-            value={mission.windowEnd}
-            onChange={e => onMissionChange({ ...mission, windowEnd: e.target.value })}
-          />
-        </Field>
+        {dateError && <div id={dateErrorId} className="sb-mission-error" role="alert">
+          <strong>Invalid landing window</strong><p>{dateError}</p>
+        </div>}
+        <DateField label="Landing window start (UTC)" value={mission.windowStart}
+          errorId={dateError ? dateErrorId : undefined}
+          onChange={windowStart => onMissionChange({ ...mission, windowStart })} />
+        <DateField label="Landing window end (UTC)" value={mission.windowEnd}
+          errorId={dateError ? dateErrorId : undefined}
+          onChange={windowEnd => onMissionChange({ ...mission, windowEnd })} />
         <div className="sb-row">
           <Field label="Days on surface">
             <div className="sb-unit">
@@ -147,7 +160,30 @@ export function Sidebar({
         </Field>
       </Section>
 
-      <Section title="Sites">
+      <Section title="Sites" action={<button ref={addButtonRef} type="button" className="ct-btn sb-add-site"
+        aria-label="Add site manually" aria-expanded={adding} aria-controls={formId}
+        onClick={() => { setAdding(true); setAnnouncement(''); nameRef.current?.focus(); }}>+ Add</button>}>
+        {adding && <form id={formId} className="sb-site-form" aria-label="Add a site manually"
+          onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeForm(); } }}
+          onSubmit={event => {
+            event.preventDefault();
+            if (!siteName.trim() || !validCoordinates) return;
+            onSiteAdd({ latitude_deg: Number(latitude), longitude_deg: Number(longitude) }, siteName.trim());
+            setAnnouncement(`Added ${siteName.trim()} to Sites.`);
+            closeForm();
+          }}>
+          <label>Site name<input ref={nameRef} autoFocus className="sb-input" required maxLength={80}
+            value={siteName} onChange={event => setSiteName(event.target.value)} /></label>
+          <label>Latitude (decimal degrees)<input type="number" className="sb-input" required step="any" min={-90} max={90}
+            value={latitude} onChange={event => setLatitude(event.target.value)} /></label>
+          <label>Longitude (decimal degrees)<input type="number" className="sb-input" required step="any" min={-180} max={180}
+            value={longitude} onChange={event => setLongitude(event.target.value)} /></label>
+          <p>Latitude −90…90°, longitude −180…180°. East-positive longitude; use negative values for west.</p>
+          <div className="sb-form-actions"><button type="submit" className="ct-btn" disabled={!siteName.trim() || !validCoordinates}>Add site</button>
+            <button type="button" className="ct-btn" onClick={closeForm}>Cancel</button></div>
+          <small>Custom sites are saved for this session.</small>
+        </form>}
+        {announcement && <p className="sb-site-announcement" role="status">{announcement}</p>}
         <span className="sb-count">
           {sites.filter(s => s.enabled).length} of {sites.length} compared
         </span>

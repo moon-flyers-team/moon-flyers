@@ -42,7 +42,7 @@ export default function App() {
   }
   function addSite(coordinates: Coordinates, name: string) {
     setSites(previous => [...previous, { ...coordinates, id: `custom_${crypto.randomUUID()}`,
-      name, group: 'Custom map sites', custom: true, enabled: true }]);
+      name, group: 'Custom sites', custom: true, enabled: true }]);
   }
   function renameSite(id: string, name: string) {
     if (!name.trim()) return;
@@ -76,6 +76,7 @@ export default function App() {
           onCommsChange={setComms}
           onTerrainChange={setTerrain}
           onSiteToggle={toggleSite}
+          onSiteAdd={addSite}
         />
         <MainPanel
           onSiteAdd={addSite}

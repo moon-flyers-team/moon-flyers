@@ -9,6 +9,9 @@ import { HEATMAPS, rasterPixels, validateHeatmaps } from './map/heatmaps';
 import features from './map/features.json';
 import { INITIAL_CAMERA, MAX_ZOOM, panBy, wheelAction, zoomAt } from './map/navigation';
 import { TopographicContours } from './map/TopographicContours';
+import { isReferenceCriterion, REFERENCE_OVERLAYS } from './map/referenceOverlays';
+import type { ReferenceCriterion } from './map/referenceOverlays';
+import { HeatmapLegends } from './map/HeatmapLegends';
 
 interface Props {
   sites: LandingSite[];
@@ -16,6 +19,7 @@ interface Props {
   mission: MissionParams;
   active: boolean;
   validation: string;
+  showValidation?: boolean;
   onSiteAdd: (coordinates: Coordinates, name: string) => void;
   onSiteRename: (id: string, name: string) => void;
   onSiteDelete: (id: string) => void;
@@ -57,15 +61,18 @@ function HeatmapImages({ data, opacity }: { data?: MapHeatmapsResponse; opacity:
     width={2 * MAP_RADIUS} height={2 * MAP_RADIUS} preserveAspectRatio="none" />)}</g>;
 }
 
-export function MapPanel({ sites, constraints, mission, active, validation, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
+export function MapPanel({ sites, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const [criteria, setCriteria] = useState<HeatmapCriterion[]>([]);
+  const [referenceCriteria, setReferenceCriteria] = useState<ReferenceCriterion[]>([]);
+  const [referenceErrors, setReferenceErrors] = useState<ReferenceCriterion[]>([]);
   const [opacity, setOpacity] = useState(0.65);
   const [camera, setCamera] = useState(INITIAL_CAMERA);
   const { zoom } = camera;
+  // Label font sizes and outlines both cancel the viewBox zoom, keeping screen sizes steady.
   const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
   const [hover, setHover] = useState<Coordinates | null>(null);
@@ -87,6 +94,8 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
   const request = useMemo(() => !active || validation || !criteria.length ? null : async (signal: AbortSignal) =>
     validateHeatmaps(await api.getMapHeatmaps(params, signal), params), [active, validation, criteria.length, params]);
   const heatmaps = useRequest(request);
+  const hasHeatmaps = criteria.length + referenceCriteria.length > 0;
+  const showBasemap = !hasHeatmaps;
   const outside = sites.filter(site => site.latitude_deg > NORTH_LIMIT || site.latitude_deg < -90);
   const halfView = 350 / zoom;
 
@@ -172,14 +181,22 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
       </label>
       <span className="map-toolbar-title">Heatmaps</span>
       {HEATMAPS.map(option => <label className="map-layer-toggle" key={option.criterion}>
-        <input type="checkbox" checked={criteria.includes(option.criterion)} onChange={event => {
+        <input type="checkbox" checked={isReferenceCriterion(option.criterion) ? referenceCriteria.includes(option.criterion) : criteria.includes(option.criterion)}
+          title={isReferenceCriterion(option.criterion) ? 'Published LOLA long-term reference average' : 'Mission-dependent backend heatmap'} onChange={event => {
           const enabled = event.target.checked;
+          if (isReferenceCriterion(option.criterion)) {
+            const criterion = option.criterion;
+            setReferenceErrors(previous => previous.filter(item => item !== criterion));
+            setReferenceCriteria(previous => REFERENCE_OVERLAYS.map(layer => layer.criterion).filter(item =>
+              item === criterion ? enabled : previous.includes(item)));
+            return;
+          }
           setCriteria(previous => HEATMAPS.map(layer => layer.criterion).filter(criterion =>
             criterion === option.criterion ? enabled : previous.includes(criterion)));
         }} />
         <span style={{ color: `rgb(${option.color.join(',')})` }}>{option.label}</span>
       </label>)}
-      <label className="map-opacity">Opacity <input type="range" aria-label="Heatmap opacity" min="0" max="1" step="0.05"
+      <label className="map-opacity">Opacity <input type="range" aria-label="Heatmap opacity" title="Opacity for all displayed overlays" min="0" max="1" step="0.05"
         value={opacity} onChange={event => setOpacity(Number(event.target.value))} /></label>
     </div>
     <div className="map-heading"><div><h2>South polar cap</h2><p>80°S–90°S · Polar stereographic · East-positive longitude</p></div>
@@ -190,18 +207,30 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
         <button className="ct-btn" onClick={() => { setCamera(INITIAL_CAMERA); setSelection(null); }}>Reset view</button>
       </div>
     </div>
-    {validation && <p className="request-error" role="alert">{validation}</p>}
-    {heatmaps.loading && <p className="request-status" role="status">Calculating overlays for the current mission settings…</p>}
+    <div className="map-preamble">
+    {showValidation && validation && <p className="request-error" role="alert">{validation}</p>}
+    {hasHeatmaps && <p className="map-hint">Basemap hidden. Clear heatmaps to restore it.</p>}
+    {heatmaps.loading && <p className="request-status" role="status">Calculating mission overlays…</p>}
     {heatmaps.error && <p className="request-error" role="alert">
       {/^(404|405|501)\b/.test(heatmaps.error) ? 'Heatmaps unavailable: the backend does not yet implement POST /map/heatmaps.' : `Heatmap request failed: ${heatmaps.error}`}
       {' '}<button className="ct-btn" onClick={heatmaps.retry}>Retry overlays</button>
     </p>}
-    {!criteria.length && <p className="map-hint">Click the surface to add a site. Enable a heatmap to request mission-dependent data.</p>}
-    <p className="map-hint">Trackpad: pinch to zoom · two-finger scroll to pan. Mouse: wheel to zoom · right-drag to pan. Shift+scroll always pans.</p>
-    <div className="map-site-legend"><span className="map-site-key map-site-key--default">Default sites</span><span className="map-site-key map-site-key--custom">Your sites · click to edit</span></div>
-    {basemap === 'topography' && <p className="map-hint">LOLA elevation, relative to the 1,737.4 km lunar reference radius · 500 m contour interval. Shading shows terrain relief.</p>}
-    {imageError && <p className="request-error" role="alert">Some local basemap tiles could not load. Coordinates and grid remain available.</p>}
-    {basemap === 'topography' && contourError && <p className="request-error" role="alert">{contourError} The elevation basemap remains available.</p>}
+    {!criteria.length && !referenceCriteria.length && <p className="map-hint">Click map to add a site · Sun/Earth: reference averages · Other heatmaps: mission analysis</p>}
+    {referenceCriteria.length > 0 && <p className="map-reference-notice" role="note">
+      LOLA averages (~18.6 years), unaffected by mission settings. Any-disc visibility; mission scoring uses whole-disc clearance.
+      {referenceCriteria.length > 1 && ' Layers blend; view individually to read their scales.'}
+    </p>}
+    {referenceErrors.some(criterion => referenceCriteria.includes(criterion)) && <p className="request-error" role="alert">
+      A reference overlay could not load. Turn its checkbox off and on to retry.
+    </p>}
+    <div className="map-preamble-controls">
+      <p className="map-hint">Pinch/wheel: zoom · Two-finger scroll/right-drag: pan · Shift+scroll: pan</p>
+      <div className="map-site-legend"><span className="map-site-key map-site-key--default">Default sites</span><span className="map-site-key map-site-key--custom">Your sites · click to edit</span></div>
+    </div>
+    {showBasemap && basemap === 'topography' && <p className="map-hint">LOLA elevation · 500 m contours · Reference radius: 1,737.4 km</p>}
+    {showBasemap && imageError && <p className="request-error" role="alert">Some local basemap tiles could not load. Coordinates and grid remain available.</p>}
+    {showBasemap && basemap === 'topography' && contourError && <p className="request-error" role="alert">{contourError} The elevation basemap remains available.</p>}
+    </div>
     <div className="map-viewport" ref={viewportRef}>
       <svg ref={svgRef} className={`polar-map${panning ? ' polar-map--panning' : ''}`} viewBox={`${camera.x - halfView} ${camera.y - halfView} ${2 * halfView} ${2 * halfView}`}
         tabIndex={0} role="img" aria-label="Lunar south-pole surface map. Arrow keys move the cursor; Enter opens Add site; Escape closes it."
@@ -242,12 +271,17 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
           if (coordinates) { setKeyboardPoint(next); setHover(coordinates); }
         }}>
         <defs><clipPath id={clipId}><circle cx={MAP_CENTER} cy={MAP_CENTER} r={MAP_RADIUS} /></clipPath></defs>
-        <circle cx={MAP_CENTER} cy={MAP_CENTER} r={MAP_RADIUS} fill="#252630" />
+        <circle cx={MAP_CENTER} cy={MAP_CENTER} r={MAP_RADIUS} fill="#191d29" />
         <g clipPath={`url(#${clipId})`}>
-          {TILES.map(tile => <image key={`${basemap}-${tile.row}-${tile.column}`} href={`/maps/south-pole/${basemap === 'topography' ? 'topography/' : ''}${tile.row}-${tile.column}.png`}
+          {showBasemap && TILES.map(tile => <image key={`${basemap}-${tile.row}-${tile.column}`} href={`/maps/south-pole/${basemap === 'topography' ? 'topography/' : ''}${tile.row}-${tile.column}.png`}
             x={tile.x} y={tile.y} width={tile.size + 0.02} height={tile.size + 0.02} onError={() => setImageError(true)} />)}
+          {REFERENCE_OVERLAYS.filter(layer => referenceCriteria.includes(layer.criterion)).map(layer => <image
+            key={layer.criterion} className="map-reference-image" data-reference={layer.criterion}
+            href={`/maps/south-pole/reference/${layer.file}`} x={MAP_CENTER - MAP_RADIUS} y={MAP_CENTER - MAP_RADIUS}
+            width={2 * MAP_RADIUS} height={2 * MAP_RADIUS} preserveAspectRatio="none"
+            opacity={opacity} onError={() => setReferenceErrors(previous => previous.includes(layer.criterion) ? previous : [...previous, layer.criterion])} />)}
           <HeatmapImages data={heatmaps.data} opacity={opacity} />
-          <TopographicContours enabled={active && basemap === 'topography'} onError={setContourError} />
+          <TopographicContours enabled={active && showBasemap && basemap === 'topography'} onError={setContourError} />
           <g className="map-grid">
             {[-88, -86, -84, -82, -80].map(latitude => <circle key={latitude} cx={MAP_CENTER} cy={MAP_CENTER}
               r={MAP_CENTER - project({ latitude_deg: latitude, longitude_deg: 0 }).y} />)}
@@ -258,11 +292,11 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
           </g>
           <g className="map-grid-labels">{[-88, -86, -84, -82, -80].map(latitude => {
             const point = project({ latitude_deg: latitude, longitude_deg: 0 });
-            return <text key={latitude} x={point.x + 4 / zoom} y={point.y + 12 / zoom} fontSize={10 / zoom}>{Math.abs(latitude)}°S</text>;
+            return <text key={latitude} x={point.x + 4 / zoom} y={point.y + 12 / zoom} fontSize={10 / zoom} strokeWidth={2 / zoom}>{Math.abs(latitude)}°S</text>;
           })}</g>
           {features.filter(feature => feature.diameter_km > 20).map(feature => {
             const point = project(feature);
-            return <text className="map-feature-label" key={feature.name} x={point.x} y={point.y} fontSize={9 / zoom} textAnchor="middle">{feature.name}</text>;
+            return <text className="map-feature-label" key={feature.name} x={point.x} y={point.y} fontSize={9 / zoom} strokeWidth={2 / zoom} textAnchor="middle">{feature.name}</text>;
           })}
           {sites.filter(site => !outside.includes(site)).map(site => {
             const point = project(site);
@@ -274,7 +308,7 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
               <title>{`${site.name}: ${formatCoordinates(site)}${site.enabled ? '' : ' (disabled)'}`}</title>
               {site.custom && <circle className="map-waypoint-hit" cx={point.x} cy={point.y} r={11 / zoom} />}
               <circle cx={point.x} cy={point.y} r={5 / zoom} />
-              <text x={point.x + 8 / zoom} y={point.y - 8 / zoom} fontSize={10 / zoom}>{site.name}</text>
+              <text x={point.x + 8 / zoom} y={point.y - 8 / zoom} fontSize={10 / zoom} strokeWidth={2 / zoom}>{site.name}</text>
             </g>;
           })}
           {selection && (() => { const p = project(selection.coordinates); return <circle className="map-pick" cx={p.x} cy={p.y} r={8 / zoom} />; })()}
@@ -282,12 +316,18 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
         </g>
         {['0°E', '90°E', '180°', '90°W'].map((label, i) => <text key={label}
           x={MAP_CENTER + Math.sin(i * Math.PI / 2) * 322} y={MAP_CENTER - Math.cos(i * Math.PI / 2) * 322}
-          textAnchor="middle" dominantBaseline="middle" className="map-compass">{label}</text>)}
+          textAnchor="middle" dominantBaseline="middle" className="map-compass" fontSize={11 / zoom} strokeWidth={2 / zoom}>{label}</text>)}
       </svg>
-      {basemap === 'topography' && <figure className="map-topography-legend" aria-label="LOLA elevation scale">
+      <HeatmapLegends references={referenceCriteria} criteria={criteria} data={heatmaps.data}
+        status={heatmaps.loading ? 'Loading scale…' : heatmaps.error ? 'Data unavailable' : validation ? 'Check mission settings' : 'Awaiting data'} />
+      {showBasemap && basemap === 'topography' && <figure className="map-topography-legend" aria-label="LOLA elevation scale">
         <img src="/maps/south-pole/topography/legend.png" width="50" height="150" alt="Elevation in metres: −9126 to 7026, purple lowlands through green and yellow to red highlands" />
         <figcaption>500 m contours</figcaption>
       </figure>}
+      <div className="map-coordinate-bar"><span className="map-coordinate-label">Cursor</span>
+        <output className="map-coordinates" aria-label="Cursor latitude and longitude">{formatCoordinates(hover)}</output>
+        <span className="map-hover-feature">{hoverFeature?.name ?? ''}</span>
+      </div>
       {selection && <form className="map-tooltip" role="dialog" aria-modal="false" aria-label={editingSite ? 'Edit custom site' : 'Add map location to sites'}
         style={{ left: `clamp(12px, ${selection.left}%, calc(100% - 272px))`, top: `clamp(12px, ${selection.top}%, calc(100% - ${editingSite ? 255 : 215}px))` }}
         onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeSelection(); } }}
@@ -312,23 +352,12 @@ export function MapPanel({ sites, constraints, mission, active, validation, onSi
         <small>Saved for this session</small>
       </form>}
     </div>
-    <div className="map-coordinate-bar"><span className="map-coordinate-label">Cursor</span>
-      <output className="map-coordinates" aria-label="Cursor latitude and longitude">{formatCoordinates(hover)}</output>
-      <span className="map-hover-feature">{hoverFeature?.name ?? ''}</span>
-    </div>
     <p className="map-announcement" role="status">{announcement}</p>
     {outside.length > 0 && <p className="map-hint">{outside.length} sidebar {outside.length === 1 ? 'site lies' : 'sites lie'} outside 80°S–90°S and {outside.length === 1 ? 'is' : 'are'} not plotted.</p>}
-    {heatmaps.data && <div className="map-legends" aria-label="Heatmap legends">
-      <strong>{heatmaps.data.data_source === 'mock' ? 'Synthetic demo overlays' : 'Backend analysis overlays'}</strong>
-      {heatmaps.data.layers.map(layer => { const option = HEATMAPS.find(item => item.criterion === layer.criterion)!;
-        return <div className="map-legend" key={layer.criterion}><span>{option.label}</span>
-          <span>{layer.min.toFixed(1)} {layer.unit}</span><span className="map-gradient" style={{ background: `linear-gradient(90deg, rgb(25,27,42), rgb(${option.color.join(',')}))` }} />
-          <span>{layer.max.toFixed(1)} {layer.unit}</span><small>{option.direction} · No data: transparent</small></div>;
-      })}
-    </div>}
-    <footer className="map-attribution">Basemap: <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek · {basemap === 'topography' ? 'LRO/LOLA elevation' : 'LRO/LROC WAC'}</a>.
+    <footer className="map-attribution">{showBasemap ? 'Basemap' : 'Surface layers'}: <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek · {basemap === 'topography' ? 'LRO/LOLA elevation' : 'LRO/LROC WAC'}</a>{!showBasemap && ' (hidden)'}.
+      {referenceCriteria.length > 0 && <> Reference overlays: <a href="https://pgda.gsfc.nasa.gov/products/69" target="_blank" rel="noreferrer">NASA/LOLA · Mazarico et al. (2011), updated 2016 products</a>.</>}
       {' '}Names: IAU/USGS via Moon Trek. Feature hover areas approximate catalogue diameters.
-      {criteria.length > 1 && ' Overlays blend in toolbar order; enable one for an unambiguous color scale.'}
+      {criteria.length + referenceCriteria.length > 1 && ' Overlays blend; enable one for an unambiguous color scale.'}
     </footer>
   </section>;
 }

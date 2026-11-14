@@ -98,3 +98,55 @@ At runtime the frontend fetches the local contour JSON only when topography is a
 uses the existing debounced/abortable request lifecycle with a zero delay. An unavailable
 contour file shows an error while retaining the elevation imagery. All basemap assets are
 served by Vite or production static hosting; no backend or external map service is needed.
+
+## Long-term sunlight and Earth-visibility reference overlays
+
+`reference/sunlight.png` and `reference/earth-visibility.png` are real LOLA average-visibility
+rasters, colorized for the app's amber and cyan legends. They are **long-term reference
+averages**, not synthetic demo values or predictions for the selected mission window.
+The publication describes hourly sampling over approximately 18.6 years. The products count
+a sample as visible when **any fraction of the body disc** is visible. That differs from
+our mission API's whole-disc-plus-clearance criterion. Dates, duration, thresholds and
+horizon clearance in the sidebar do not recalculate these layers.
+
+Source description, interpretation and requested scientific citation:
+https://pgda.gsfc.nasa.gov/products/69
+
+Citation: Mazarico, E., et al. (2011), *Illumination conditions of the lunar polar regions
+using LOLA topography*, Icarus 211, 1066–1081. https://doi.org/10.1016/j.icarus.2010.10.030
+The bundled data use the updated 2016 product release, version 1.05.
+
+Original numeric rasters (82,432,800 bytes each; raw files are not committed):
+https://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_65S_240M_201608.IMG
+https://imbrium.mit.edu/EXTRAS/ILLUMINATION/IMG/AVGVISIB_65S_240M_201608_EARTH.IMG
+
+Official detached labels are bundled in `reference/` and available beside each IMG with
+`.LBL` replacing `.IMG`. They specify 6420×6420 little-endian signed 16-bit samples,
+240 m/pixel, south-polar spherical stereographic with central meridian 0°, radius
+1,737,400 m, east-positive longitude, and line/sample projection offsets 3209.5.
+The fractional visibility is `DN × 0.00004 + 0`; percentages multiply that by 100.
+Zero is valid permanent shadow / no visibility and must not be treated as missing data.
+
+Regeneration (download both IMG and LBL files into a temporary directory first):
+
+```sh
+uv run --with numpy --with pillow frontend/scripts/generate-reference-overlays.py \
+  /path/to/download-directory frontend/public/maps/south-pole/reference
+```
+
+The generator crops the numeric data to the exact projected 80°S-cap bounding square,
+resamples bilinearly to 1024×1024 (~593.76 m/pixel), and applies a fixed 0–100% color ramp.
+It accounts for the source pixel centres and masks out-of-cap/no-data samples with alpha.
+These regional display rasters can smooth or miss small illuminated terrain peaks; use
+native-resolution data for quantitative site analysis. The display PNGs are colorized images,
+not an invertible numerical dataset. `reference/metadata.json` records projection, extent,
+scaling, input SHA-256 checksums and generated value ranges for reproducibility.
+
+Both layers may be enabled together. Selecting any heatmap hides the underlying satellite
+or topographic basemap, its contours and elevation legend, leaving a neutral surface. They are composited in sunlight,
+then Earth-visibility order, using the toolbar opacity for each image. Their combined colors
+are a visual blend, not a new physical metric; the top-left map legends describe each layer
+separately. Clearing the final heatmap restores the remembered basemap and camera.
+Mission-dependent backend overlays render above the reference layers. Disabling one reference
+layer leaves the other visible. Neither requires a backend, and their checkbox changes do
+not trigger backend heatmap requests. Other toolbar heatmaps retain the proposed API path.
