@@ -114,7 +114,7 @@ interface SettingsModalProps {
   onCompare: () => void;
 }
 
-function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowerChange, onCommsChange, onTerrainChange, onClose, onCompare }: SettingsModalProps) {
+export function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowerChange, onCommsChange, onTerrainChange, onClose, onCompare }: SettingsModalProps) {
   const dateErrorId = useId();
   const dateError = landingWindowError(mission.windowStart, mission.windowEnd);
   const overlayRef = useRef<HTMLDivElement>(null);
