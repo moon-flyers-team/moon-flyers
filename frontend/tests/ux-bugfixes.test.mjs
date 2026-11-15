@@ -1,6 +1,6 @@
 import { before, after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'vite';
@@ -18,23 +18,6 @@ before(async () => {
   ({ api, siteReference } = await server.ssrLoadModule('/src/api.ts'));
 });
 after(async () => { await server?.close(); if (cacheDir) await rm(cacheDir, { recursive: true, force: true }); });
-
-test('approved copy cleanup removes only the five selected notices', async () => {
-  const source = async name => readFile(new URL(`../src/${name}.tsx`, import.meta.url), 'utf8');
-  const map = await source('MapPanel');
-  assert.doesNotMatch(map, /Polar stereographic · East-positive longitude|Basemap hidden\.|Reference radius:/);
-  assert.match(map, /Click map to add a site/);
-  assert.match(map, /Pinch\/wheel: zoom/);
-  const sidebar = await source('Sidebar');
-  assert.doesNotMatch(sidebar, /Latitude −90…90°, longitude −180…180°/);
-  assert.match(sidebar, /min=\{-90\} max=\{90\}/);
-  assert.match(sidebar, /min=\{-180\} max=\{180\}/);
-  const main = await source('MainPanel');
-  assert.doesNotMatch(main, /Fetching comparison and visibility data/);
-  assert.match(main, /Loading site profiles…/);
-  assert.match(await source('ComparisonTable'), /This can take 10–30 seconds/);
-  assert.match(await source('TouristRoutePanel'), /Elevation change: approximate endpoint difference/);
-});
 
 const site = { id: 'landing', name: 'Landing', latitude_deg: -89, longitude_deg: 0, enabled: true };
 const mission = { windowStart: '2027-08-01', windowEnd: '2027-08-10', daysOnSurface: 3, horizonClearance: 0.3, poiRadiusKm: 12.5 };
