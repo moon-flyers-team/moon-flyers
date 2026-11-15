@@ -250,3 +250,31 @@ test('route panel renders its routing limits and calculation controls', () => {
   assert.match(html, /value="20"/);
   assert.match(html, /value="60"/);
 });
+
+test('a stale route keeps the draft stops on the map, not the old stop list', async () => {
+  const { displayRoute } = await server.ssrLoadModule('/src/routeDisplay.ts');
+  const draft = {
+    method: 'straight_line', waypoints: [
+      { id: null, name: 'Landing', group: 'Custom', latitude_deg: -89, longitude_deg: 0 },
+      { id: null, name: 'New stop', group: 'Custom', latitude_deg: -89.01, longitude_deg: 0.02 },
+      { id: null, name: 'Landing', group: 'Custom', latitude_deg: -89, longitude_deg: 0 },
+    ],
+    path: [], legs: [], total_distance_m: 0,
+  };
+  const stale = {
+    ...routedResponse,
+    waypoints: [
+      { id: null, name: 'Landing', group: 'Custom', latitude_deg: -89, longitude_deg: 0 },
+      { id: null, name: 'Old stop', group: 'Custom', latitude_deg: -89.02, longitude_deg: 0.03 },
+      { id: null, name: 'Landing', group: 'Custom', latitude_deg: -89, longitude_deg: 0 },
+    ],
+  };
+
+  const merged = displayRoute(stale, draft);
+  // Geometry comes from the previous response, so the path is still visible while editing.
+  assert.equal(merged.path.length, stale.path.length);
+  assert.equal(merged.total_distance_m, stale.total_distance_m);
+  // Stops come from the draft, so a newly clicked waypoint appears immediately.
+  assert.deepEqual(merged.waypoints.map(w => w.name), ['Landing', 'New stop', 'Landing']);
+  assert.equal(displayRoute(null, draft).waypoints, draft.waypoints);
+});
