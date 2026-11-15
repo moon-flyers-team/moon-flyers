@@ -225,18 +225,21 @@ test('reference rasters have documented percentage scaling and the same polar ex
 
 test('every selected heatmap has its own legend with correct units and source, including unavailable layers', () => {
   const html=renderToStaticMarkup(React.createElement(HeatmapLegends,{
-    references:['sun_visible_pct','earth_visible_pct'],
-    criteria:['longest_darkness_hours','longest_earth_blackout_hours','slope_deg'],
-    status:'Data unavailable',data:{data_source:'mock',layers:[{criterion:'longest_darkness_hours',min:0,max:96,unit:'h'}]},
+    references:['sun_visible_pct'],criteria:['earth_visible_pct'],status:'Data unavailable',
   }));
-  assert.equal((html.match(/class="map-heatmap-legend"/g)??[]).length,5);
-  for (const name of ['Sunlight','Earth visibility','Longest night','Comms blackout','Slope']) assert.ok(html.includes(name));
+  assert.equal((html.match(/class="map-heatmap-legend"/g)??[]).length,2);
+  for (const name of ['Sunlight','Earth contact']) assert.ok(html.includes(name));
   assert.match(html,/0%/);
   assert.match(html,/100%/);
-  assert.match(html,/96 h/);
-  assert.match(html,/Synthetic demo data/);
-  assert.equal((html.match(/Data unavailable/g)??[]).length,2);
+  assert.equal((html.match(/Data unavailable/g)??[]).length,1);
   assert.doesNotMatch(html,/undefined|NaN/);
+  const mock=renderToStaticMarkup(React.createElement(HeatmapLegends,{
+    references:[],criteria:['earth_visible_pct'],status:'',
+    data:{data_source:'mock',layers:[{criterion:'earth_visible_pct',min:12,max:88,unit:'%'}]},
+  }));
+  assert.match(mock,/12%/);
+  assert.match(mock,/88%/);
+  assert.match(mock,/Synthetic demo data/);
   const empty=renderToStaticMarkup(React.createElement(HeatmapLegends,{references:[],criteria:[],status:''}));
   assert.equal(empty,'');
 });

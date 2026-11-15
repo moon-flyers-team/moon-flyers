@@ -41,7 +41,7 @@ test('route planning starts with one landing marker and no invented path or dist
   assert.match(html, /aria-label="Tourist route"/);
   assert.equal((html.match(/class="route-marker(?: route-marker--landing)?"/g) ?? []).length, 1);
   assert.match(html, /Click the map to add up to 98 waypoints/);
-  assert.match(html, /disabled="">Calculate round trip/);
+  assert.match(html, /disabled="">Calculate route/);
   assert.doesNotMatch(html, /_route\.kml|Straight-line route:|class="route-stat"/);
 });
 
