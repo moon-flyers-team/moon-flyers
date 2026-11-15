@@ -5,8 +5,13 @@ from .errors import UnknownSiteError
 
 # Coordinates are approximate. Verify before relying on real data.
 SITES: list[Site] = [
+    # Rim crest, not the crater centre: the IAU centre (89.66 S, 129.2 E, diameter 20.9 km) is the
+    # permanently shadowed floor at -2785 m. This point is 10.58 km from that centre (crater radius
+    # 10.45 km) and 2.13 km from the south pole, at +1438 m; the terrain falls away toward the crater.
+    # Derived from the mounted LOLA DEM, so it is a rim reference, not a vetted landing site.
     Site(id="shackleton_rim", name="Shackleton rim", group="Artemis III region",
-         latitude_deg=-89.667, longitude_deg=129.783, notes="Rim of Shackleton crater."),
+         latitude_deg=-89.9297, longitude_deg=-139.407,
+         notes="Rim crest of Shackleton crater near the south pole (DEM-derived, not a vetted landing site)."),
     Site(id="connecting_ridge", name="Connecting Ridge", group="Artemis III region",
          latitude_deg=-89.45, longitude_deg=-140.2, notes="Ridge between Shackleton and de Gerlache."),
     Site(id="de_gerlache_rim", name="de Gerlache rim", group="Artemis III region",

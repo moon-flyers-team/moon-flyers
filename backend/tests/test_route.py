@@ -131,6 +131,17 @@ def test_terrain_round_trip_returns_elevations_and_diagnostics(dataset, monkeypa
         assert leg["expanded_nodes"] > 0 and leg["cost"] >= leg["distance_m"]
         assert leg["start_check"]["passable"] and leg["goal_check"]["passable"]
         assert leg["start_check"]["blocked_reasons"] == []
+
+    # Every requested stop is described once, independently of the legs that touch it.
+    assert [s["index"] for s in data["stops"]] == [0, 1, 2]
+    assert all(s["passable"] for s in data["stops"])
+    assert all(s["terrain_slope_deg"] is not None for s in data["stops"])
+    assert data["stops"][0]["latitude_deg"] == START[0] and data["stops"][1]["latitude_deg"] == GOAL[0]
+    summary = data["summary"]
+    assert summary["planned_legs"] == 2 and summary["failed_legs"] == 0
+    assert summary["distance_m"] == pytest.approx(data["total_distance_m"])
+    assert summary["max_slope_deg"] == 20 and summary["cell_size_m"] == 20
+    assert summary["elevation_gain_m"] > 0 and summary["elevation_loss_m"] > 0
     json.dumps(data, allow_nan=False)
 
 
@@ -211,12 +222,48 @@ def test_terrain_requires_a_mounted_dataset():
     assert "LOLA_DEM_DIR" in r.json()["detail"]
 
 
-def test_terrain_leg_beyond_the_search_radius_is_rejected(dataset, monkeypatch):
+def test_terrain_leg_beyond_the_search_radius_is_reported_per_leg(dataset, monkeypatch):
+    """One unplannable leg must not turn the whole request into a 422."""
     monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
-    payload = body([{"id": "shackleton_rim"}, {"id": "malapert_massif"}], planner="terrain")
+
+    def planner(dem, start, goal, **kw):
+        if goal == C and start != goal:
+            raise ValueError("Destination exceeds max_region_radius_m; only local routes are supported")
+        return _fake_result(start, goal, "route_found", kw["padding_m"])
+    monkeypatch.setattr(route_service, "plan_rover_route", planner)
+
+    payload = body([custom("A", START), custom("B", GOAL), custom("C", C), custom("D", START)],
+                   planner="terrain")
     r = client.post("/route", json=payload)
-    assert r.status_code == 422
-    assert "max_region_radius_m" in r.json()["detail"]
+    assert r.status_code == 200
+    data = r.json()
+    assert [leg["status"] for leg in data["legs"]] == ["route_found", "region_too_large", "route_found"]
+    assert data["failed_legs"] == [1] and data["status"] == "region_too_large"
+    assert "leg 1 (B -> C)" in data["reason"]
+    assert data["legs"][1]["distance_m"] is None
+    assert data["summary"]["planned_legs"] == 2 and data["summary"]["failed_legs"] == 1
+    assert data["legs"][0]["distance_m"] > 0 and data["legs"][2]["distance_m"] > 0
+
+
+def test_terrain_route_beyond_the_region_radius_reports_region_too_large(dataset, monkeypatch):
+    """A real planner rejection is a leg status, and its placeholder is still drawn."""
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    payload = body([custom("A", START), custom("B", GOAL)], planner="terrain",
+                   rover={"max_slope_deg": 20, "max_region_radius_m": 1_200})
+    r = client.post("/route", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "region_too_large" and data["failed_legs"] == [0]
+    assert "max_region_radius_m" in data["legs"][0]["reason"]
+    assert data["path"] and all(p["placeholder"] for p in data["path"])
+    assert data["stops"][0]["passable"] is True
+
+
+def test_terrain_default_slope_limit_is_twenty_degrees():
+    """The routing limit is its own setting; the mission constraint default stays 8."""
+    from src.schemas import Constraints, RoverSettings
+    assert RoverSettings().max_slope_deg == 20
+    assert Constraints().max_slope_deg == 8
 
 
 def test_terrain_settings_are_validated():
@@ -244,6 +291,24 @@ def _fake_result(start, goal, status, padding_m):
             "search": {"grid_shape": [3, 3], "padding_m": padding_m}}
 
 
+def test_terrain_blocked_stop_is_reported_once_and_blocks_its_legs(dataset, monkeypatch):
+    """The stop list, not just the leg verdict, has to say a location is impractical."""
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    payload = body([custom("A", START), custom("B", GOAL), custom("A2", START)], planner="terrain",
+                   rover={"max_slope_deg": 0.5, "padding_m": 200})
+    data = client.post("/route", json=payload).json()
+
+    assert [s["passable"] for s in data["stops"]] == [False, False, False]
+    assert all("terrain_slope_exceeds_limit" in s["blocked_reasons"] for s in data["stops"])
+    assert all(s["max_slope_deg"] == 0.5 for s in data["stops"])
+    assert [leg["status"] for leg in data["legs"]] == ["start_blocked", "start_blocked"]
+    assert data["failed_legs"] == [0, 1] and data["summary"]["planned_legs"] == 0
+    # The leg's checkpoint agrees with the stop verdict instead of contradicting it.
+    assert data["legs"][0]["start_check"]["passable"] is False
+    assert data["legs"][1]["goal_check"]["passable"] is False
+    assert "exceeds 0.5" in data["reason"]
+
+
 C = (-88.0, 45.1)
 
 
@@ -258,16 +323,20 @@ def test_terrain_plans_every_leg_after_a_failed_one(dataset, monkeypatch):
     monkeypatch.setattr(route_service, "plan_rover_route", planner)
 
     payload = body([custom("A", START), custom("B", GOAL), custom("C", C), custom("A", START)],
-                   planner="terrain", rover={"padding_m": 200})
+                   planner="terrain", rover={"padding_m": 200, "cell_size_m": 60})
     data = client.post("/route", json=payload).json()
     assert [leg["status"] for leg in data["legs"]] == ["route_found", "no_route", "route_found"]
     assert data["status"] == "no_route" and data["failing_leg"] == 1 and data["failed_legs"] == [1]
     assert "leg 1 (B -> C)" in data["reason"]
     assert data["legs"][1]["distance_m"] is None and data["legs"][2]["distance_m"] > 0
     assert data["total_distance_m"] == pytest.approx(data["legs"][0]["distance_m"] + data["legs"][2]["distance_m"])
-    # The failed leg was retried once with the wider corridor; found legs were not.
-    assert calls == [200, 200, route_service.WIDE_PADDING_M, 200]
-    assert data["legs"][1]["padding_m"] == route_service.WIDE_PADDING_M
+    stop_calls = [c for c in calls if c == route_service.STOP_CHECK_PADDING_M]
+    assert len(stop_calls) == 3  # one check per unique stop, before any leg
+    leg_calls = [c for c in calls if c != route_service.STOP_CHECK_PADDING_M]
+    # The failed leg walks the whole corridor ladder; found legs are planned once.
+    assert leg_calls == [200, 200, *route_service.CORRIDOR_STEPS_M, 200]
+    assert data["legs"][1]["padding_m"] == route_service.CORRIDOR_STEPS_M[-1]
+    assert data["summary"]["padding_m"] == route_service.CORRIDOR_STEPS_M[-1]
     markers = [p["waypoint_index"] for p in data["path"] if p["waypoint_index"] is not None]
     assert markers == [0, 1, 2, 3]
     flags = {p["placeholder"] for p in data["path"][1:-1]}
@@ -278,13 +347,108 @@ def test_terrain_plans_every_leg_after_a_failed_one(dataset, monkeypatch):
 
 def test_terrain_wider_retry_can_find_the_route(dataset, monkeypatch):
     monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    calls = []
 
     def planner(dem, start, goal, **kw):
-        wide = kw["padding_m"] >= route_service.WIDE_PADDING_M
+        calls.append(kw["padding_m"])
+        wide = kw["padding_m"] >= 10_000
         return _fake_result(start, goal, "route_found" if wide else "no_route", kw["padding_m"])
     monkeypatch.setattr(route_service, "plan_rover_route", planner)
 
-    data = client.post("/route", json=body([custom("A", START), custom("B", GOAL)], planner="terrain")).json()
+    data = client.post("/route", json=body([custom("A", START), custom("B", GOAL)], planner="terrain",
+                                            rover={"cell_size_m": 60, "padding_m": 200})).json()
     assert data["status"] == "route_found" and data["failed_legs"] == []
-    assert data["legs"][0]["padding_m"] == route_service.WIDE_PADDING_M
+    # The ladder stops at the first corridor that works instead of always trying the widest one.
+    assert data["legs"][0]["padding_m"] == 10_000
+    assert [c for c in calls if c != route_service.STOP_CHECK_PADDING_M] == [200, 5000, 10_000]
     assert not any(p["placeholder"] for p in data["path"])
+
+
+def test_terrain_cell_budget_degrades_instead_of_failing_the_request(dataset, monkeypatch):
+    """A request that runs out of cells keeps its planned legs and reports the rest."""
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    monkeypatch.setattr(route_service, "MAX_TERRAIN_CELLS", 30_000)
+
+    def planner(dem, start, goal, **kw):
+        result = _fake_result(start, goal, "route_found", kw["padding_m"])
+        result["search"]["grid_shape"] = [50, 50]
+        return result
+    monkeypatch.setattr(route_service, "plan_rover_route", planner)
+
+    far = (-88.5, 45.1)
+    payload = body([custom("A", START), custom("B", GOAL), custom("C", far)], planner="terrain",
+                   rover={"cell_size_m": 20, "padding_m": 500})
+    r = client.post("/route", json=payload)
+    assert r.status_code == 200
+    data = r.json()
+    assert data["legs"][0]["status"] == "route_found"
+    assert data["legs"][1]["status"] == "search_limit_reached"
+    assert "cell budget" in data["legs"][1]["reason"]
+    assert data["summary"]["planned_legs"] == 1 and data["summary"]["failed_legs"] == 1
+    assert data["total_distance_m"] == data["legs"][0]["distance_m"]
+
+
+def test_terrain_stop_checks_are_shared_by_every_leg(dataset, monkeypatch):
+    """A repeated stop is evaluated once, so both legs see the same verdict."""
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    calls = []
+
+    def planner(dem, start, goal, **kw):
+        calls.append((start, goal, kw["padding_m"]))
+        return _fake_result(start, goal, "route_found", kw["padding_m"])
+    monkeypatch.setattr(route_service, "plan_rover_route", planner)
+
+    payload = body([custom("A", START), custom("B", GOAL), custom("A again", START)], planner="terrain")
+    data = client.post("/route", json=payload).json()
+    checks = [c for c in calls if c[0] == c[1]]
+    assert len(checks) == 2
+    assert [s["latitude_deg"] for s in data["stops"]] == [START[0], GOAL[0], START[0]]
+    assert data["stops"][0]["terrain_slope_deg"] == data["stops"][2]["terrain_slope_deg"]
+
+
+# ---------- stop preflight (no legs planned) ----------
+
+def test_route_stops_reports_usability_without_planning_legs(dataset, monkeypatch):
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    calls = []
+
+    def planner(dem, start, goal, **kw):
+        calls.append((start, goal))
+        assert start == goal, "preflight must not plan a leg"
+        return _fake_result(start, goal, "route_found", kw["padding_m"])
+    monkeypatch.setattr(route_service, "plan_rover_route", planner)
+
+    r = client.post("/route/stops", json={
+        "waypoints": [custom("A", START), custom("B", GOAL), custom("A2", START)],
+        "rover": {"max_slope_deg": 20},
+    })
+    assert r.status_code == 200
+    data = r.json()
+    assert [s["index"] for s in data["stops"]] == [0, 1, 2]
+    assert all(s["passable"] for s in data["stops"])
+    assert len(calls) == 2  # the repeated stop is evaluated once
+    assert all(s["terrain_slope_deg"] is not None for s in data["stops"])
+
+
+def test_route_stops_reports_a_blocked_location_with_candidates(dataset, monkeypatch):
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    r = client.post("/route/stops", json={
+        "waypoints": [custom("A", START), custom("B", GOAL)],
+        "rover": {"max_slope_deg": 3.35},
+    })
+    assert r.status_code == 200
+    stops = r.json()["stops"]
+    assert [s["passable"] for s in stops] == [False, False]
+    assert "terrain_slope_exceeds_limit" in stops[0]["blocked_reasons"]
+    assert stops[0]["nearby_terrain_candidates"]
+
+
+def test_route_stops_requires_a_mounted_dataset():
+    r = client.post("/route/stops", json={"waypoints": [custom("A", START)]})
+    assert r.status_code == 503 and "LOLA_DEM_DIR" in r.json()["detail"]
+
+
+def test_route_stops_validates_input():
+    assert client.post("/route/stops", json={"waypoints": []}).status_code == 422
+    assert client.post("/route/stops", json={
+        "waypoints": [custom("A", START)], "rover": {"max_slope_deg": 90}}).status_code == 422

@@ -47,8 +47,17 @@ def test_default_and_explicit_radius_match():
     assert all(r["distance_km"] <= 40 for r in rows)
     assert all(set(r) == {"poi", "distance_km"} for r in rows)
     shackleton = next(r for r in rows if r["poi"]["id"] == "iau-5450")
-    assert shackleton["distance_km"] == 0
+    # The rim crest lies just outside the crater's approximate published circle, so the distance
+    # no longer collapses to zero the way the former crater-centre coordinate did.
     assert shackleton["poi"]["boundary"]["kind"] == "approximate_circle"
+    assert 0 < shackleton["distance_km"] < 2
+
+
+def test_landing_inside_a_crater_footprint_is_zero_away():
+    """A reference site placed at a published feature centre reports 0 km to that feature."""
+    rows = client.post("/recommended-sites", json={"site": {"id": "cabeus_reference"}}).json()
+    match = next(r for r in rows["recommendations"] if r["poi"]["id"] == "iau-953")
+    assert match["distance_km"] == 0
 
 
 def test_coordinates_with_optional_name_match_catalogue_reference():

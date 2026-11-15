@@ -4,6 +4,35 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Route resilience, stop preflight and a 20° traversal default (2026-11-15).** Per-leg limits
+  replaced whole-request failures: a leg beyond `max_region_radius_m` is `region_too_large`, an
+  exhausted cell budget leaves the remaining legs `search_limit_reached`, and a stop whose own
+  terrain fails gates its legs (`start_blocked`/`goal_blocked`). Every stop is now evaluated once
+  in a fixed local frame (`stops[]`, with slope, `blocked_reasons` and nearby passable cells),
+  which also removes the old inconsistency where one waypoint was blocked as a goal and passable
+  as a start. The `no_route` corridor ladder retries 5/10/20 km within the region radius and cell
+  budget and reports the corridor used (`legs[].padding_m`, `summary.padding_m`). New
+  `POST /route/stops` preflights up to 100 stops without planning a leg (503 without a dataset).
+  Routing default `max_slope_deg` raised 15° → 20° on the user's decision; the mission
+  `Constraints.max_slope_deg` (8) is a separate site-slope violation and nothing links them.
+  On the real archive: ridge → Connecting Ridge was `no_route` at 15° and now plans 15.6 km in
+  1.26 s at 60 m cells; 5 of 61 POI centres remain unusable stops at 20° (2 at 25°), each
+  returning nearby passable cells. Frontend: precached stop chips, a blocked banner, automatic
+  snapping of map picks on impractical terrain, and an explicit "Move to workable cell" for
+  published stops. Verification: backend pytest 130 passed, 3 skipped (containerised, pinned
+  requirements); ruff clean on changed files; frontend 61 passed; `tsc` and Vite build clean.
+  Findings and remaining UX work: root `docs/route-planner-overhaul.md`.
+- **`shackleton_rim` moved to the rim; route overhaul planned (2026-11-15).** The site sat at the
+  IAU crater centre (−89.667, 129.783, DEM −2785 m, permanently shadowed floor) and is the UI's
+  default landing, so default round trips always failed on leg 0. It now uses a DEM-derived rim
+  crest: −89.9297, −139.407 (10.58 km from the crater centre at 89.66 S 129.2 E, crater radius
+  10.45 km; 2.13 km from the south pole; +1438 m; 0.4 deg slope at 60 m cells; terrain falls away
+  toward the crater). Notes say "rim crest, DEM-derived, not a vetted landing site". Node mock and
+  both API.md examples follow. POI coverage stays at 49/61 within 40 km; the Shackleton POI is now
+  0.98 km outside its approximate published circle instead of 0 km, so that test asserts the new
+  rim semantics. Backend pytest 121 passed, 3 skipped (run in a container against the pinned
+  requirements, not locally); frontend 57 passed; `tsc` + Vite build clean. Findings and the agreed
+  workstreams are in root `docs/route-planner-overhaul.md`.
 - **Route fixes: every leg planned, failures visible (2026-11-15, branch `fix/route-all-legs`).**
   Diagnosis on production (real LOLA): the terrain A* is correct, but (1) `_terrain` stopped at
   the first failed leg, so later legs were never drawn; (2) the default 1 km corridor leaves no
@@ -215,10 +244,10 @@ _(date: decision, then why)_
 - 2026-11-14: The user owns the backend; the frontend is out of scope unless asked.
 
 ## Open questions
-- `shackleton_rim` sits at Shackleton's IAU centre (crater floor, permanently shadowed): which
-  sourced rim coordinate should replace it? Affects power/comms results too, not only routes.
-- Rover slope limit: 15° default connects almost no south-pole sites at 60 m cells; rover owner
-  to choose (20–25°?). Should POI stops target the nearest rim point instead of the crater centre?
+- Rover slope limit: 15° default connects almost no south-pole site pairs at 60 m cells (ridge →
+  de Gerlache rim needs ~19.6°); 20° leaves 5 POIs unusable as endpoints, 25° leaves 2. Rover
+  owner to choose. Should POI stops target the nearest passable point instead of the crater
+  centre? Both questions are tracked in root `docs/route-planner-overhaul.md`.
 - From the requirements PDF (ask the team):
   - "Days on surface (lunar or Earth days?)": which unit? Proposal: return both Earth days
     (hours / 24) and lunar days (÷ 29.53).

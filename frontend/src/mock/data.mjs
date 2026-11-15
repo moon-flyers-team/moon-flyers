@@ -7,7 +7,7 @@ const PERIOD_MS = 29.5306 * DAY_MS;
 const EPOCH = Date.parse('2027-08-01T00:00:00Z');
 const NOTE = 'Synthetic demo data; not NASA ephemerides or terrain calculations.';
 export const sites = [
-  { id: 'shackleton_rim', name: 'Shackleton rim', latitude_deg: -89.667, longitude_deg: 129.783 },
+  { id: 'shackleton_rim', name: 'Shackleton rim', latitude_deg: -89.9297, longitude_deg: -139.407 },
   { id: 'connecting_ridge', name: 'Connecting Ridge', latitude_deg: -89.458, longitude_deg: -140.2 },
   { id: 'de_gerlache_rim', name: 'de Gerlache rim', latitude_deg: -88.67, longitude_deg: -68 },
   { id: 'malapert_massif', name: 'Malapert massif', latitude_deg: -86, longitude_deg: 0 },

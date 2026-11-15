@@ -52,7 +52,9 @@ def test_added_defaults_use_published_in_cap_coordinates(site_id, poi_id):
 def test_catalogue_preserves_old_sites_and_public_shape():
     assert [s.id for s in SITES[:5]] == LEGACY_IDS
     assert len(SITES) == len(SITES_BY_ID) == 19
-    assert SITES_BY_ID["shackleton_rim"].latitude_deg == -89.667
+    # Legacy identity is preserved, but its coordinates are the Shackleton rim crest, not the floor.
+    assert SITES_BY_ID["shackleton_rim"].latitude_deg == -89.9297
+    assert SITES_BY_ID["shackleton_rim"].longitude_deg == -139.407
     assert all(-90 <= site.latitude_deg <= -80 for site in SITES)
     assert {"chandrayaan3_shiv_shakti", "change6_apollo_basin"}.isdisjoint(SITES_BY_ID)
     response = client.get("/sites")

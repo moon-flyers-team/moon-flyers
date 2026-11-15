@@ -271,7 +271,8 @@ Successful response shape (one illustrative match shown; actual results include 
   "catalogue_version": "south-pole-20261115",
   "site": {
     "id": "shackleton_rim", "name": "Shackleton rim", "group": "Artemis III region",
-    "latitude_deg": -89.667, "longitude_deg": 129.783, "notes": "Rim of Shackleton crater."
+    "latitude_deg": -89.9297, "longitude_deg": -139.407,
+    "notes": "Rim crest of Shackleton crater near the south pole (DEM-derived, not a vetted landing site)."
   },
   "radius_km": 40,
   "recommendations": [{
@@ -448,7 +449,7 @@ is repeated at the end, giving two more request entries than the number of inter
   ],
   "step_m": 100,
   "planner": "terrain",
-  "rover": { "max_slope_deg": 15, "cell_size_m": 20, "padding_m": 1000 }
+  "rover": { "max_slope_deg": 20, "cell_size_m": 60, "padding_m": 1000 }
 }
 ```
 
@@ -464,44 +465,69 @@ FastAPI accepts 2–100 entries and a positive `step_m` (default 100 metres).
 - **`terrain`** — bounded A* over the LOLA DEMs mounted at `LOLA_DEM_DIR`, one point per
   planned grid cell, `method: "astar_terrain"`, `terrain_source: "lola_dem"`, DEM
   `elevation_m` per point. Returns **503** when no dataset is mounted (it never substitutes
-  flat or synthetic terrain) and 422 for geometry or limit problems. Terrain results are
+  flat or synthetic terrain); per-leg limits are reported per leg, and 422 is reserved for
+  malformed geometry or invalid settings. Terrain results are
   suggested candidate routes at the stated resolution, not validated driving instructions:
   no travel time, energy, illumination, communications or turning model.
 
-Response fields: `method`, `status`, `reason`, `failing_leg`, `terrain_source`, `rover`,
-resolved `waypoints`, `legs` (`from_index`, `to_index`, `distance_m`, `status`, `reason`,
-terrain metrics, `expanded_nodes`, `cost`, `start_check`, `goal_check`), `total_distance_m`,
-and a densified `path` (`latitude_deg`, `longitude_deg`, cumulative `distance_m`,
-`elevation_m`, nullable `waypoint_index`).
+Response fields: `method`, `status`, `reason`, `failing_leg`, `failed_legs`, `terrain_source`,
+`rover`, resolved `waypoints`, `stops`, `summary`, `legs` (`from_index`, `to_index`, `distance_m`,
+`status`, `reason`, terrain metrics, `expanded_nodes`, `cost`, `padding_m`, `start_check`,
+`goal_check`), `total_distance_m`, and a densified `path` (`latitude_deg`, `longitude_deg`,
+cumulative `distance_m`, `elevation_m`, nullable `waypoint_index`, `placeholder`).
 
 `status` is `route_found`, `start_blocked`, `goal_blocked`, `no_route`,
-`search_limit_reached`, or `not_evaluated` for `straight_line`. On a failed terrain leg,
-`failing_leg` names it, that leg reports `distance_m: null`, and `path`/`total_distance_m`
-keep only the planned prefix. `start_check`/`goal_check` list `blocked_reasons`
-(`missing_elevation`, `unknown_slope`, `terrain_slope_exceeds_limit`, `excluded_by_mask`) and
-`nearby_terrain_candidates`, which pass node terrain checks only — they are not a route and
-never replace the endpoints. Neither planner optimizes waypoint order or scores mission
-criteria. The frontend renders the returned path and invalidates it whenever draft waypoints
-change. This endpoint is not implemented by the standalone Node mock.
+`search_limit_reached`, `region_too_large`, or `not_evaluated` for `straight_line`.
 
-`rover` fields (`max_slope_deg` 15, `max_uphill_grade_deg`/`max_downhill_grade_deg` null → the
+Every leg is attempted. A leg without a terrain route keeps its own `status`/`reason`, reports
+`distance_m: null`, and is drawn as a flagged straight `placeholder` polyline between its stops;
+`failed_legs` lists every such leg and `failing_leg` names the first. Later legs are still
+planned, and `total_distance_m` counts only planned legs. Per-leg limits never fail the whole
+request: a stop beyond `max_region_radius_m` reports `region_too_large`, an exhausted request
+cell budget reports `search_limit_reached`, and a stop whose own terrain fails reports
+`start_blocked`/`goal_blocked`. **422** remains for malformed geometry and invalid settings.
+
+`stops[]` gives the terrain verdict for each requested stop once (`index`, `latitude_deg`,
+`longitude_deg`, `elevation_m`, `terrain_slope_deg`, `max_slope_deg`, `passable`,
+`blocked_reasons`, `nearby_terrain_candidates`). It is evaluated in a fixed local frame, so the
+same coordinates get the same verdict no matter which leg touches them, and it is what the UI
+uses to say a location is impractical. `blocked_reasons` are `missing_elevation`,
+`unknown_slope`, `terrain_slope_exceeds_limit` and `excluded_by_mask`. `summary` totals the
+planned legs: `planned_legs`, `failed_legs`, `distance_m`, `elevation_gain_m`,
+`elevation_loss_m`, `max_terrain_slope_deg`, `cell_size_m`, `padding_m` (widest corridor used)
+and `max_slope_deg`.
+
+`rover` fields (`max_slope_deg` 20, `max_uphill_grade_deg`/`max_downhill_grade_deg` null → the
 same limit, `cell_size_m` 20, `padding_m` 1000, `climb_weight` 0, `slope_weight` 1,
 `max_region_radius_m` 25000 capped at 50000) are illustrative defaults, not a vehicle
-specification; limits describe the intended rover. A request may sample at most 1,000,000
-terrain cells across all legs (422 beyond that), so very long multi-stop routes must be split
-or run at a larger `cell_size_m`.
+specification; limits describe the intended rover. `max_slope_deg` here is the hard traversal
+limit for route cells and is **unrelated** to the mission constraint `max_slope_deg` (default 8)
+that flags a landing site in `fit.violations`; nothing links the two values. When the requested
+corridor has no route, the planner retries at 5, 10 and then 20 km padding while the region
+radius and the request cell budget allow, and reports the corridor it used. A request may sample
+at most 1,000,000 terrain cells across all legs; beyond that the remaining legs report
+`search_limit_reached` instead of failing the request.
 
-**Frontend work still needed to use `terrain`:** widen `RouteResponse.method` to
-`'straight_line' | 'astar_terrain'`, add `status`/`reason`/`failing_leg`/`terrain_source`/
-`rover` and the new leg/path fields, send `planner` (and optional `rover`), render a blocked
-or failed leg from `legs[].status`/`reason` instead of a partial path, and surface the 503
-"no dataset mounted" response. The existing elevation-change column can then read
-`path[].elevation_m` instead of the bundled ~792 m grid. Terrain requests are slower than
-straight lines (roughly 0.05 s for 1.5 km up to ~2 s for 9 km at 20 m cells on smooth
-synthetic terrain), so keep the existing loading state and prefer 40–60 m cells for
-multi-stop round trips.
+### Stop preflight: `POST /route/stops`
 
-Route-table elevation changes are currently calculated independently in the frontend from the
+```json
+{
+  "waypoints": [{ "id": "shackleton_rim" }, { "name": "Waypoint 1", "latitude_deg": -89.9, "longitude_deg": 12.5 }],
+  "rover": { "max_slope_deg": 20, "cell_size_m": 60 }
+}
+```
+
+Returns `{ "stops": [...] }` with the same `StopCheck` entries as `RouteResponse.stops`, without
+planning a leg (a few milliseconds per stop). The frontend uses it to mark an impractical stop
+before the user presses Calculate route, and to move a map pick onto the nearest cell in
+`nearby_terrain_candidates` (cells that pass the node checks only; never a route or proof of
+access). Published stops keep their coordinates. Without a mounted dataset this endpoint returns
+**503**, like `terrain` routing.
+
+The frontend requests `terrain` with 60 m cells, a 20° slope limit and a 50 km region radius,
+renders per-stop slope/blocked chips and failed legs, and keeps the elevation column separate
+from the sampled `path[].elevation_m` until that column is switched over.
+Route-table elevation changes in the shipped UI are still calculated independently from the
 bundled LOLA elevation grid, because the `straight_line` response supplies no terrain
 elevations. Each signed metre difference is destination elevation minus previous waypoint
 elevation (including the return leg). Missing coverage shows a dash. These approximate

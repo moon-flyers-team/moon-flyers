@@ -31,17 +31,23 @@ when agreed behavior changes.
   references at published feature centres, not selected landing points. Sources/coverage are
   in `docs/poi-sources.md`; Node mock/offline catalogues are unchanged. App currently enables
   every returned site by default, so the larger catalogue increases initial analysis work.
-- Python `POST /route` now serves the terrain planner as well as the mock. `planner`
-  (`straight_line` default, or `terrain`) plus an optional `rover` block; `terrain` runs the
-  bounded A* in `backend/src/rover_path.py` over the DEMs at `LOLA_DEM_DIR` (moved out of
-  `app/Functions` so the Dockerfile ships it) and returns `method: astar_terrain`, per-point
-  `elevation_m`, per-leg status/metrics and endpoint checks. It returns **503** rather than
-  substituting terrain when no dataset is mounted, and 422 for planner limits/geometry or a
-  request over 1,000,000 sampled cells. Rover limits are illustrative, not a vehicle spec;
-  results are suggested candidate routes, with no travel-time, energy, illumination,
-  keep-out or waypoint-order model. The frontend still requests `straight_line` and must be
-  updated (types, `planner`, failure/503 rendering) before using it; root `API.md` documents
-  both modes and the required frontend work.
+- Route Planner uses the terrain planner and the stop preflight. The frontend sends
+  `planner: "terrain"` with 60 m cells, a 20° traversal limit and a 50 km region radius;
+  `POST /route/stops` validates the stops without planning a leg so an impractical location is
+  visible before Calculate route. `terrain` runs the bounded A* in `backend/src/rover_path.py`
+  over the DEMs at `LOLA_DEM_DIR` and returns `stops[]` (slope/passable/reasons/nearest passable
+  cells), `summary`, per-leg status/metrics, `padding_m` and flagged straight placeholders for
+  legs without a route. Per-leg limits (a stop beyond the region radius, an exhausted cell
+  budget, a blocked stop) are leg statuses, never a failed request; **422** is for invalid
+  geometry/settings and **503** for a missing dataset. The routing `max_slope_deg` (20, hard
+  traversal limit) is unrelated to the mission constraint `max_slope_deg` (8, site-slope
+  violation) and nothing links them. A map pick on impractical terrain is snapped to the
+  nearest cell that passes the checks and labelled in the table; published POI/reference stops
+  keep their coordinates and use an explicit "Move to workable cell" action, and the landing
+  belongs to the sidebar. Rover limits are illustrative, not a vehicle spec; results are
+  candidate routes with no travel-time, energy, illumination, keep-out or waypoint-order model.
+  Findings, measurements and the remaining UX work are in `docs/route-planner-overhaul.md`;
+  root `API.md` owns the contract.
 
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including
