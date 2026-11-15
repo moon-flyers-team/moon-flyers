@@ -14,6 +14,15 @@ when agreed behavior changes.
 
 ## Current handoff state
 
+- Python `POST /recommended-sites` now searches a real bundled POI catalogue near a landing
+  site, not the former mocked mission ranking. Request: `site` (landing-site ID or coordinates)
+  and optional `radius_km` (40 default). Response: published POIs and point/approximate-area
+  distances, no scores/ranks. The 80°S–90°S cap includes boundary-crossing features. Successful
+  responses use data-source header `catalogue`, independent of ephemerides. No frontend UI or
+  client is wired yet; Node mock has no implementation. Root `API.md` owns the revised contract;
+  `docs/poi-sources.md` records sources, cave/pit coverage limits and regeneration. POI IDs are
+  not landing-site IDs. Do not invent cave, rover or suitability data for missing records.
+
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including
   comparison results, visibility timelines and sampled Earth-eclipse intervals. Ranked
