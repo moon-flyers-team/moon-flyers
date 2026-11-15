@@ -87,6 +87,7 @@ when agreed behavior changes.
 | `frontend/tests/mock-pipeline.mjs` | Live HTTP checks through Vite and the mock, using the real frontend client |
 | `frontend/vite.config.ts` | React plugin, `@` alias, dev port, and API proxy |
 | `backend/src/main.py`, `backend/requirements.txt` | FastAPI endpoints and Python runtime dependencies |
+| `backend/app/Functions/rover_path.py`, `backend/docs/ROVER_PATH_REVIEW.md` | Standalone rover route calculations and algorithm review; no route endpoint/UI yet |
 | `backend/src/lunar_horizon_dem.py`, `backend/tools/lola_data.py`, `deploy/compose.terrain.yaml` | LOLA DEM loader/verifier, host dataset checks, and the optional read-only deployment mount |
 | `frontend/src/mock/server.mjs` | Standalone Node HTTP mock API on port 8000 |
 | `frontend/src/mock/api.mjs`, `data.mjs` | Validated mock routes and deterministic generators |
