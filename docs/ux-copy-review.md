@@ -1,8 +1,10 @@
-# UX copy removal shortlist (pending approval)
+# UX copy cleanup review
 
-No existing UI copy has been removed. These are recommendations, not implementation tasks yet.
+Items 1–5 were approved and removed from the main view. Items 6–12 remain unchanged,
+pending approval. Coordinate validation, the elevation legend, loading status and the
+comparison's slow-request cue remain intact.
 
-## Remove from the main view
+## Removed from the main view
 
 1. **Map subtitle:** “80°S–90°S · Polar stereographic · East-positive longitude”
    (`frontend/src/MapPanel.tsx`). Keep the cap extent if useful; projection and longitude

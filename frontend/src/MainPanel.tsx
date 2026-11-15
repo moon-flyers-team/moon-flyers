@@ -93,7 +93,6 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
           <div className="profiles-loading-popup" role="status" aria-live="polite" aria-atomic="true">
             <span className="profiles-loading-spinner" aria-hidden="true" />
             <strong>Loading site profiles…</strong>
-            <p>Fetching comparison and visibility data. This can take 10–30 seconds.</p>
           </div>
         </div>}
         {validation && !dateError && <div className="request-error" role="alert">{validation}</div>}

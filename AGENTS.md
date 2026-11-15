@@ -381,6 +381,10 @@ decisions change.
   `strokeWidth={2 / zoom}` so outlines stay constant in screen pixels. Do not override these
   label stroke widths with a fixed CSS pixel value: that scales with the SVG viewBox and
   produces thick outlines when zoomed in. Browser checks verified 1× through 16×.
+- Approved copy cleanup removed the map's technical subtitle, basemap-hidden notice,
+  standalone topography/reference-radius note, always-visible manual coordinate bounds,
+  and duplicate loading-popup paragraph. Keep validation, the elevation legend and loading
+  status intact. `docs/ux-copy-review.md` tracks pending copy suggestions (6–12).
 - Group pre-map notices/help in `.map-preamble`, with a 3px gap and 1.25 line height. Keep
   navigation hints and site color keys on a wrapping row, and keep reference-data caveats
   concise while preserving their long-term/any-disc meaning. Errors remain conspicuous.
