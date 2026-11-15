@@ -14,6 +14,15 @@ def check(base_url: str) -> None:
 
     if "<html" not in get("/").lower():
         raise ValueError("Frontend did not return HTML")
+    for path in (
+        "/maps/south-pole/5-5.png",
+        "/maps/south-pole/topography/5-5.png",
+        "/maps/south-pole/reference/sunlight.png",
+        "/maps/south-pole/reference/earth-visibility.png",
+    ):
+        with urlopen(f"{base_url.rstrip('/')}{path}", timeout=10) as response:
+            if response.headers.get_content_type() != "image/png" or response.read(8) != b"\x89PNG\r\n\x1a\n":
+                raise ValueError(f"Map layer did not return a PNG: {path}")
     if get("/healthz").strip() != "ok":
         raise ValueError("Frontend health check failed")
     if json.loads(get("/api/health")) != {"status": "ok"}:
