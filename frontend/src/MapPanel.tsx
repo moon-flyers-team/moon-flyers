@@ -15,6 +15,7 @@ import { HeatmapLegends } from './map/HeatmapLegends';
 
 interface Props {
   sites: LandingSite[];
+  landingSiteId?: string | null;
   constraints: Constraints;
   mission: MissionParams;
   active: boolean;
@@ -61,7 +62,7 @@ function HeatmapImages({ data, opacity }: { data?: MapHeatmapsResponse; opacity:
     width={2 * MAP_RADIUS} height={2 * MAP_RADIUS} preserveAspectRatio="none" />)}</g>;
 }
 
-export function MapPanel({ sites, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
+export function MapPanel({ sites, landingSiteId, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -307,6 +308,7 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
               onKeyDown={site.custom ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); choose(site, undefined, undefined, site); } } : undefined}>
               <title>{`${site.name}: ${formatCoordinates(site)}${site.enabled ? '' : ' (disabled)'}`}</title>
               {site.custom && <circle className="map-waypoint-hit" cx={point.x} cy={point.y} r={11 / zoom} />}
+              {site.id === landingSiteId && <circle className="map-landing-ring" cx={point.x} cy={point.y} r={10 / zoom}><title>Selected landing site</title></circle>}
               <circle cx={point.x} cy={point.y} r={5 / zoom} />
               <text x={point.x + 8 / zoom} y={point.y - 8 / zoom} fontSize={10 / zoom} strokeWidth={2 / zoom}>{site.name}</text>
             </g>;
@@ -353,11 +355,9 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
       </form>}
     </div>
     <p className="map-announcement" role="status">{announcement}</p>
-    {outside.length > 0 && <p className="map-hint">{outside.length} sidebar {outside.length === 1 ? 'site lies' : 'sites lie'} outside 80°S–90°S and {outside.length === 1 ? 'is' : 'are'} not plotted.</p>}
-    <footer className="map-attribution">{showBasemap ? 'Basemap' : 'Surface layers'}: <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek · {basemap === 'topography' ? 'LRO/LOLA elevation' : 'LRO/LROC WAC'}</a>{!showBasemap && ' (hidden)'}.
-      {referenceCriteria.length > 0 && <> Reference overlays: <a href="https://pgda.gsfc.nasa.gov/products/69" target="_blank" rel="noreferrer">NASA/LOLA · Mazarico et al. (2011), updated 2016 products</a>.</>}
-      {' '}Names: IAU/USGS via Moon Trek. Feature hover areas approximate catalogue diameters.
+    {(referenceCriteria.length > 0 || criteria.length + referenceCriteria.length > 1) && <footer className="map-attribution">
+      {referenceCriteria.length > 0 && <>Reference overlays: <a href="https://pgda.gsfc.nasa.gov/products/69" target="_blank" rel="noreferrer">NASA/LOLA · Mazarico et al. (2011), updated 2016 products</a>.</>}
       {criteria.length + referenceCriteria.length > 1 && ' Overlays blend; enable one for an unambiguous color scale.'}
-    </footer>
+    </footer>}
   </section>;
 }

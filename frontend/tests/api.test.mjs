@@ -45,6 +45,22 @@ function capture(response = {}) {
   return calls;
 }
 
+test('round-trip route preserves the chosen stop order and repeats the landing reference', async () => {
+  const calls = capture({ method: 'straight_line', path: [] });
+  const landingSite = { id: site.id };
+  const stops = Array.from({ length: 10 }, (_, index) => ({
+    name: `Waypoint ${index + 1}`, latitude_deg: -88 + index / 100, longitude_deg: index,
+  }));
+  const signal = new AbortController().signal;
+  await api.getRoute({ waypoints: [landingSite, ...stops, landingSite] }, signal);
+  assert.match(calls[0].url.pathname, /\/route$/);
+  assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.signal, signal);
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    step_m: 100, waypoints: [landingSite, ...stops, landingSite],
+  });
+});
+
 test('catalogue and health use parameter-free GET requests', async () => {
   const calls = capture([site]);
   assert.deepEqual(await api.getSites(), [site]);

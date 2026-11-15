@@ -1,6 +1,7 @@
 import type {
   SiteDefinition, SiteReference, SiteAnalysisResponse, ComparisonResult,
   LandingWindow, Constraints, LandingSite, MapHeatmapsParams, MapHeatmapsResponse,
+  RouteParams, RouteResponse, RecommendedSitesParams, RecommendedSitesResponse,
 } from './types';
 
 const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
@@ -81,5 +82,9 @@ export const api = {
     post<ComparisonResult[]>('/compare', { timestep_seconds: 3600, ...params }, signal),
   getLandingWindows: (params: LandingWindowsParams, signal?: AbortSignal) =>
     post<LandingWindow[]>('/landing-windows', { candidate_step_hours: 6, limit: 5, ...params }, signal),
+  getRoute: (params: RouteParams, signal?: AbortSignal) =>
+    post<RouteResponse>('/route', { step_m: 100, ...params }, signal),
+  getRecommendedSites: (params: RecommendedSitesParams, signal?: AbortSignal) =>
+    post<RecommendedSitesResponse>('/recommended-sites', { limit: 5, ...params }, signal),
   health: (signal?: AbortSignal) => request<{ status: string }>('/health', { signal }),
 };

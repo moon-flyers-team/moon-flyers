@@ -5,22 +5,22 @@ export interface MapCamera extends MapPoint { zoom: number }
 export const INITIAL_CAMERA: MapCamera = { x: MAP_CENTER, y: MAP_CENTER, zoom: 1 };
 export const MAX_ZOOM = 16;
 
-export function constrainCamera(camera: MapCamera): MapCamera {
-  const zoom = Math.max(1, Math.min(MAX_ZOOM, camera.zoom));
+export function constrainCamera(camera: MapCamera, maxZoom = MAX_ZOOM): MapCamera {
+  const zoom = Math.max(1, Math.min(maxZoom, camera.zoom));
   const limit = MAP_CENTER - MAP_CENTER / zoom;
   const dx = Math.max(-limit, Math.min(limit, camera.x - MAP_CENTER));
   const dy = Math.max(-limit, Math.min(limit, camera.y - MAP_CENTER));
   const scale = Math.min(1, MAP_RADIUS / (Math.hypot(dx, dy) || 1));
   return { zoom, x: MAP_CENTER + dx * scale, y: MAP_CENTER + dy * scale };
 }
-export function zoomAt(camera: MapCamera, factor: number, anchor: MapPoint): MapCamera {
-  const zoom = Math.max(1, Math.min(MAX_ZOOM, camera.zoom * factor));
+export function zoomAt(camera: MapCamera, factor: number, anchor: MapPoint, maxZoom = MAX_ZOOM): MapCamera {
+  const zoom = Math.max(1, Math.min(maxZoom, camera.zoom * factor));
   const ratio = camera.zoom / zoom;
   return constrainCamera({ zoom, x: anchor.x + (camera.x - anchor.x) * ratio,
-    y: anchor.y + (camera.y - anchor.y) * ratio });
+    y: anchor.y + (camera.y - anchor.y) * ratio }, maxZoom);
 }
-export function panBy(camera: MapCamera, dx: number, dy: number): MapCamera {
-  return constrainCamera({ ...camera, x: camera.x + dx, y: camera.y + dy });
+export function panBy(camera: MapCamera, dx: number, dy: number, maxZoom = MAX_ZOOM): MapCamera {
+  return constrainCamera({ ...camera, x: camera.x + dx, y: camera.y + dy }, maxZoom);
 }
 export interface WheelInput {
   deltaX: number; deltaY: number; deltaMode: number; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean;
