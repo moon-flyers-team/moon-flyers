@@ -382,6 +382,9 @@ body {
   letter-spacing: 0.5px;
 }
 
+.ct-time-input { color-scheme: dark; min-width: 0; }
+.ct-time-input:focus-visible { outline: 2px solid var(--comms); outline-offset: 2px; }
+
 /* ── Time Slider ─────────────────────────────────────── */
 .ts-wrapper {
   height: 100%;

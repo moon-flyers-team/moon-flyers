@@ -44,6 +44,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
   }, [sliderEnd, startMs]);
 
   const [viewStartMs, setViewStartMs] = useState(() => startMs);
+  const selectedMs = Date.parse(landingTime);
 
   useEffect(() => { setViewStartMs(startMs); }, [startMs]);
 
@@ -120,7 +121,18 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
       <span className="ct-tab">Comparison</span>
       <div className="ct-time">
         <span className="ct-time-label">Landing (UTC)</span>
-        <span className="ct-time-val">{landingTime.slice(0, 10)} {landingTime.slice(11, 16)}</span>
+        <input type="datetime-local" className="ct-time-val ct-time-input"
+          aria-label="Landing time (UTC)" title="UTC arrival; 6-hour sampled candidates"
+          value={Number.isFinite(selectedMs) ? new Date(selectedMs).toISOString().slice(0, 16) : ''}
+          min={new Date(startMs).toISOString().slice(0, 16)}
+          max={new Date(sliderEndMs).toISOString().slice(0, 16)} step={21600} disabled={!!disabled}
+          onChange={event => {
+            const value = Date.parse(`${event.currentTarget.value}Z`);
+            if (!disabled && event.currentTarget.validity.valid && Number.isFinite(value)
+              && value >= startMs && value <= sliderEndMs && (value - startMs) % STEP_MS === 0) {
+              onTimeSeek(new Date(value).toISOString());
+            }
+          }} />
       </div>
     </div>
     {loading && <p className="request-status" role="status">Comparing sites. This can take 10–30 seconds…</p>}
@@ -166,13 +178,13 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
         {sites.map((site, index) => {
           const result = results?.[index];
           const entry: WindowMetricsEntry | undefined = result?.window_metrics.find(
-            e => e.landing_utc === landingTime
-          ) ?? result?.window_metrics[0];
+            e => Date.parse(e.landing_utc) === selectedMs
+          );
           const metrics = entry?.metrics;
           const warn = (metric: keyof Metrics) => entry?.fit.violations.includes(metric) ?? false;
           return <tr key={site.id} className={selectedId === site.id ? 'row-sel' : ''} onClick={() => onSelect(site.id)}>
             <td className="ct-left ct-name"><button className="site-select" aria-pressed={selectedId === site.id} onClick={() => onSelect(site.id)}>{site.name}</button></td>
-            <td>{entry ? <FitBadge fit={entry.fit.status} /> : '—'}</td>
+            <td>{entry ? <FitBadge fit={entry.fit.status} /> : result ? 'Not sampled' : '—'}</td>
             <NumCell value={metrics?.sun_visible_pct} warn={warn('sun_visible_pct')} unit="%" />
             <NumCell value={metrics?.longest_darkness_hours} warn={warn('longest_darkness_hours')} unit=" h" />
             <NumCell value={metrics?.earth_visible_pct} warn={warn('earth_visible_pct')} unit="%" />
