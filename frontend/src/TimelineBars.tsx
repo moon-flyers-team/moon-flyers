@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import type { TimeWindow } from './types';
+import type { Fit, TimeWindow } from './types';
 import { DAY_MS, formatUtc } from './time';
 
 const STEP_MS = 6 * 3_600_000;
 
 interface Props {
+  fit?: Fit;
   powerWindows?: TimeWindow[];
   commsWindows?: TimeWindow[];
   missionStart: string;
@@ -12,7 +13,6 @@ interface Props {
   landingUtc?: string;
   daysOnSurface?: number;
   onChange?: (iso: string) => void;
-  allMet?: boolean;
 }
 export function normalise(windows: TimeWindow[], missionStart: string, missionEnd: string) {
   const start = Date.parse(missionStart);
@@ -42,7 +42,7 @@ export function SurfaceStayWindow({ landingUtc, daysOnSurface, missionStart, mis
     style={{ left: `${segment.left * 100}%`, width: `${segment.width * 100}%` }} />;
 }
 
-export function TimelineBars({ powerWindows, commsWindows, missionStart, missionEnd, landingUtc, daysOnSurface, onChange, allMet }: Props) {
+export function TimelineBars({ fit, powerWindows, commsWindows, missionStart, missionEnd, landingUtc, daysOnSurface, onChange }: Props) {
   const startMs = Date.parse(missionStart);
   const endMs   = Date.parse(missionEnd);
   const tracksRef = useRef<HTMLDivElement>(null);
@@ -69,6 +69,7 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [onChange, startMs, endMs]);
 
+  const meetsConstraints = fit?.status === 'both_met' && fit.violations.length === 0;
   return (
     <td>
       <div className="tl-wrap">
@@ -94,7 +95,7 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
             ))}
           </div>
           <SurfaceStayWindow landingUtc={landingUtc} daysOnSurface={daysOnSurface} missionStart={missionStart} missionEnd={missionEnd} />
-          {markerPct !== null && <div className={`tl-marker${allMet ? ' tl-marker--both' : ''}`} style={{ left: `${markerPct}%` }} />}
+          {markerPct !== null && <div className={`tl-marker${meetsConstraints ? ' tl-marker--both' : ''}`} style={{ left: `${markerPct}%` }} />}
         </div>
       </div>
     </td>

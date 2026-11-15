@@ -1,5 +1,5 @@
 // Validated mock implementation of API.md. No Python or backend/ files required.
-import { DAY_MS, sites, resolveSite, analyze, timeseries, visibilityWindows, eclipseWindows, utc } from './data.mjs';
+import { DAY_MS, HOUR_MS, sites, resolveSite, analyze, timeseries, visibilityWindows, eclipseWindows, utc, candidateMetrics } from './data.mjs';
 
 class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -102,14 +102,21 @@ function route(method, url, body) {
     const count = Math.floor((end - start) / (candidateStep * 3_600_000)) + 1;
     if (count > 2000 || count * (c.days_on_surface * 24 + 1) > 1_000_000) fail('Demo request too large; shorten the window or increase candidate_step_hours.');
     seriesLimit(start, timelineEnd, step);
+    const candidateMs = candidateStep * 3_600_000;
     return body.sites.map(reference => {
       const site = siteFrom(reference);
+      // One hourly series per site, sliced per landing (mirrors the real backend's SiteSeries).
+      const hourly = timeseries(site, start, timelineEnd, c, 3600);
+      const sunFlags = hourly.map(point => point.sun_visible);
+      const earthFlags = hourly.map(point => point.earth_visible);
       const window_metrics = Array.from({ length: count }, (_, i) => {
-        const landing = start + i * candidateStep * 3_600_000;
-        const a = analyze(site, landing, c);
+        const landing = start + i * candidateMs;
+        // Off-grid candidate steps keep the legacy per-candidate path for exact behavior.
+        const fast = candidateMs % HOUR_MS === 0 ? candidateMetrics(sunFlags, earthFlags, start, landing, c) : null;
+        const a = fast ?? analyze(site, landing, c);
         return { landing_utc: utc(landing), metrics: a.metrics, fit: a.fit };
       });
-      const points = timeseries(site, start, timelineEnd, c, step);
+      const points = step === 3600 ? hourly : timeseries(site, start, timelineEnd, c, step);
       return { site, window_metrics,
         timeline: { ...Object.fromEntries(['sun', 'earth'].map(name => [name, visibilityWindows(points, name)])),
           eclipse: eclipseWindows(points) } };
@@ -123,9 +130,15 @@ function route(method, url, body) {
     const count = Math.floor((end - start) / (step * 3_600_000)) + 1;
     if (count > 2000 || count * (c.days_on_surface * 24 + 1) > 1_000_000) fail('Demo search is too large; shorten the range or increase candidate_step_hours.');
     seriesLimit(start, end + c.days_on_surface * DAY_MS, 3600);
+    // One hourly series, sliced per candidate (see /compare); off-grid steps use analyze().
+    const stepMs = step * 3_600_000;
+    const hourly = timeseries(site, start, end + c.days_on_surface * DAY_MS, c, 3600);
+    const sunFlags = hourly.map(point => point.sun_visible);
+    const earthFlags = hourly.map(point => point.earth_visible);
     const candidates = Array.from({ length: count }, (_, i) => {
-      const time = start + i * step * 3_600_000;
-      const analysis = analyze(site, time, c);
+      const time = start + i * stepMs;
+      const fast = stepMs % HOUR_MS === 0 ? candidateMetrics(sunFlags, earthFlags, start, time, c) : null;
+      const analysis = fast ?? analyze(site, time, c);
       return { landing_utc: utc(time), metrics: analysis.metrics, fit: analysis.fit };
     });
     candidates.sort((a, b) => a.fit.violations.length - b.fit.violations.length

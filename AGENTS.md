@@ -18,15 +18,30 @@ when agreed behavior changes.
   site, not the former mocked mission ranking. Request: `site` (landing-site ID or coordinates)
   and optional `radius_km` (40 default). Response: published POIs and point/approximate-area
   distances, no scores/ranks. The 80°S–90°S cap includes boundary-crossing features. Successful
-  responses use data-source header `catalogue`, independent of ephemerides. No frontend UI or
-  client is wired yet; Node mock has no implementation. Root `API.md` owns the revised contract;
+  responses use data-source header `catalogue`, independent of ephemerides. Frontend client
+  now uses this contract. Mission Planner owns an applied search radius (40 km default);
+  Route Planner explicitly searches nearby POIs and displays names/footprint distances.
+  Radius changes hide prior results without reloading mission analysis. Node mock has no implementation. Root `API.md` owns the revised contract;
   `docs/poi-sources.md` records sources, cave/pit coverage limits and regeneration. POI IDs are
   not landing-site IDs. Do not invent cave, rover or suitability data for missing records.
-- Python `GET /sites` has 21 entries (seven preserved plus 14 sourced location additions),
-  covering 49/61 POIs within 40 km. Most additions are explicitly unvetted exploration
+- Python `GET /sites` has 19 in-cap entries (five preserved plus 14 sourced location additions).
+  Out-of-cap Chandrayaan-3 and Chang'e-6 were removed; their IDs now return 404. Custom
+  coordinates outside the cap remain supported for analysis. The catalogue still covers
+  49/61 POIs within 40 km. Most additions are explicitly unvetted exploration
   references at published feature centres, not selected landing points. Sources/coverage are
   in `docs/poi-sources.md`; Node mock/offline catalogues are unchanged. App currently enables
   every returned site by default, so the larger catalogue increases initial analysis work.
+- Python `POST /route` now serves the terrain planner as well as the mock. `planner`
+  (`straight_line` default, or `terrain`) plus an optional `rover` block; `terrain` runs the
+  bounded A* in `backend/src/rover_path.py` over the DEMs at `LOLA_DEM_DIR` (moved out of
+  `app/Functions` so the Dockerfile ships it) and returns `method: astar_terrain`, per-point
+  `elevation_m`, per-leg status/metrics and endpoint checks. It returns **503** rather than
+  substituting terrain when no dataset is mounted, and 422 for planner limits/geometry or a
+  request over 1,000,000 sampled cells. Rover limits are illustrative, not a vehicle spec;
+  results are suggested candidate routes, with no travel-time, energy, illumination,
+  keep-out or waypoint-order model. The frontend still requests `straight_line` and must be
+  updated (types, `planner`, failure/503 rendering) before using it; root `API.md` documents
+  both modes and the required frontend work.
 
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including
@@ -53,6 +68,8 @@ when agreed behavior changes.
 - The separate mock API lives entirely in `frontend/src/mock/` and implements every v0
   endpoint with deterministic synthetic data. Run `pnpm mock:api`; it uses Node and requires
   no Python environment. `data.mjs` generates consistent samples, metrics, windows, and fit.
+  `/compare` and `/landing-windows` build one hourly series per site and slice per candidate
+  (`candidateMetrics`) instead of rebuilding every stay, mirroring the real backend.
 - The frontend identifies mock responses via `X-Moon-Flyers-Data-Source: mock` and labels
   them explicitly. Offline fallback data still contains example site metadata only. Do not
   present synthetic results as scientific predictions.
@@ -75,6 +92,7 @@ when agreed behavior changes.
 | `frontend/src/api.ts` | Shared HTTP client, typed endpoint methods, request payloads, FastAPI error handling |
 | `frontend/src/types.ts` | API response types and UI parameter types |
 | `frontend/src/useRequest.ts` | Debouncing, abort handling, retry state, and suppression of obsolete responses |
+| `frontend/src/useSiteBatch.ts` | Per-site comparison/analysis cache so enabling a site fetches only that site |
 | `frontend/src/time.ts` | UTC helpers and lunar-day constants |
 | `frontend/src/ComparisonTable.tsx`, `FitBadge.tsx` | Backend metrics, fit statuses, and violation indicators |
 | `frontend/src/TimelineBars.tsx` | Visibility intervals clipped to the displayed time range |
@@ -87,6 +105,7 @@ when agreed behavior changes.
 | `frontend/tests/mock-pipeline.mjs` | Live HTTP checks through Vite and the mock, using the real frontend client |
 | `frontend/vite.config.ts` | React plugin, `@` alias, dev port, and API proxy |
 | `backend/src/main.py`, `backend/requirements.txt` | FastAPI endpoints and Python runtime dependencies |
+| `backend/src/services/route.py`, `backend/src/rover_path.py` | `/route` legs (straight-line default, terrain A*) and the bounded rover planner |
 | `backend/app/Functions/rover_path.py`, `backend/docs/ROVER_PATH_REVIEW.md` | Standalone rover route calculations and algorithm review; no route endpoint/UI yet |
 | `backend/src/lunar_horizon_dem.py`, `backend/tools/lola_data.py`, `deploy/compose.terrain.yaml` | LOLA DEM loader/verifier, host dataset checks, and the optional read-only deployment mount |
 | `frontend/src/mock/server.mjs` | Standalone Node HTTP mock API on port 8000 |
@@ -176,19 +195,26 @@ Keep **mission scoring duration** separate from **visualization coverage**:
 
 1. `/compare` and `/landing-windows` receive the user's `days_on_surface` unchanged
    (default 14). Mission constraints are assembled in `MainPanel.tsx`.
-2. Visualization requests all enabled sites in parallel with the mission window, mission
-   duration, and hourly samples (`timestep_seconds: 3600`). The batch extends through the
-   window end plus the mission stay. Switching sites uses the preloaded data.
+2. Visualization requests enabled sites with the mission window, mission duration, and
+   hourly samples (`timestep_seconds: 3600`). The batch extends through the window end plus
+   the mission stay. Switching sites uses the preloaded data. `useSiteBatch.ts` caches one
+   entry per site: a changed mission window or constraint set invalidates every entry, while
+   enabling or disabling a site reuses the cache and fetches only sites with no entry (one
+   comparison request for those sites plus one analysis each). Disabling a site or
+   re-enabling a cached site makes no request.
 3. `HorizonChart.tsx` selects returned samples from the current time through one mean lunar
    day. Markers use the first available sample in that slice. The full site batch determines
    altitude-axis bounds. The custom timeline slider updates time locally; ±6 h buttons
    are no longer mounted.
-4. Applied mission dates/constraints or enabled sites load new batches. Comparison returns
+4. Applied mission dates/constraints or enabled sites load new batches. A site with no cached
+   entry renders as pending (`—`) until its own response arrives. Comparison returns
    `window_metrics`; the table matches numeric UTC instants exactly, accepting equivalent
    timestamp spellings. Missing samples show “Not sampled”, never first-candidate evidence.
    The native Landing time (UTC) field supports keyboard editing on the 6-hour grid and
    changes selection locally without fetching; retain the custom timeline as another input.
-   `SurfaceStayWindow` in TimelineBars shades landing through `days_on_surface` on the
+   The timeline marker turns green only for the exact selected candidate's passing backend
+  fit (both_met with no violations), not instantaneous Sun/Earth visibility.
+  `SurfaceStayWindow` in TimelineBars shades landing through `days_on_surface` on the
    slider and every site's timeline. It follows selection locally and clips to the visible
    range; a dashed right edge indicates the stay continues beyond view. Keep its duration
    tied to applied scoring constraints, not the lunar-day chart coverage.
@@ -355,6 +381,10 @@ decisions change.
   `strokeWidth={2 / zoom}` so outlines stay constant in screen pixels. Do not override these
   label stroke widths with a fixed CSS pixel value: that scales with the SVG viewBox and
   produces thick outlines when zoomed in. Browser checks verified 1× through 16×.
+- Approved copy cleanup removed the map's technical subtitle, basemap-hidden notice,
+  standalone topography/reference-radius note, always-visible manual coordinate bounds,
+  and duplicate loading-popup paragraph. Keep validation, the elevation legend and loading
+  status intact. `docs/ux-copy-review.md` tracks pending copy suggestions (6–12).
 - Group pre-map notices/help in `.map-preamble`, with a 3px gap and 1.25 line height. Keep
   navigation hints and site color keys on a wrapping row, and keep reference-data caveats
   concise while preserving their long-term/any-disc meaning. Errors remain conspicuous.
@@ -378,7 +408,8 @@ decisions change.
   FastAPI `/route` returns great-circle segments; retain its terrain/slope/shadow limitation.
   The Node mock does not implement `/route`: show its error instead of inventing a path.
 - The map starts centered on the landing. Picking stops preserves the camera; calculation
-  fits the returned route, and Fit can frame draft markers. KML/CSV appear only for a current
+  fits the returned route, and Fit can frame draft markers. Fit includes returned path points
+  and compensates for `xMidYMid slice` cropping using the measured viewport aspect ratio. KML/CSV appear only for a current
   successful response. Route distances and path come from the backend, not draft geometry.
 
 - Intermediate route-table rows support native drag-and-drop; there is no separate waypoint list.

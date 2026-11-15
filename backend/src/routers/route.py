@@ -1,4 +1,8 @@
-"""POST /route: a detailed path visiting the given sites in order (mock: straight lines)."""
+"""POST /route: ordered legs between the given sites.
+
+`planner="straight_line"` (default) is the mock interpolation; `planner="terrain"` uses the
+bounded A* rover planner over the mounted LOLA DEMs and needs `LOLA_DEM_DIR`.
+"""
 
 from fastapi import APIRouter
 
@@ -11,6 +15,7 @@ router = APIRouter(tags=["route"])
 
 @router.post("/route", response_model=RouteResponse)
 def route(req: RouteRequest):
-    """Waypoints are visited in the given order. `path` has a point at least every `step_m` metres."""
+    """Waypoints are visited in the given order. Straight-line legs are densified at least every
+    `step_m` metres; terrain legs return one point per planned grid cell."""
     sites = [catalogue.resolve_site(ref) for ref in req.waypoints]
-    return plan_route(sites, req.step_m)
+    return plan_route(sites, req)

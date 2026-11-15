@@ -16,7 +16,7 @@ from . import lunar_horizon_dem
 from .routers import compare, health, recommended_sites, route, sites
 from .services import ephemeris
 from .services.errors import (DomainError, EphemerisUnavailableError, InvalidInputError, LimitExceededError,
-                              UnknownSiteError)
+                              TerrainUnavailableError, UnknownSiteError)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -59,7 +59,7 @@ async def mark_data_source(request: Request, call_next):
 
 
 ERROR_STATUS = {UnknownSiteError: 404, LimitExceededError: 422, InvalidInputError: 422,
-                EphemerisUnavailableError: 502}
+                EphemerisUnavailableError: 502, TerrainUnavailableError: 503}
 
 
 @app.exception_handler(DomainError)

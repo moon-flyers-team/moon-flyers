@@ -16,7 +16,7 @@ function NumCell({ value, warn, unit = '' }: { value?: number | null; warn: bool
 
 interface Props {
   sites: LandingSite[];
-  results?: ComparisonResult[];
+  results?: (ComparisonResult | undefined)[];
   constraints: Constraints;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -227,10 +227,9 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
               <NumCell value={metrics?.earth_visible_pct} warn={warn('earth_visible_pct')} unit="%" />
               <NumCell value={metrics?.longest_earth_blackout_hours} warn={warn('longest_earth_blackout_hours')} unit=" h" />
               <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
-              <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
+              <TimelineBars fit={disabled ? undefined : entry?.fit} powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
                 missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime}
-                daysOnSurface={disabled ? undefined : c.days_on_surface} onChange={disabled ? undefined : onTimeSeek}
-                allMet={entry?.fit.status === 'both_met'} />
+                daysOnSurface={disabled ? undefined : c.days_on_surface} onChange={disabled ? undefined : onTimeSeek} />
             </tr>;
           })}
         </tbody>

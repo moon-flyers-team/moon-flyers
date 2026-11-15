@@ -60,6 +60,7 @@ export interface ComparisonResult {
 export interface LandingWindow { rank: number; landing_utc: string; metrics: Metrics; fit: Fit }
 export interface MissionParams {
   windowStart: string; windowEnd: string; daysOnSurface: number; horizonClearance: number;
+  poiRadiusKm?: number;
 }
 export interface PowerParams { minSunlight: number; maxNight: number }
 export interface CommsParams { minEarthContact: number; maxCommsGap: number }
@@ -99,30 +100,19 @@ export interface RouteResponse {
   total_distance_m: number;
   path: RoutePoint[];
 }
-// POST /recommended-sites: published points of interest near a landing site (nearest first).
-export interface RecommendedSitesParams {
-  site: { id: string } | { name?: string; latitude_deg: number; longitude_deg: number };
-  radius_km?: number;
-}
-export type PoiCategory = 'lander' | 'rover' | 'impact' | 'natural_feature';
+export interface RecommendedSitesParams { site: SiteReference; radius_km?: number }
 export interface PointOfInterest {
-  id: string;
-  name: string;
-  category: PoiCategory;
-  feature_type: string;
-  latitude_deg: number;
-  longitude_deg: number;
-  location_uncertainty_km: number | null;
-  notes: string;
+  id: string; name: string; category: 'natural_feature' | 'lander' | 'rover' | 'impact';
+  feature_type: string; latitude_deg: number; longitude_deg: number;
+  boundary: { kind: 'point' | 'approximate_circle'; radius_km: number };
+  location_uncertainty_km: number | null; notes: string;
+  sources: { title: string; url: string; record_id: string | null }[];
 }
-export interface Recommendation { poi: PointOfInterest; distance_km: number }
+export type PoiCategory = PointOfInterest['category'];
 export interface RecommendedSitesResponse {
-  method: 'catalogue_proximity';
-  data_source: 'published_catalogue';
-  catalogue_version: string;
-  site: SiteDefinition & { id: string | null };
-  radius_km: number;
-  recommendations: Recommendation[];
+  method: 'catalogue_proximity'; data_source: 'published_catalogue'; catalogue_version: string;
+  site: SiteDefinition; radius_km: number;
+  recommendations: { poi: PointOfInterest; distance_km: number }[];
 }
 
 export interface MapHeatmapsResponse {

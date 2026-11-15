@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ComparisonTable } from './ComparisonTable';
 import { HorizonChart } from './HorizonChart';
-import { api, siteReference } from './api';
 import { MapPanel } from './MapPanel';
 import { TouristRoutePanel } from './TouristRoutePanel';
 import type { Coordinates } from './map/projection';
-import { useRequest } from './useRequest';
+import { useSiteBatch } from './useSiteBatch';
 import { dateUtc, landingWindowError } from './time';
-import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints, SiteAnalysisResponse } from './types';
+import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints } from './types';
 
 interface Props {
   sites: LandingSite[];
@@ -61,35 +60,19 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
     && mission.horizonClearance <= 90 && terrain.maxSlope <= 90;
   const validation = dateError ? dateError
     : !validConstraints ? 'Use positive whole mission days, percentages from 0–100, angles from 0–90°, and nonnegative time limits.' : '';
-  const compareRequest = useMemo(() => validation || !enabled.length ? null
-    : (signal: AbortSignal) => api.compare({
-      sites: enabled.map(siteReference),
-      window_start_utc: dateUtc(mission.windowStart), window_end_utc: dateUtc(mission.windowEnd),
-      constraints, candidate_step_hours: 6,
-    }, signal), [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
-  const comparison = useRequest(compareRequest);
+  const compareQuery = useMemo(() => validation || !enabled.length ? null
+    : ({ windowStart: dateUtc(mission.windowStart), windowEnd: dateUtc(mission.windowEnd), constraints }),
+    [validation, enabled.length, mission.windowStart, mission.windowEnd, constraints]);
+  const batch = useSiteBatch(enabled, compareQuery);
 
-  const horizonsRequest = useMemo(() => validation || !enabled.length ? null
-    : (signal: AbortSignal) => Promise.all(
-        enabled.map(site => api.getSiteAnalysis({
-          site: siteReference(site),
-          window_start_utc: dateUtc(mission.windowStart), window_end_utc: dateUtc(mission.windowEnd),
-          constraints,
-        }, signal))
-      ).then(results => new Map<string, SiteAnalysisResponse>(
-        enabled.map((site, i) => [site.id, results[i]])
-      )),
-    [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
-  const horizons = useRequest(horizonsRequest);
-
-  const profilesLoading = comparison.loading || horizons.loading;
+  const profilesLoading = batch.loading;
 
   return (
     <main className="main">
       <div className="main-hdr">
         <h1 className="main-title">Lunar landing site navigator</h1>
         <div className="main-score" role="status">
-          {comparison.loading ? 'Comparing sites…' : comparison.data ? `Scored ${comparison.data.length} sites` : `${enabled.length} sites selected`}
+          {batch.loading ? 'Comparing sites…' : batch.results ? `Scored ${batch.loadedCount} sites` : `${enabled.length} sites selected`}
         </div>
       </div>
       <div className="workspace-tabs" role="tablist" aria-label="Workspace">
@@ -110,21 +93,20 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
           <div className="profiles-loading-popup" role="status" aria-live="polite" aria-atomic="true">
             <span className="profiles-loading-spinner" aria-hidden="true" />
             <strong>Loading site profiles…</strong>
-            <p>Fetching comparison and visibility data. This can take 10–30 seconds.</p>
           </div>
         </div>}
         {validation && !dateError && <div className="request-error" role="alert">{validation}</div>}
-        <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
+        <ComparisonTable sites={enabled} results={batch.results} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} onLandingSelect={chooseLandingSite} landingSiteId={landingSiteId} landingTime={landingUtc}
           onTimeSeek={setLandingUtc}
           missionStart={dateUtc(mission.windowStart)}
           sliderEnd={dateUtc(mission.windowEnd)} disabled={!!validation}
-          loading={comparison.loading} error={comparison.error} onRetry={comparison.retry}>
+          loading={batch.loading} error={batch.error} onRetry={batch.retry}>
           <div className="hz-grid">
             {enabled.map(site => <HorizonChart key={site.id} siteName={site.name}
-              analysis={horizons.data?.get(site.id)?.analysis} landingUtc={landingUtc}
+              analysis={batch.analyses.get(site.id)?.analysis} landingUtc={landingUtc}
               selected={site.id === siteId} onSelect={() => setSelectedId(site.id)}
-              loading={horizons.loading} error={horizons.error} onRetry={horizons.retry} />)}
+              loading={batch.loading} error={batch.error} onRetry={batch.retry} />)}
           </div>
         </ComparisonTable>
       </div>
@@ -135,7 +117,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       {landingSite && <div className="main-body route-planner-body" id="panel-route" role="tabpanel"
         aria-labelledby="tab-route" hidden={activeTab !== 'route'}>
         <TouristRoutePanel key={`${landingSite.id}:${landingSite.latitude_deg}:${landingSite.longitude_deg}`}
-          landingSite={landingSite} landingUtc={landingUtc} onClose={() => { setLandingSiteId(null); setTab('profiles'); }} />
+          landingSite={landingSite} landingUtc={landingUtc} poiRadiusKm={mission.poiRadiusKm ?? 40} onClose={() => { setLandingSiteId(null); setTab('profiles'); }} />
       </div>}
     </main>
   );

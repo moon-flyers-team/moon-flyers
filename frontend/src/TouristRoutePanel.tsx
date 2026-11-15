@@ -34,26 +34,29 @@ const LANDING_COLOR = '#00e676';
 const POI_COLOR = '#ffb74d';
 const LEGEND: [string, string][] = [[LANDING_COLOR, 'Landing site'], [WAYPOINT_COLOR, 'Waypoints'], [POI_COLOR, 'Recommended sites']];
 const DRAG_TYPE = 'application/x-moon-waypoint';
-// 40 km is the backend default: 10 km/h, eight hours out and back.
-const RADIUS_OPTIONS_KM = [10, 20, 40, 80, 150];
-const DEFAULT_RADIUS_KM = 40;
 const CATEGORY_LABEL: Record<PoiCategory, string> = {
   lander: 'Lander', rover: 'Rover', impact: 'Impact site', natural_feature: 'Natural feature',
 };
 const poiWaypointId = (poi: PointOfInterest) => `poi:${poi.id}`;
 
-function fitCamera(pts: MapPoint[]): MapCamera {
+export function fitCamera(pts: MapPoint[], width = 600, height = 600): MapCamera {
   if (!pts.length) return { x: MAP_CENTER, y: MAP_CENTER, zoom: 1 };
   if (pts.length === 1) return { ...pts[0], zoom: 16 };
-  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+  }
+  if (minX === maxX && minY === maxY) return { ...pts[0], zoom: 16 };
+  // xMidYMid slice crops the square viewBox along the shorter viewport dimension.
   const halfSpan = Math.max(
-    (Math.max(...xs) - Math.min(...xs)) / 2,
-    (Math.max(...ys) - Math.min(...ys)) / 2,
+    (maxX - minX) / 2 * Math.max(width, height) / width,
+    (maxY - minY) / 2 * Math.max(width, height) / height,
     0.5,
   );
   return {
-    x: (Math.min(...xs) + Math.max(...xs)) / 2,
-    y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
     zoom: Math.min(MAX_ZOOM, Math.max(1, MAP_CENTER / (halfSpan * 1.45))),
   };
 }
@@ -102,10 +105,19 @@ function toCsv(r: RouteResponse) {
 interface Props {
   landingSite: LandingSite;
   landingUtc: string;
+  poiRadiusKm?: number;
   onClose: () => void;
 }
 
-export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
+export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, onClose }: Props) {
+  const [searchRadius, setSearchRadius] = useState<number | null>(null);
+  // A changed applied radius invalidates previous catalogue results without an automatic search.
+  useEffect(() => setSearchRadius(null), [poiRadiusKm]);
+  const poiRequest = useMemo(() => searchRadius !== poiRadiusKm || !Number.isFinite(poiRadiusKm) || poiRadiusKm <= 0
+    ? null : (signal: AbortSignal) => api.getRecommendedSites({
+      site: siteReference(landingSite), radius_km: poiRadiusKm,
+    }, signal), [searchRadius, poiRadiusKm, landingSite]);
+  const nearby = useRequest(poiRequest, 0);
   const elevations = useRequest(loadElevations, 0);
   const siteName = landingSite.name;
   const slug = siteName.replace(/\s+/g, '_');
@@ -123,11 +135,6 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
   const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
     waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite], path: [], legs: [], total_distance_m: 0,
   }), [landingSite, waypoints]);
-  const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
-  const recommendationRequest = useMemo(() => (signal: AbortSignal) => api.getRecommendedSites({
-    site: siteReference(landingSite), radius_km: radiusKm,
-  }, signal), [landingSite, radiusKm]);
-  const recommendations = useRequest(recommendationRequest, 0);
   const addedPoiIds = useMemo(() => new Set(waypoints.map(w => w.id)), [waypoints]);
   function pushWaypoint(next: LandingSite): boolean {
     if (waypoints.length >= MAX_WAYPOINTS) {
@@ -201,6 +208,15 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
           {elevations.error && <p>Elevation data unavailable. <button className="ct-btn" onClick={elevations.retry}>Retry elevations</button></p>}
         </div>
       )}
+      <div className="route-editor">
+        <button className="ct-btn" disabled={nearby.loading || !Number.isFinite(poiRadiusKm) || poiRadiusKm <= 0}
+          onClick={() => { if (searchRadius === poiRadiusKm) nearby.retry(); else setSearchRadius(poiRadiusKm); }}>
+          Find nearby POIs ({poiRadiusKm} km)
+        </button>
+        {nearby.loading && <span role="status">Searching catalogue…</span>}
+        {nearby.error && <span className="request-error" role="alert">POI search failed: {nearby.error}</span>}
+        {nearby.data && <span>{nearby.data.recommendations.length} nearby POIs: add them from the list or the amber map markers.</span>}
+      </div>
       {loading && <p className="request-status" role="status">Calculating route…</p>}
       {result.error && <div className="request-error" role="alert">Route request failed: {result.error}
         {' '}<button className="ct-btn" onClick={result.retry}>Retry</button></div>}
@@ -209,36 +225,28 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
         setWaypoints(previous => previous.filter((_, i) => i !== index));
         setAnnouncement(`Removed waypoint ${index + 1}. Recalculate to update the route.`);
       }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={route ?? preview} onMapPick={addWaypoint} calculated={!!route}
-        pois={(recommendations.data?.recommendations ?? []).map(r => r.poi).filter(p => !addedPoiIds.has(poiWaypointId(p)))}
+        pois={(nearby.data?.recommendations ?? []).map(r => r.poi).filter(p => !addedPoiIds.has(poiWaypointId(p)))}
         onPoiPick={togglePoi}
-        sidePanel={<RecommendedStops data={recommendations.data} loading={recommendations.loading}
-          error={recommendations.error} onRetry={recommendations.retry} radiusKm={radiusKm} onRadius={setRadiusKm}
+        sidePanel={<RecommendedStops data={nearby.data} radiusKm={poiRadiusKm}
           isAdded={poi => addedPoiIds.has(poiWaypointId(poi))} onToggle={togglePoi} />} />
     </section>
   );
 }
 
-function RecommendedStops({ data, loading, error, onRetry, radiusKm, onRadius, isAdded, onToggle }: {
-  data?: RecommendedSitesResponse; loading: boolean; error?: string; onRetry: () => void;
-  radiusKm: number; onRadius: (km: number) => void;
+// Lists the latest "Find nearby POIs" results; the radius is the mission setting.
+function RecommendedStops({ data, radiusKm, isAdded, onToggle }: {
+  data?: RecommendedSitesResponse; radiusKm: number;
   isAdded: (poi: PointOfInterest) => boolean; onToggle: (poi: PointOfInterest) => void;
 }) {
-  const selectId = useId();
   return (
     <section className="route-recs" aria-label="Recommended sites">
       <div className="route-recs-hdr">
         <span className="route-recs-title">Recommended sites</span>
-        <label htmlFor={selectId} className="route-recs-radius">within
-          <select id={selectId} value={radiusKm} onChange={event => onRadius(Number(event.target.value))}>
-            {RADIUS_OPTIONS_KM.map(km => <option key={km} value={km}>{km} km</option>)}
-          </select>
-        </label>
+        <span className="route-recs-radius">within {radiusKm} km</span>
       </div>
-      {loading && <p className="request-status" role="status">Loading nearby sites…</p>}
-      {error && <div className="request-error" role="alert">Recommended sites unavailable: {error}
-        {' '}<button className="ct-btn" onClick={onRetry}>Retry</button></div>}
+      {!data && <p className="route-recs-empty">Use “Find nearby POIs” to list published sites you can add as stops.</p>}
       {data && !data.recommendations.length && (
-        <p className="route-recs-empty">No published sites within {data.radius_km} km. Try a larger radius.</p>
+        <p className="route-recs-empty">No published sites within {data.radius_km} km. Increase the search radius in Settings.</p>
       )}
       {data && data.recommendations.length > 0 && (
         <ul className="route-recs-list">
@@ -261,7 +269,7 @@ function RecommendedStops({ data, loading, error, onRetry, radiusKm, onRadius, i
           })}
         </ul>
       )}
-      {data && <p className="route-recs-foot">Published catalogue {data.catalogue_version}. Distances are great-circle, not drivable routes.</p>}
+      {data && <p className="route-recs-foot">Published catalogue {data.catalogue_version}. Distances are to approximate footprints, not driving routes.</p>}
     </section>
   );
 }
@@ -277,7 +285,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
   const [active, setActive] = useState<number | null>(null);
-  const [px, setPx] = useState(600);
+  const [viewport, setViewport] = useState({ width: 600, height: 600 });
+  const px = Math.max(viewport.width, viewport.height);
 
   const colorOf = (i: number) => i === 0 ? LANDING_COLOR : WAYPOINT_COLOR;
 
@@ -296,7 +305,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   }, [route, pathPts]);
   const fullD = useMemo(() => pathPts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' '), [pathPts]);
 
-  const fit = useMemo(() => fitCamera(stops), [stops]);
+  const fit = useMemo(() => fitCamera([...stops, ...pathPts], viewport.width, viewport.height),
+    [stops, pathPts, viewport]);
   const [camera, setCamera] = useState<MapCamera>(fit);
   useEffect(() => { if (calculated) setCamera(fit); }, [fit, calculated]);
 
@@ -305,7 +315,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
     if (!svg) return;
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      if (width && height) setPx(Math.max(width, height));
+      if (width && height) setViewport(previous => previous.width === width && previous.height === height
+        ? previous : { width, height });
     });
     ro.observe(svg);
     return () => ro.disconnect();

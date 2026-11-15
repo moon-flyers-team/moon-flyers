@@ -115,8 +115,11 @@ with sourced dimensions and evidence notes. No such record is currently shipped.
 
 ## Default landing-site / exploration-reference coverage
 
-The backend `GET /sites` catalogue now preserves its seven original sites and adds **14
-published-location references**, for **21 sites total**. This is a deliberately modest
+The backend `GET /sites` catalogue preserves five original in-cap sites and adds **14
+published-location references**, for **19 sites total**. All default sites are inside the
+route map's **80°S–90°S** coverage. Chandrayaan-3 (69.373°S) and Chang'e-6 (41.64°S)
+were removed because they are outside that cap; their former catalogue IDs now return 404.
+Custom coordinates outside the cap remain valid for analysis. This is a deliberately modest
 coverage extension, not a list of safe touchdown locations.
 
 We first checked NASA's [updated Artemis III candidate-region announcement](https://www.nasa.gov/news-release/nasa-provides-update-on-artemis-iii-moon-landing-regions/),
@@ -157,10 +160,10 @@ and groups explicitly say `reference` / `not vetted`; no terrain, slope, illumin
 communications, heritage stand-off or landing-safety suitability is inferred. These site
 IDs are separate from POI IDs and work with the existing analysis endpoints.
 
-Measured against the 61-record snapshot, the seven original sites cover **14/61** POIs;
+Measured against the 61-record snapshot, the five original in-cap sites cover **14/61** POIs;
 the expanded catalogue covers **49/61 (80.3%)** within 40 km. Coverage uses the endpoint's
 **point/approximate-area distance**, not necessarily distance to feature centres or rover
-routes. Original out-of-cap sites remain unchanged; all added references are in-cap.
+routes. Removing the two out-of-cap defaults does not reduce this POI coverage.
 Tests verify the measurement through both geometry and the public API.
 
 The 12 remaining uncovered POIs are Newton E, Wiechert J, Ibn Bajja, Kocher, Kuhn,
@@ -169,7 +172,7 @@ We do not add another site per isolated POI just to claim 100% coverage.
 
 **Frontend integration note:** the current frontend enables every returned catalogue site
 by default and requests analysis for each enabled site. Therefore the larger catalogue
-increases initial analysis work (21 sites rather than seven). This change does not alter
+increases initial analysis work (19 sites rather than five). This change does not alter
 that lifecycle or the wire format; frontend selection/performance policy remains separate.
 
 ## Refresh and review procedure
