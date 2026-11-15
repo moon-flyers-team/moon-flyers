@@ -27,11 +27,13 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
   const selectedSite = enabled.find(site => site.id === selectedId) ?? enabled[0];
   const siteId = selectedSite?.id;
   const [landingSiteId, setLandingSiteId] = useState<string | null>(null);
-  const landingSite = sites.find(site => site.id === landingSiteId);
+  // Default to the first compared site so the Route Planner is available whenever 1+ sites are compared.
+  const landingSite = enabled.find(site => site.id === landingSiteId) ?? enabled[0];
+  const effectiveLandingId = landingSite?.id ?? null;
   const tabs: ('profiles' | 'map' | 'route')[] = landingSite ? ['map', 'profiles', 'route'] : ['map', 'profiles'];
   const activeTab = tab === 'route' && !landingSite ? 'profiles' : tab;
   useEffect(() => {
-    if (landingSiteId && !landingSite) { setLandingSiteId(null); setTab('profiles'); }
+    if (landingSiteId && landingSite?.id !== landingSiteId) setLandingSiteId(null);
   }, [landingSiteId, landingSite]);
   function chooseLandingSite(id: string) {
     setSelectedId(id);
@@ -97,7 +99,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
         </div>}
         {validation && !dateError && <div className="request-error" role="alert">{validation}</div>}
         <ComparisonTable sites={enabled} results={batch.results} constraints={constraints}
-          selectedId={siteId ?? null} onSelect={setSelectedId} onLandingSelect={chooseLandingSite} landingSiteId={landingSiteId} landingTime={landingUtc}
+          selectedId={siteId ?? null} onSelect={setSelectedId} onLandingSelect={chooseLandingSite} landingSiteId={effectiveLandingId} landingTime={landingUtc}
           onTimeSeek={setLandingUtc}
           missionStart={dateUtc(mission.windowStart)}
           sliderEnd={dateUtc(mission.windowEnd)} disabled={!!validation}
@@ -111,13 +113,13 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
         </ComparisonTable>
       </div>
       <div className="main-body map-body" id="panel-map" role="tabpanel" aria-labelledby="tab-map" hidden={tab !== 'map'}>
-        <MapPanel sites={sites} landingSiteId={landingSiteId} constraints={constraints} mission={mission} active={tab === 'map'}
+        <MapPanel sites={sites} landingSiteId={effectiveLandingId} constraints={constraints} mission={mission} active={tab === 'map'}
           validation={validation} showValidation={!dateError} onSiteAdd={onSiteAdd} onSiteRename={onSiteRename} onSiteDelete={onSiteDelete} />
       </div>
       {landingSite && <div className="main-body route-planner-body" id="panel-route" role="tabpanel"
         aria-labelledby="tab-route" hidden={activeTab !== 'route'}>
         <TouristRoutePanel key={`${landingSite.id}:${landingSite.latitude_deg}:${landingSite.longitude_deg}`}
-          landingSite={landingSite} landingUtc={landingUtc} poiRadiusKm={mission.poiRadiusKm ?? 40} onClose={() => { setLandingSiteId(null); setTab('profiles'); }} />
+          landingSite={landingSite} landingUtc={landingUtc} poiRadiusKm={mission.poiRadiusKm ?? 40} onClose={() => setTab('profiles')} />
       </div>}
     </main>
   );
