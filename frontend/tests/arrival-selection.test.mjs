@@ -45,14 +45,18 @@ test('route planning starts with one landing marker and no invented path or dist
   assert.doesNotMatch(html, /_route\.kml|Straight-line route:|class="route-stat"/);
 });
 
-test('Profiles contains no tourist route section and Route Planner is absent until landing selection', () => {
-  const html = renderToStaticMarkup(React.createElement(MainPanel, {
-    sites: [site], mission: { windowStart: '2027-08-01', windowEnd: '2027-08-10', daysOnSurface: 3, horizonClearance: 0.3 },
+test('Route Planner defaults to the first compared site and stays out of Profiles', () => {
+  const render = sites => renderToStaticMarkup(React.createElement(MainPanel, {
+    sites, mission: { windowStart: '2027-08-01', windowEnd: '2027-08-10', daysOnSurface: 3, horizonClearance: 0.3 },
     power: { minSunlight: 60, maxNight: 96 }, comms: { minEarthContact: 45, maxCommsGap: 240 },
     terrain: { maxSlope: 8 }, onSiteAdd() {}, onSiteRename() {}, onSiteDelete() {},
   }));
+  const html = render([site]);
   assert.match(html, /Double-click a site to choose landing/);
-  assert.doesNotMatch(html, /id="tab-route"|aria-label="Tourist route"|Plan tourist route from this landing/);
+  assert.match(html, /id="tab-route"/);
+  const profiles = html.slice(html.indexOf('id="panel-profiles"'), html.indexOf('id="panel-map"'));
+  assert.doesNotMatch(profiles, /aria-label="Tourist route"|Plan tourist route from this landing/);
+  assert.doesNotMatch(render([{ ...site, enabled: false }]), /id="tab-route"/);
 });
 
 test('elevation changes interpolate cell centres, preserve signed deltas and reject missing coverage', () => {
