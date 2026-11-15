@@ -6,7 +6,7 @@ import os
 import numpy as np
 import pytest
 
-from app.Functions.rover_path import MOON_RADIUS_M, plan_rover_route
+from src.rover_path import MOON_RADIUS_M, plan_rover_route
 from src.lunar_horizon_dem import DEM
 from tools.lola_fixture import write_dataset
 

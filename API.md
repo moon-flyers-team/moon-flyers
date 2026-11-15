@@ -431,23 +431,64 @@ is repeated at the end, giving two more request entries than the number of inter
     { "name": "Waypoint 1", "latitude_deg": -88.1, "longitude_deg": 12.5 },
     { "id": "malapert_massif" }
   ],
-  "step_m": 100
+  "step_m": 100,
+  "planner": "terrain",
+  "rover": { "max_slope_deg": 15, "cell_size_m": 20, "padding_m": 1000 }
 }
 ```
 
 Use the same catalogue/custom `SiteReference` format as comparison. Custom UUIDs remain
 local. The frontend allows up to 98 intermediate stops, reserving start and return entries.
 FastAPI accepts 2–100 entries and a positive `step_m` (default 100 metres).
-The response contains `method: "straight_line"`, resolved `waypoints`, `legs`
-(`from_index`, `to_index`, `distance_m`), `total_distance_m`, and a densified `path`
-(`latitude_deg`, `longitude_deg`, cumulative `distance_m`, nullable `waypoint_index`).
-The current method uses great-circle segments and does not account for terrain, slope,
-or shadow. It does not optimize waypoint order or score mission criteria. The frontend
-renders the returned path and invalidates it whenever draft waypoints change.
-This endpoint exists in FastAPI but is not implemented by the standalone Node mock.
 
-Route-table elevation changes are calculated independently in the frontend from the bundled
-LOLA elevation grid, because `/route` currently supplies no terrain elevations. Each signed
-metre difference is destination elevation minus previous waypoint elevation (including the
-return leg). Missing coverage shows a dash. These approximate ~792 m samples are independent
-of the route service and do not establish terrain-aware routing or cumulative ascent.
+`planner` is `straight_line` (default) or `terrain`; `rover` is optional and only used by
+`terrain`.
+
+- **`straight_line`** — unchanged existing behavior. `method: "straight_line"`, great-circle
+  segments densified every `step_m` metres, `status: "not_evaluated"`, `elevation_m: null`.
+- **`terrain`** — bounded A* over the LOLA DEMs mounted at `LOLA_DEM_DIR`, one point per
+  planned grid cell, `method: "astar_terrain"`, `terrain_source: "lola_dem"`, DEM
+  `elevation_m` per point. Returns **503** when no dataset is mounted (it never substitutes
+  flat or synthetic terrain) and 422 for geometry or limit problems. Terrain results are
+  suggested candidate routes at the stated resolution, not validated driving instructions:
+  no travel time, energy, illumination, communications or turning model.
+
+Response fields: `method`, `status`, `reason`, `failing_leg`, `terrain_source`, `rover`,
+resolved `waypoints`, `legs` (`from_index`, `to_index`, `distance_m`, `status`, `reason`,
+terrain metrics, `expanded_nodes`, `cost`, `start_check`, `goal_check`), `total_distance_m`,
+and a densified `path` (`latitude_deg`, `longitude_deg`, cumulative `distance_m`,
+`elevation_m`, nullable `waypoint_index`).
+
+`status` is `route_found`, `start_blocked`, `goal_blocked`, `no_route`,
+`search_limit_reached`, or `not_evaluated` for `straight_line`. On a failed terrain leg,
+`failing_leg` names it, that leg reports `distance_m: null`, and `path`/`total_distance_m`
+keep only the planned prefix. `start_check`/`goal_check` list `blocked_reasons`
+(`missing_elevation`, `unknown_slope`, `terrain_slope_exceeds_limit`, `excluded_by_mask`) and
+`nearby_terrain_candidates`, which pass node terrain checks only — they are not a route and
+never replace the endpoints. Neither planner optimizes waypoint order or scores mission
+criteria. The frontend renders the returned path and invalidates it whenever draft waypoints
+change. This endpoint is not implemented by the standalone Node mock.
+
+`rover` fields (`max_slope_deg` 15, `max_uphill_grade_deg`/`max_downhill_grade_deg` null → the
+same limit, `cell_size_m` 20, `padding_m` 1000, `climb_weight` 0, `slope_weight` 1,
+`max_region_radius_m` 25000 capped at 50000) are illustrative defaults, not a vehicle
+specification; limits describe the intended rover. A request may sample at most 1,000,000
+terrain cells across all legs (422 beyond that), so very long multi-stop routes must be split
+or run at a larger `cell_size_m`.
+
+**Frontend work still needed to use `terrain`:** widen `RouteResponse.method` to
+`'straight_line' | 'astar_terrain'`, add `status`/`reason`/`failing_leg`/`terrain_source`/
+`rover` and the new leg/path fields, send `planner` (and optional `rover`), render a blocked
+or failed leg from `legs[].status`/`reason` instead of a partial path, and surface the 503
+"no dataset mounted" response. The existing elevation-change column can then read
+`path[].elevation_m` instead of the bundled ~792 m grid. Terrain requests are slower than
+straight lines (roughly 0.05 s for 1.5 km up to ~2 s for 9 km at 20 m cells on smooth
+synthetic terrain), so keep the existing loading state and prefer 40–60 m cells for
+multi-stop round trips.
+
+Route-table elevation changes are currently calculated independently in the frontend from the
+bundled LOLA elevation grid, because the `straight_line` response supplies no terrain
+elevations. Each signed metre difference is destination elevation minus previous waypoint
+elevation (including the return leg). Missing coverage shows a dash. These approximate
+~792 m samples do not establish terrain-aware routing or cumulative ascent; a `terrain`
+response supplies sampled `elevation_m` per path point instead.

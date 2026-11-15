@@ -227,27 +227,68 @@ The app does not rank; the user chooses the site and landing time from the `/com
 ## 4. `GET /health`
 Returns `{"status": "ok"}`.
 
-## 5. `POST /route`: a detailed path through several sites (MOCK)
+## 5. `POST /route`: a detailed path through several sites
 ```json
 { "waypoints": [{ "id": "shackleton_rim" }, { "id": "connecting_ridge" },
                 { "name": "Spot", "latitude_deg": -89.0, "longitude_deg": 10.0 }],
-  "step_m": 100 }
+  "step_m": 100,
+  "planner": "terrain",
+  "rover": { "max_slope_deg": 15, "cell_size_m": 20, "padding_m": 1000 } }
 ```
-Response:
+Response (abridged):
 ```json
-{ "method": "straight_line",
+{ "method": "astar_terrain", "status": "route_found", "reason": null, "failing_leg": null,
+  "terrain_source": "lola_dem", "rover": { "max_slope_deg": 15.0, "cell_size_m": 20.0, "...": "..." },
   "waypoints": [{ "id": "shackleton_rim", "name": "...", "...": "..." }],
-  "legs": [{ "from_index": 0, "to_index": 1, "distance_m": 12345.6 }],
-  "total_distance_m": 23456.7,
-  "path": [{ "latitude_deg": -89.667, "longitude_deg": 129.783, "distance_m": 0.0, "waypoint_index": 0 },
-           { "latitude_deg": -89.66, "longitude_deg": 130.1, "distance_m": 100.0, "waypoint_index": null }] }
+  "legs": [{ "from_index": 0, "to_index": 1, "distance_m": 1234.5, "status": "route_found",
+             "terrain_distance_m": 1240.1, "elevation_gain_m": 8.2, "elevation_loss_m": 3.1,
+             "max_terrain_slope_deg": 7.4, "max_uphill_grade_deg": 6.0, "max_downhill_grade_deg": 5.1,
+             "expanded_nodes": 5123, "cost": 1502.9,
+             "start_check": { "passable": true, "blocked_reasons": [], "nearby_terrain_candidates": [] },
+             "goal_check": { "passable": true, "blocked_reasons": [], "nearby_terrain_candidates": [] } }],
+  "total_distance_m": 1234.5,
+  "path": [{ "latitude_deg": -89.667, "longitude_deg": 129.783, "distance_m": 0.0,
+             "elevation_m": -1812.4, "waypoint_index": 0 }] }
 ```
 - Waypoints (2–100, same shape as `site` elsewhere) are visited in the given order.
-- `path` has a point at least every `step_m` metres (default 100); `waypoint_index` marks the
-  requested waypoints. `distance_m` is cumulative from the first waypoint.
-- **Mock:** `method: "straight_line"` means great-circle segments on a 1737.4 km sphere; terrain,
-  slope and shadow are ignored. A real planner will keep this shape and change `method`.
-- 404 for an unknown site id; 422 for fewer than 2 waypoints or more than 100,000 path points.
+- `planner` is `straight_line` (default) or `terrain`.
+
+**`straight_line`** (existing behavior, unchanged): great-circle segments on the 1737.4 km
+sphere, densified to a point at least every `step_m` metres (default 100). `method` is
+`straight_line`, `status` is `not_evaluated`, `elevation_m`, `terrain_source`, `rover` and all
+terrain diagnostics are null. Terrain, slope and shadow are ignored.
+
+**`terrain`** plans every leg with the bounded A* planner in `src/rover_path.py` over the
+LOLA DEMs mounted at `LOLA_DEM_DIR`: one `path` point per planned grid cell, `elevation_m`
+sampled from the DEM, and `method` is `astar_terrain`. `step_m` does not apply; spacing is
+`rover.cell_size_m` (20 m default, not a claim of source-map resolution).
+- `rover`: `max_slope_deg` (15) bounds the estimated terrain gradient; `max_uphill_grade_deg`
+  and `max_downhill_grade_deg` bound each directed move and default to it; `padding_m` (1000)
+  is detour space each side of the corridor; `climb_weight` (0) and `slope_weight` (1) are
+  route preferences in equivalent metres, not energy or risk models; `max_region_radius_m`
+  (25000, cap 50000) rejects routes that are not local. Defaults are illustrative, not a
+  vehicle specification — the rover owner must choose the real limits.
+- `status`: `route_found`, `start_blocked`, `goal_blocked`, `no_route`,
+  `search_limit_reached`. On failure `failing_leg` names the leg, `legs` keeps the failed leg
+  with `distance_m: null`, and `path`/`total_distance_m` keep only the planned prefix.
+  `start_check`/`goal_check` explain blocking (`missing_elevation`, `unknown_slope`,
+  `terrain_slope_exceeds_limit`, `excluded_by_mask`) and may list
+  `nearby_terrain_candidates`: passable cells only, never a route or proof of access.
+- `cost` = `distance_m` + slope/climb preference charges; `terrain_distance_m` follows the
+  elevation profile. Neither is measured driving distance, and no travel time, energy,
+  illumination or communications model is included.
+- `distance_m` is cumulative along `path`; `waypoint_index` marks the requested waypoints.
+- 404 for an unknown site id; 422 for invalid waypoints, limits or geometry (leg beyond
+  `max_region_radius_m`, region beyond the cell budget), too many path points, or more than
+  `1_000_000` sampled terrain cells across the request; **503 when `LOLA_DEM_DIR` is not set**
+  (terrain is never substituted). Missing DEM coverage inside a mounted dataset reduces to
+  blocked cells and an explicit status, not invented terrain.
+- The `X-Moon-Flyers-Data-Source` header keeps describing ephemerides, not terrain;
+  `terrain_source` reports DEM use per response.
+- Timing on the smooth synthetic fixture: about 50 ms for a 1.5 km leg, 1.9 s for a 9 km
+  leg at `cell_size_m` 20 with 1000 m padding, and 210 ms for the same 9 km leg at 60 m.
+  Rougher real terrain expands more nodes, and costs add up across legs, so keep generous
+  request timeouts and prefer 40–60 m cells for long multi-stop round trips.
 
 ## 6. `POST /recommended-sites`: published nearby points of interest
 

@@ -1,7 +1,7 @@
 # Rover path planner — algorithm review
 
 Prepared 2026-11-15. This document is the standalone algorithm handoff for review.
-Implementation: `backend/app/Functions/rover_path.py`.
+Implementation: `backend/src/rover_path.py`.
 Tests: `backend/app/Functions/Tests/test_rover_path.py` and
 `backend/tests/test_rover_dem.py`.
 
@@ -222,7 +222,7 @@ Run Python with `backend` as the working directory/import root:
 ```python
 import os
 from src.lunar_horizon_dem import DEM
-from app.Functions.rover_path import plan_rover_route
+from src.rover_path import plan_rover_route
 
 # Read existing host files. No network calls or mock fallback.
 dem = DEM(data_dir=os.environ['LOLA_DEM_DIR'])
@@ -259,7 +259,7 @@ this version does not automatically inflate obstacles or validate turning geomet
 Run from the repository root with the project's Python environment:
 
 ```sh
-python -m pytest backend/app/Functions/Tests/test_rover_path.py backend/tests/test_rover_dem.py -v
+python -m pytest backend/app/Functions/Tests/test_rover_path.py backend/tests/test_rover_dem.py backend/tests/test_route.py -v
 ```
 
 There are 24 focused tests. They check known distances, terrain gradients versus
@@ -279,9 +279,26 @@ The teammate reviewing this should check:
 4. Are the prototype slope weight of 1 and illustrative ascent weight of 2 suitable preferences?
 5. Are the route statuses and metrics sufficient for a future map endpoint?
 
-No endpoint/schema changes are included. The functions currently live in the
-calculation package `app/Functions`; backend deployment must package this code before
-an endpoint can import it (the existing Dockerfile copies only `src`).
+## API integration (done)
+
+The planner now lives in `backend/src/rover_path.py`, so the existing Dockerfile (which
+copies `src`) deploys it and the earlier packaging blocker is gone. `POST /route` exposes
+it through `src/services/route.py`:
+
+- `planner: "straight_line"` (default) keeps the previous mock contract exactly.
+- `planner: "terrain"` plans every leg with `plan_rover_route` over the DEMs mounted at
+  `LOLA_DEM_DIR` (opened once per directory and shared with the horizon service), returns
+  `elevation_m` per path point plus per-leg statuses/metrics/endpoint checks, and returns
+  **503** when no dataset is mounted rather than substituting terrain.
+- Rover limits come from the request's `rover` block, are echoed in the response, and are
+  422 when the planner rejects them; per-request work is bounded by a 1,000,000-cell cap
+  across all legs plus the existing planner cell/expansion budgets.
+
+Not implemented (deliberate): exclusion masks/keep-out buffers, footprint inflation,
+waypoint-order optimization, travel time/energy/illumination/communications constraints,
+and any automatic fallback when terrain blocks a leg. `tests/test_route.py` covers the
+contract on the synthetic LOLA fixture; the opt-in real-raster test below remains the
+scientific check.
 
 ## Real LOLA check before API integration
 
