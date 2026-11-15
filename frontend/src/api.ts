@@ -1,7 +1,8 @@
 import type {
   SiteDefinition, SiteReference, SiteAnalysisResponse, ComparisonResult,
   LandingWindow, Constraints, LandingSite, MapHeatmapsParams, MapHeatmapsResponse,
-  RouteParams, RouteResponse, RecommendedSitesParams, RecommendedSitesResponse,
+  RouteParams, RouteResponse, RouteStopsParams, RouteStopsResponse, RecommendedSitesParams,
+  RecommendedSitesResponse,
 } from './types';
 
 const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
@@ -84,9 +85,17 @@ export const api = {
     post<LandingWindow[]>('/landing-windows', { candidate_step_hours: 6, limit: 5, ...params }, signal),
   getRoute: (params: RouteParams, signal?: AbortSignal) =>
     // Terrain A* over LOLA. 60 m cells keep multi-stop loops inside the backend cell budget;
-    // 50 km (the backend cap) lets legs reach the 40 km recommended-site radius.
+    // 50 km (the backend cap) lets legs reach the 40 km recommended-site radius. The 20 deg
+    // slope limit blocks cells the rover may not enter; it is unrelated to the mission's
+    // 8 deg site-slope constraint used by the comparison fit.
     post<RouteResponse>('/route', {
-      planner: 'terrain', rover: { cell_size_m: 60, max_region_radius_m: 50_000 }, ...params,
+      planner: 'terrain', rover: { max_slope_deg: 20, cell_size_m: 60, max_region_radius_m: 50_000 },
+      ...params,
+    }, signal),
+  // Preflight for the stops list: no legs are planned, so a blocked stop is visible immediately.
+  getRouteStops: (params: RouteStopsParams, signal?: AbortSignal) =>
+    post<RouteStopsResponse>('/route/stops', {
+      rover: { max_slope_deg: 20, cell_size_m: 60, max_region_radius_m: 50_000 }, ...params,
     }, signal),
   getRecommendedSites: (params: RecommendedSitesParams, signal?: AbortSignal) =>
     post<RecommendedSitesResponse>('/recommended-sites', params, signal),

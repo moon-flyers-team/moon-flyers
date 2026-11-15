@@ -57,8 +57,22 @@ test('round-trip route preserves the chosen stop order and repeats the landing r
   assert.equal(calls[0].init.method, 'POST');
   assert.equal(calls[0].init.signal, signal);
   assert.deepEqual(JSON.parse(calls[0].init.body), {
-    planner: 'terrain', rover: { cell_size_m: 60, max_region_radius_m: 50_000 },
+    planner: 'terrain',
+    rover: { max_slope_deg: 20, cell_size_m: 60, max_region_radius_m: 50_000 },
     waypoints: [landingSite, ...stops, landingSite],
+  });
+});
+
+test('stop preflight posts every stop with the same rover limits', async () => {
+  const calls = capture({ stops: [] });
+  const signal = new AbortController().signal;
+  const waypoints = [{ id: site.id }, { name: 'Stop 1', latitude_deg: -88, longitude_deg: 5 }];
+  await api.getRouteStops({ waypoints }, signal);
+  assert.ok(calls[0].url.pathname.endsWith('/route/stops'));
+  assert.equal(calls[0].init.signal, signal);
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    rover: { max_slope_deg: 20, cell_size_m: 60, max_region_radius_m: 50_000 },
+    waypoints,
   });
 });
 

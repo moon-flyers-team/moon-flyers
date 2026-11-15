@@ -84,3 +84,52 @@ test('POI client sends only landing reference and optional radius, preserving ab
     assert.deepEqual(JSON.parse(calls[1].init.body), { site: { id: site.id } });
   } finally { globalThis.fetch = original; }
 });
+
+const stopCheck = (index, extra = {}) => ({
+  index, latitude_deg: -89, longitude_deg: 0, elevation_m: 100, terrain_slope_deg: 3,
+  max_slope_deg: 20, passable: true, blocked_reasons: [], nearby_terrain_candidates: [], ...extra,
+});
+const steepCheck = (index, candidates) => stopCheck(index, {
+  terrain_slope_deg: 21.4, passable: false, blocked_reasons: ['terrain_slope_exceeds_limit'],
+  nearby_terrain_candidates: candidates,
+});
+const candidate = (offset_m, slope, lat = -89.01, lon = 0.02) => ({
+  grid_cell: [0, 0], latitude_deg: lat, longitude_deg: lon, elevation_m: 120,
+  terrain_slope_deg: slope, offset_m,
+});
+
+test('an impractical stop is described before a route is calculated', async () => {
+  const { stopChipText, stopChipTitle, snapTarget } = await server.ssrLoadModule('/src/TouristRoutePanel.tsx');
+  assert.equal(stopChipText(stopCheck(1)), 'Slope 3°');
+  assert.equal(stopChipText(steepCheck(1, [candidate(120, 2)])), 'Not practical · 21°');
+  assert.match(stopChipTitle(steepCheck(1, [])), /Not practical for a 20° rover: terrain is steeper/);
+  assert.equal(snapTarget(stopCheck(1)), null);
+  assert.equal(snapTarget(steepCheck(1, [candidate(400, 2), candidate(120, 3)])).offset_m, 120);
+});
+
+test('a map pick on steep terrain is snapped to the nearest workable cell', async () => {
+  const { snapPickedStops } = await server.ssrLoadModule('/src/TouristRoutePanel.tsx');
+  const picked = { id: 'picked', name: 'Waypoint 1', latitude_deg: -89, longitude_deg: 0, enabled: true };
+  const published = { id: 'poi:iau-5450', name: 'Crater', latitude_deg: -89, longitude_deg: 0, enabled: true };
+  const stops = [stopCheck(0), steepCheck(1, [candidate(120, 2)]), steepCheck(2, [candidate(90, 4)])];
+
+  const pickedResult = snapPickedStops([picked, published], stops, new Set(['picked']));
+  assert.equal(pickedResult.waypoints[0].latitude_deg, -89.01);
+  assert.equal(pickedResult.waypoints[0].longitude_deg, 0.02);
+  assert.deepEqual(pickedResult.moved, [{ id: 'picked', offset_m: 120, terrain_slope_deg: 2 }]);
+
+  // A published stop keeps its coordinates; the user chooses to move it explicitly.
+  const publishedResult = snapPickedStops([published], stops.slice(0, 2), new Set());
+  assert.deepEqual(publishedResult.moved, []);
+  assert.equal(publishedResult.waypoints[0].latitude_deg, -89);
+});
+
+test('the panel preflights stops and sends the routing slope limit', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../src/TouristRoutePanel.tsx', import.meta.url), 'utf8');
+  assert.match(source, /api\.getRouteStops\(/);
+  assert.match(source, /snapPickedStops\(/);
+  const client = await readFile(new URL('../src/api.ts', import.meta.url), 'utf8');
+  assert.match(client, /max_slope_deg: 20/);
+  assert.match(client, /\/route\/stops/);
+});

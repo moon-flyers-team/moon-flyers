@@ -89,7 +89,47 @@ export interface RouteParams {
   waypoints: SiteReference[];
   step_m?: number;
   planner?: 'straight_line' | 'terrain';
-  rover?: { max_slope_deg?: number; cell_size_m?: number; padding_m?: number; max_region_radius_m?: number };
+  rover?: {
+    max_slope_deg?: number; cell_size_m?: number; padding_m?: number; max_region_radius_m?: number;
+    climb_weight?: number; slope_weight?: number;
+    max_uphill_grade_deg?: number | null; max_downhill_grade_deg?: number | null;
+  };
+}
+export type RouteStatus = 'not_evaluated' | 'route_found' | 'start_blocked' | 'goal_blocked'
+  | 'no_route' | 'search_limit_reached' | 'region_too_large';
+// A cell that passes the planner's node checks near a blocked stop. Not a route or proof of access.
+export interface TerrainCandidate {
+  grid_cell: number[];
+  latitude_deg: number;
+  longitude_deg: number;
+  elevation_m: number;
+  terrain_slope_deg: number;
+  offset_m: number;
+}
+// Terrain usability of one stop, evaluated once and reused by every leg that touches it.
+export interface StopCheck {
+  index: number;
+  latitude_deg: number;
+  longitude_deg: number;
+  elevation_m: number | null;
+  terrain_slope_deg: number | null;
+  max_slope_deg: number;
+  passable: boolean;
+  blocked_reasons: string[];
+  nearby_terrain_candidates: TerrainCandidate[];
+}
+export interface RouteStopsParams { waypoints: SiteReference[]; rover?: RouteParams['rover'] }
+export interface RouteStopsResponse { stops: StopCheck[] }
+export interface RouteSummary {
+  planned_legs: number;
+  failed_legs: number;
+  distance_m: number;
+  elevation_gain_m: number;
+  elevation_loss_m: number;
+  max_terrain_slope_deg: number | null;
+  cell_size_m: number;
+  padding_m: number;
+  max_slope_deg: number;
 }
 export interface RoutePoint {
   latitude_deg: number;
@@ -101,14 +141,17 @@ export interface RoutePoint {
 }
 // distance_m is null for a terrain leg that could not be planned.
 export interface RouteLeg {
-  from_index: number; to_index: number; distance_m: number | null; status?: string; reason?: string | null;
+  from_index: number; to_index: number; distance_m: number | null; status?: RouteStatus; reason?: string | null;
+  padding_m?: number | null;
 }
 export interface RouteResponse {
   method: 'straight_line' | 'astar_terrain';
-  status?: string;
+  status?: RouteStatus;
   reason?: string | null;
   // Legs without a terrain route; every leg is still attempted and drawn.
   failed_legs?: number[];
+  stops?: StopCheck[];
+  summary?: RouteSummary | null;
   waypoints: (SiteDefinition & { id: string | null })[];
   legs: RouteLeg[];
   total_distance_m: number;

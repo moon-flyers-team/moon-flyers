@@ -10,7 +10,8 @@ import { useRequest } from './useRequest';
 import { elevationChange, loadElevations } from './map/elevations';
 import type { ElevationGrid } from './map/elevations';
 import { formatUtc } from './time';
-import type { LandingSite, PoiCategory, PointOfInterest, RecommendedSitesResponse, RouteResponse } from './types';
+import type { LandingSite, PoiCategory, PointOfInterest, RecommendedSitesResponse, RouteResponse,
+  StopCheck } from './types';
 
 const MAX_ZOOM = 600;
 // FastAPI accepts 100 entries, including the repeated landing at start and end.
@@ -68,6 +69,52 @@ function niceKm(km: number): number {
 
 const km = (m: number | null) => m == null || !Number.isFinite(m) ? '—' : `${(m / 1000).toFixed(1)} km`;
 
+// One line describing a stop's terrain, shared by the table chip and its accessible label.
+export function stopChipText(check: StopCheck): string {
+  if (!check.passable) {
+    const slope = check.terrain_slope_deg == null ? null : Math.round(check.terrain_slope_deg);
+    return slope == null ? 'Not practical' : `Not practical · ${slope}°`;
+  }
+  const slope = check.terrain_slope_deg == null ? null : Math.round(check.terrain_slope_deg);
+  return slope == null ? 'Slope unknown' : `Slope ${slope}°`;
+}
+
+// A blocked stop can be moved onto a nearby cell that passes the same node checks.
+export function snapTarget(check: StopCheck | undefined): StopCheck['nearby_terrain_candidates'][number] | null {
+  if (!check || check.passable || !check.nearby_terrain_candidates.length) return null;
+  return [...check.nearby_terrain_candidates].sort((a, b) => a.offset_m - b.offset_m)[0];
+}
+
+const BLOCK_REASON: Record<string, string> = {
+  terrain_slope_exceeds_limit: 'terrain is steeper than the routing limit',
+  missing_elevation: 'no elevation data at this point',
+  unknown_slope: 'the slope cannot be estimated here',
+  excluded_by_mask: 'this point is inside an excluded area',
+};
+
+export function stopChipTitle(check: StopCheck): string {
+  const slope = check.terrain_slope_deg == null ? 'unknown' : `${check.terrain_slope_deg.toFixed(1)}°`;
+  if (check.passable) return `Terrain slope ${slope} at the planner's resolution (limit ${check.max_slope_deg}°)`;
+  const reasons = check.blocked_reasons.map(reason => BLOCK_REASON[reason] ?? reason).join('; ');
+  return `Not practical for a ${check.max_slope_deg}° rover: ${reasons || 'failed a terrain check'} (slope ${slope})`;
+}
+
+// Map picks are moved to the nearest cell that passes the checks before a route is calculated.
+// Published stops (recommended sites, the landing) keep their coordinates: their position is data.
+export function snapPickedStops(waypoints: LandingSite[], stops: StopCheck[], pickedIds: Set<string>) {
+  const byIndex = new Map(stops.map(stop => [stop.index, stop]));
+  const moved: { id: string; offset_m: number; terrain_slope_deg: number }[] = [];
+  const next = waypoints.map((waypoint, i) => {
+    const check = byIndex.get(i + 1);
+    if (!pickedIds.has(waypoint.id) || !check || check.passable) return waypoint;
+    const target = snapTarget(check);
+    if (!target) return waypoint;
+    moved.push({ id: waypoint.id, offset_m: target.offset_m, terrain_slope_deg: target.terrain_slope_deg });
+    return { ...waypoint, latitude_deg: target.latitude_deg, longitude_deg: target.longitude_deg };
+  });
+  return { waypoints: next, moved };
+}
+
 function download(content: string, filename: string, mime: string) {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
   const a = document.createElement('a');
@@ -124,6 +171,9 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
   const [waypoints, setWaypoints] = useState<LandingSite[]>([]);
   const [submitted, setSubmitted] = useState<LandingSite[] | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  // Map picks may be moved onto passable terrain; remember which ones moved and by how much.
+  const pickedIds = useRef(new Set<string>());
+  const [snapped, setSnapped] = useState<Record<string, { offset_m: number; terrain_slope_deg: number }>>({});
   const request = useMemo(() => submitted !== waypoints ? null
     : (signal: AbortSignal) => api.getRoute({
       waypoints: [siteReference(landingSite), ...waypoints.map(siteReference), siteReference(landingSite)],
@@ -131,11 +181,57 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
   const result = useRequest(request, 0);
   const route = result.data;
   const loading = result.loading;
+  // Preflight the stops so an impractical location is visible before a route is calculated.
+  const stopRequest = useMemo(() => !waypoints.length ? null
+    : (signal: AbortSignal) => api.getRouteStops({
+      waypoints: [siteReference(landingSite), ...waypoints.map(siteReference)],
+    }, signal), [landingSite, waypoints]);
+  const stopChecks = useRequest(stopRequest, 350);
+  const checksByIndex = useMemo(() => {
+    const map = new Map<number, StopCheck>();
+    // The response is authoritative once calculated; preflight data covers the draft.
+    for (const check of route?.stops ?? stopChecks.data?.stops ?? []) map.set(check.index, check);
+    return map;
+  }, [route, stopChecks.data]);
+  const blockedStops = useMemo(
+    () => [...checksByIndex.values()].filter(check => !check.passable),
+    [checksByIndex]);
   // Draft markers are preview-only: no path or distances are invented before the response.
   const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
     waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite], path: [], legs: [], total_distance_m: 0,
   }), [landingSite, waypoints]);
   const addedPoiIds = useMemo(() => new Set(waypoints.map(w => w.id)), [waypoints]);
+  // A map pick that lands on impractical terrain is moved to the nearest workable cell, so the
+  // first calculation is not spent explaining a stop the user did not mean to place. Published
+  // stops (recommended sites) keep their coordinates; the landing belongs to the sidebar.
+  useEffect(() => {
+    const stops = stopChecks.data?.stops;
+    if (!stops?.length || !pickedIds.current.size) return;
+    const { waypoints: snappedWaypoints, moved } = snapPickedStops(waypoints, stops, pickedIds.current);
+    if (!moved.length) return;
+    moved.forEach(move => pickedIds.current.delete(move.id));
+    setWaypoints(snappedWaypoints);
+    setSnapped(previous => {
+      const next = { ...previous };
+      moved.forEach(move => { next[move.id] = { offset_m: move.offset_m, terrain_slope_deg: move.terrain_slope_deg }; });
+      return next;
+    });
+    setAnnouncement(`${moved.length === 1 ? 'Stop' : `${moved.length} stops`} moved to the nearest `
+      + `passable terrain, about ${Math.round(moved[0].offset_m)} m from the picked point.`);
+  }, [stopChecks.data, waypoints]);
+  // Move a blocked stop to the closest cell that passes the same checks; the landing is App-owned.
+  function snapStop(index: number) {
+    const target = snapTarget(checksByIndex.get(index));
+    if (!target) return;
+    if (index === 0) {
+      setAnnouncement('The landing site is owned by the sidebar; move it there.');
+      return;
+    }
+    setWaypoints(previous => previous.map((w, i) => i === index - 1
+      ? { ...w, latitude_deg: target.latitude_deg, longitude_deg: target.longitude_deg } : w));
+    setAnnouncement(`Moved stop ${index} ${Math.round(target.offset_m)} m to a `
+      + `${target.terrain_slope_deg.toFixed(0)}° cell. Recalculate to update the route.`);
+  }
   function pushWaypoint(next: LandingSite): boolean {
     if (waypoints.length >= MAX_WAYPOINTS) {
       setAnnouncement(`Maximum of ${MAX_WAYPOINTS} waypoints reached. Remove a stop to add another.`);
@@ -145,8 +241,12 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
     return true;
   }
   function addWaypoint(coordinates: Coordinates) {
-    if (pushWaypoint({ ...coordinates, id: crypto.randomUUID(), custom: true, enabled: true,
-      name: `Waypoint ${waypoints.length + 1}` })) setAnnouncement('');
+    const id = crypto.randomUUID();
+    if (pushWaypoint({ ...coordinates, id, custom: true, enabled: true,
+      name: `Waypoint ${waypoints.length + 1}` })) {
+      pickedIds.current.add(id);
+      setAnnouncement('');
+    }
   }
   // Recommended sites become ordinary custom waypoints, so routing and reordering are unchanged.
   function togglePoi(poi: PointOfInterest) {
@@ -218,6 +318,13 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
         {nearby.data && <span>{nearby.data.recommendations.length} nearby POIs: add them from the list or the amber map markers.</span>}
       </div>
       {loading && <p className="request-status" role="status">Calculating route…</p>}
+      {stopChecks.error && <p className="request-status">Terrain check unavailable: {stopChecks.error}</p>}
+      {blockedStops.length > 0 && <div className="request-error" role="alert">
+        {blockedStops.length} of {checksByIndex.size} stops are not practical for this rover:{' '}
+        {blockedStops.map(check => `stop ${check.index} (${check.terrain_slope_deg == null
+          ? 'slope unknown' : `${Math.round(check.terrain_slope_deg)}°`})`).join(', ')}.
+        {' '}Move a stop to a workable cell or raise the slope limit.
+      </div>}
       {route?.failed_legs?.length ? <div className="request-error" role="status">
         No terrain route for {route.failed_legs.length} of {route.legs.length} leg{route.legs.length !== 1 ? 's' : ''} (dashed
         straight lines only connect the stops). {route.reason}</div> : null}
@@ -231,7 +338,9 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
         pois={(nearby.data?.recommendations ?? []).map(r => r.poi).filter(p => !addedPoiIds.has(poiWaypointId(p)))}
         onPoiPick={togglePoi}
         sidePanel={<RecommendedStops data={nearby.data} radiusKm={poiRadiusKm}
-          isAdded={poi => addedPoiIds.has(poiWaypointId(poi))} onToggle={togglePoi} />} />
+          isAdded={poi => addedPoiIds.has(poiWaypointId(poi))} onToggle={togglePoi} />}
+        checks={checksByIndex} onStopSnap={snapStop}
+        snapped={snapped} />
     </section>
   );
 }
@@ -277,11 +386,14 @@ function RecommendedStops({ data, radiusKm, isAdded, onToggle }: {
   );
 }
 
-function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapPick, calculated, pois, onPoiPick, sidePanel }: {
+function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapPick, calculated, pois,
+  onPoiPick, sidePanel, checks, onStopSnap, snapped }: {
   onWaypointRemove: (index: number) => void;
   route: RouteResponse; elevations?: ElevationGrid; onWaypointMove: (from: number, to: number) => void;
   onMapPick: (coordinates: Coordinates) => void; calculated: boolean;
   pois: PointOfInterest[]; onPoiPick: (poi: PointOfInterest) => void; sidePanel: ReactNode;
+  checks: Map<number, StopCheck>; onStopSnap: (index: number) => void;
+  snapped: Record<string, { offset_m: number; terrain_slope_deg: number }>;
 }) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -530,6 +642,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
             {route.waypoints.map((wp, i) => {
               const editable = i > 0 && !(isLoop && i === route.waypoints.length - 1);
               const change = i > 0 ? elevationChange(elevations, route.waypoints[i - 1], wp) : null;
+              const check = checks.get(i);
+              const snap = snapTarget(check);
               return (
                 <tr key={i} className={active === i ? 'route-row--active' : ''} tabIndex={0}
                   data-wtype={editable ? 'stop' : 'base'} draggable={editable}
@@ -544,6 +658,16 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
                     <span className="route-dot" style={{ background: colorOf(i) }} />
                     <span>
                       {wp.name}
+                      {check && <span className={`route-chip${check.passable ? '' : ' route-chip--blocked'}`}
+                        title={stopChipTitle(check)}>{stopChipText(check)}</span>}
+                      {snap && <button className="ct-btn route-snap"
+                        title={`Move this stop to a ${snap.terrain_slope_deg.toFixed(0)}° cell about ${Math.round(snap.offset_m)} m away`}
+                        onClick={event => { event.stopPropagation(); onStopSnap(i); }}
+                        onKeyDown={event => event.stopPropagation()}>
+                        Move to workable cell
+                      </button>}
+                      {snapped[wp.id] && <span className="route-note">Moved {Math.round(snapped[wp.id].offset_m)} m
+                        from the picked point ({snapped[wp.id].terrain_slope_deg.toFixed(0)}° terrain)</span>}
                       <span className="route-location-details">
                         <span className="route-coordinates">{wp.latitude_deg.toFixed(4)}°, {wp.longitude_deg.toFixed(4)}°</span>
                         {editable && <button className="ct-btn" aria-label={`Remove waypoint ${i}`}
