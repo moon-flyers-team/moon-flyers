@@ -42,4 +42,8 @@ Read [experiment results](agent-task-audit-results.md) for the distinctions betw
 - No scientific/safety threshold changes, API redesign, new dependencies or global Pi/system configuration.
 - No edits to the user's uncommitted proposal/session/coworker documents.
 
+All experiment participants finished. Owned mock/Vite test servers and disposable browser
+sessions were stopped afterward; local worktrees and evidence logs remain for review. No
+background implementation agent is being left to make further changes.
+
 The team still needs to choose one problem at the morning sync. These repairs improve the existing tool and the reliability of what it demonstrates; they do not choose that problem for the team.
