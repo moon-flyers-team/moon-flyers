@@ -46,7 +46,7 @@ function capture(response = {}) {
 }
 
 test('round-trip route preserves the chosen stop order and repeats the landing reference', async () => {
-  const calls = capture({ method: 'straight_line', path: [] });
+  const calls = capture({ method: 'astar_terrain', path: [] });
   const landingSite = { id: site.id };
   const stops = Array.from({ length: 10 }, (_, index) => ({
     name: `Waypoint ${index + 1}`, latitude_deg: -88 + index / 100, longitude_deg: index,
@@ -57,7 +57,8 @@ test('round-trip route preserves the chosen stop order and repeats the landing r
   assert.equal(calls[0].init.method, 'POST');
   assert.equal(calls[0].init.signal, signal);
   assert.deepEqual(JSON.parse(calls[0].init.body), {
-    step_m: 100, waypoints: [landingSite, ...stops, landingSite],
+    planner: 'terrain', rover: { cell_size_m: 60, max_region_radius_m: 50_000 },
+    waypoints: [landingSite, ...stops, landingSite],
   });
 });
 

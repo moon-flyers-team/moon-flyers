@@ -83,7 +83,11 @@ export const api = {
   getLandingWindows: (params: LandingWindowsParams, signal?: AbortSignal) =>
     post<LandingWindow[]>('/landing-windows', { candidate_step_hours: 6, limit: 5, ...params }, signal),
   getRoute: (params: RouteParams, signal?: AbortSignal) =>
-    post<RouteResponse>('/route', { step_m: 100, ...params }, signal),
+    // Terrain A* over LOLA. 60 m cells keep multi-stop loops inside the backend cell budget;
+    // 50 km (the backend cap) lets legs reach the 40 km recommended-site radius.
+    post<RouteResponse>('/route', {
+      planner: 'terrain', rover: { cell_size_m: 60, max_region_radius_m: 50_000 }, ...params,
+    }, signal),
   getRecommendedSites: (params: RecommendedSitesParams, signal?: AbortSignal) =>
     post<RecommendedSitesResponse>('/recommended-sites', params, signal),
   health: (signal?: AbortSignal) => request<{ status: string }>('/health', { signal }),

@@ -85,16 +85,23 @@ export interface HeatmapLayer {
   max: number;
   values: (number | null)[];
 }
-export interface RouteParams { waypoints: SiteReference[]; step_m?: number }
+export interface RouteParams {
+  waypoints: SiteReference[];
+  step_m?: number;
+  planner?: 'straight_line' | 'terrain';
+  rover?: { max_slope_deg?: number; cell_size_m?: number; padding_m?: number; max_region_radius_m?: number };
+}
 export interface RoutePoint {
   latitude_deg: number;
   longitude_deg: number;
   distance_m: number;
   waypoint_index: number | null;
 }
-export interface RouteLeg { from_index: number; to_index: number; distance_m: number }
+// distance_m is null for a terrain leg that could not be planned.
+export interface RouteLeg { from_index: number; to_index: number; distance_m: number | null; status?: string }
 export interface RouteResponse {
-  method: 'straight_line';
+  method: 'straight_line' | 'astar_terrain';
+  status?: string;
   waypoints: (SiteDefinition & { id: string | null })[];
   legs: RouteLeg[];
   total_distance_m: number;

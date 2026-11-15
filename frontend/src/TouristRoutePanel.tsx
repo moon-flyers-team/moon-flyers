@@ -66,7 +66,7 @@ function niceKm(km: number): number {
   return [5, 2, 1].map(m => m * p).find(v => v <= km) ?? p;
 }
 
-const km = (m: number) => `${(m / 1000).toFixed(1)} km`;
+const km = (m: number | null) => m == null || !Number.isFinite(m) ? '—' : `${(m / 1000).toFixed(1)} km`;
 
 function download(content: string, filename: string, mime: string) {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
@@ -352,7 +352,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   );
   const scaleKm = niceKm((px / 5) * k / METRES_TO_SVG / 1000);
   const scalePx = scaleKm * 1000 * METRES_TO_SVG / k;
-  const cumulative = route.legs.reduce<number[]>((acc, l) => [...acc, acc[acc.length - 1] + l.distance_m], [0]);
+  const cumulative = route.legs.reduce<number[]>((acc, l) => [...acc, acc[acc.length - 1] + (l.distance_m ?? NaN)], [0]);
   const isLoop = route.waypoints.length > 2
     && route.waypoints[0].latitude_deg === route.waypoints[route.waypoints.length - 1].latitude_deg
     && route.waypoints[0].longitude_deg === route.waypoints[route.waypoints.length - 1].longitude_deg;
