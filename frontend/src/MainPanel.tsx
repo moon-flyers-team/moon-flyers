@@ -93,7 +93,6 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
           <div className="profiles-loading-popup" role="status" aria-live="polite" aria-atomic="true">
             <span className="profiles-loading-spinner" aria-hidden="true" />
             <strong>Loading site profiles…</strong>
-            <p>Fetching comparison and visibility data. This can take 10–30 seconds.</p>
           </div>
         </div>}
         {validation && !dateError && <div className="request-error" role="alert">{validation}</div>}
@@ -118,7 +117,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       {landingSite && <div className="main-body route-planner-body" id="panel-route" role="tabpanel"
         aria-labelledby="tab-route" hidden={activeTab !== 'route'}>
         <TouristRoutePanel key={`${landingSite.id}:${landingSite.latitude_deg}:${landingSite.longitude_deg}`}
-          landingSite={landingSite} landingUtc={landingUtc} onClose={() => { setLandingSiteId(null); setTab('profiles'); }} />
+          landingSite={landingSite} landingUtc={landingUtc} poiRadiusKm={mission.poiRadiusKm ?? 40} onClose={() => { setLandingSiteId(null); setTab('profiles'); }} />
       </div>}
     </main>
   );

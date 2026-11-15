@@ -15,10 +15,6 @@ SITES: list[Site] = [
          latitude_deg=-86.0, longitude_deg=0.0, notes="Near-side massif with good Earth view."),
     Site(id="im1_malapert_a", name="IM-1 Odysseus (Malapert A)", group="CLPS",
          latitude_deg=-80.13, longitude_deg=1.44, notes="Intuitive Machines IM-1 landing, 2024."),
-    Site(id="chandrayaan3_shiv_shakti", name="Chandrayaan-3 (Shiv Shakti point)", group="ISRO landing",
-         latitude_deg=-69.373, longitude_deg=32.319, notes="Chandrayaan-3 Vikram landing, 2023."),
-    Site(id="change6_apollo_basin", name="Chang'e-6 (Apollo basin)", group="CNSA landing",
-         latitude_deg=-41.64, longitude_deg=-153.99, notes="Far-side sample return, 2024. No Earth view."),
     # Published landing/candidate-region context first, then geographic references.
     # Feature centres below are NOT vetted touchdown sites or necessarily traversable.
     # Coordinates and the measured 40 km POI coverage are documented in docs/poi-sources.md (root).

@@ -204,8 +204,8 @@ export function MapPanel({ sites, landingSiteId, constraints, mission, active, v
       <div className="map-heading-title">
         <h2>South polar cap</h2>
         <span className="ct-info map-info-tip" tabIndex={0} role="img"
-          aria-label="80°S–90°S · Polar stereographic · East-positive longitude. Click map to add a site; Sun/Earth: reference averages, other heatmaps: mission analysis. Pinch/wheel: zoom; two-finger scroll/right-drag: pan; Shift+scroll: pan."
-          data-tip={'80°S–90°S · Polar stereographic · East-positive longitude\nClick map to add a site · Sun/Earth: reference averages · Other heatmaps: mission analysis\nPinch/wheel: zoom · Two-finger scroll/right-drag: pan · Shift+scroll: pan'}>i</span>
+          aria-label="Click map to add a site; Sun/Earth: reference averages, other heatmaps: mission analysis. Pinch/wheel: zoom; two-finger scroll/right-drag: pan; Shift+scroll: pan."
+          data-tip={'Click map to add a site · Sun/Earth: reference averages · Other heatmaps: mission analysis\nPinch/wheel: zoom · Two-finger scroll/right-drag: pan · Shift+scroll: pan'}>i</span>
       </div>
       <div className="map-zoom" role="group" aria-label="Map zoom">
         <button className="ct-btn" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => { setCamera(previous => zoomAt(previous, 0.5, previous)); setSelection(null); }}>−</button>
@@ -216,7 +216,6 @@ export function MapPanel({ sites, landingSiteId, constraints, mission, active, v
     </div>
     <div className="map-preamble">
     {showValidation && validation && <p className="request-error" role="alert">{validation}</p>}
-    {hasHeatmaps && <p className="map-hint">Basemap hidden. Clear heatmaps to restore it.</p>}
     {heatmaps.loading && <p className="request-status" role="status">Calculating mission overlays…</p>}
     {heatmaps.error && <p className="request-error" role="alert">
       {/^(404|405|501)\b/.test(heatmaps.error) ? 'Heatmaps unavailable: the backend does not yet implement POST /map/heatmaps.' : `Heatmap request failed: ${heatmaps.error}`}
@@ -232,7 +231,6 @@ export function MapPanel({ sites, landingSiteId, constraints, mission, active, v
     <div className="map-preamble-controls">
       <div className="map-site-legend"><span className="map-site-key map-site-key--default">Default sites</span><span className="map-site-key map-site-key--custom">Your sites · click to edit</span></div>
     </div>
-    {showBasemap && basemap === 'topography' && <p className="map-hint">LOLA elevation · 500 m contours · Reference radius: 1,737.4 km</p>}
     {showBasemap && imageError && <p className="request-error" role="alert">Some local basemap tiles could not load. Coordinates and grid remain available.</p>}
     {showBasemap && basemap === 'topography' && contourError && <p className="request-error" role="alert">{contourError} The elevation basemap remains available.</p>}
     </div>

@@ -72,7 +72,6 @@ export function Sidebar({ sites, onSiteToggle, onSiteAdd, onOpenSettings }: Prop
             value={latitude} onChange={event => setLatitude(event.target.value)} /></label>
           <label>Longitude (decimal degrees)<input type="number" className="sb-input" required step="any" min={-180} max={180}
             value={longitude} onChange={event => setLongitude(event.target.value)} /></label>
-          <p>Latitude −90…90°, longitude −180…180°.</p>
           <div className="sb-form-actions">
             <button type="submit" className="ct-btn" disabled={!siteName.trim() || !validCoordinates}>Add site</button>
             <button type="button" className="ct-btn" onClick={closeForm}>Cancel</button>
