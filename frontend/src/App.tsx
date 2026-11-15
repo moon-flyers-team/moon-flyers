@@ -25,7 +25,6 @@ export default function App() {
   const [usingMock, setUsingMock] = useState(false);
   const [backendMock, setBackendMock] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [routeOpen, setRouteOpen] = useState(false);
   const [applied, setApplied] = useState({ mission, power, comms, terrain });
 
   const catalogue = useRequest(api.getCatalogue, 0);
@@ -88,8 +87,6 @@ export default function App() {
           onOpenSettings={() => setSettingsOpen(true)}
         />
         <MainPanel
-          routeOpen={routeOpen}
-          onRouteOpenChange={setRouteOpen}
           onSiteAdd={addSite}
           onSiteRename={renameSite}
           onSiteDelete={deleteSite}

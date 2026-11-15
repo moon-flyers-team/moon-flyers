@@ -20,6 +20,8 @@ interface Props {
   constraints: Constraints;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onLandingSelect?: (id: string) => void;
+  landingSiteId?: string | null;
   landingTime: string;
   onTimeSeek: (iso: string) => void;
   missionStart: string;
@@ -31,7 +33,7 @@ interface Props {
   children?: ReactNode;
 }
 
-export function ComparisonTable({ sites, results, constraints: c, selectedId, onSelect,
+export function ComparisonTable({ sites, results, constraints: c, selectedId, onSelect, onLandingSelect, landingSiteId,
   landingTime, onTimeSeek,
   missionStart, sliderEnd, disabled,
   loading, error, onRetry, children }: Props) {
@@ -141,7 +143,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
 
   return <section className="ct-wrap" aria-label="Site comparison" aria-busy={loading}>
     <div className="ct-topbar" ref={topbarRef}>
-      <span className="ct-tab">Comparison</span>
+      <span className="ct-tab">Comparison{onLandingSelect && <small className="ct-landing-hint">Double-click a site to choose landing · keyboard: Shift+Enter</small>}</span>
       <div className="ct-time">
         <span className="ct-time-label">Landing (UTC)</span>
         <input type="datetime-local" className="ct-time-val ct-time-input"
@@ -212,8 +214,8 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             );
             const metrics = entry?.metrics;
             const warn = (metric: keyof Metrics) => entry?.fit.violations.includes(metric) ?? false;
-            return <tr key={site.id} className={selectedId === site.id ? 'row-sel' : ''} onClick={() => onSelect(site.id)}>
-              <td className="ct-left ct-name"><button className="site-select" aria-pressed={selectedId === site.id} onClick={() => onSelect(site.id)}>{site.name}</button></td>
+            return <tr key={site.id} className={`${selectedId === site.id ? 'row-sel' : ''}${landingSiteId === site.id ? ' row-landing' : ''}`}  onClick={() => onSelect(site.id)} onDoubleClick={() => onLandingSelect?.(site.id)}>
+              <td className="ct-left ct-name"><button className="site-select" onKeyDown={event => { if (event.key === 'Enter' && event.shiftKey) { event.preventDefault(); onLandingSelect?.(site.id); } }} aria-pressed={selectedId === site.id} onClick={() => onSelect(site.id)}>{site.name}</button>{landingSiteId === site.id && <span className="ct-landing-badge">Landing site</span>}</td>
               <td>{entry ? <FitBadge fit={entry.fit.status} /> : result ? 'Not sampled' : '—'}</td>
               <NumCell value={metrics?.sun_visible_pct} warn={warn('sun_visible_pct')} unit="%" />
               <NumCell value={metrics?.longest_darkness_hours} warn={warn('longest_darkness_hours')} unit=" h" />

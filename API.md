@@ -324,3 +324,37 @@ Response (abbreviated example with a 2×2 raster; a real response must match the
 - The current client requests 128×128 cells. Backend implementations will likely need batching,
   caching, or asynchronous jobs before evaluating the entire cap with live ephemerides; these
   are not implemented by this frontend proposal.
+
+## Route Planner: `POST /route` (existing FastAPI endpoint)
+
+The frontend calls this explicitly after a landing site and additional waypoints
+are chosen. Waypoints are visited in supplied order. For a round trip the landing site
+is repeated at the end, giving two more request entries than the number of intermediate stops:
+
+```json
+{
+  "waypoints": [
+    { "id": "malapert_massif" },
+    { "name": "Waypoint 1", "latitude_deg": -88.1, "longitude_deg": 12.5 },
+    { "id": "malapert_massif" }
+  ],
+  "step_m": 100
+}
+```
+
+Use the same catalogue/custom `SiteReference` format as comparison. Custom UUIDs remain
+local. The frontend allows up to 98 intermediate stops, reserving start and return entries.
+FastAPI accepts 2–100 entries and a positive `step_m` (default 100 metres).
+The response contains `method: "straight_line"`, resolved `waypoints`, `legs`
+(`from_index`, `to_index`, `distance_m`), `total_distance_m`, and a densified `path`
+(`latitude_deg`, `longitude_deg`, cumulative `distance_m`, nullable `waypoint_index`).
+The current method uses great-circle segments and does not account for terrain, slope,
+or shadow. It does not optimize waypoint order or score mission criteria. The frontend
+renders the returned path and invalidates it whenever draft waypoints change.
+This endpoint exists in FastAPI but is not implemented by the standalone Node mock.
+
+Route-table elevation changes are calculated independently in the frontend from the bundled
+LOLA elevation grid, because `/route` currently supplies no terrain elevations. Each signed
+metre difference is destination elevation minus previous waypoint elevation (including the
+return leg). Missing coverage shows a dash. These approximate ~792 m samples are independent
+of the route service and do not establish terrain-aware routing or cumulative ascent.

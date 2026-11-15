@@ -150,3 +150,24 @@ separately. Clearing the final heatmap restores the remembered basemap and camer
 Mission-dependent backend overlays render above the reference layers. Disabling one reference
 layer leaves the other visible. Neither requires a backend, and their checkbox changes do
 not trigger backend heatmap requests. Other toolbar heatmaps retain the proposed API path.
+
+## Route waypoint elevations
+
+`topography/elevations.json` preserves the numeric values of the same real F32 LOLA DEM
+crop used above for contours, rounded to whole metres. Its 768×768 pixel centres cover
+[-304005.6080198807, -304005.6080198807, 304005.6080198807, 304005.6080198807] metres,
+with north-to-south rows, east-positive longitude and reference radius 1,737,400 m.
+The metadata records bounds, ~791.68 m sampling and the input GeoTIFF SHA-256. Nonfinite or
+invalid (>20 km magnitude) samples become null; zero remains valid. Regenerate with:
+
+```sh
+uv run --with pillow --with numpy frontend/scripts/generate-elevations.py \
+  /path/to/cropped-dem.tif frontend/public/maps/south-pole/topography/elevations.json
+```
+
+Route Planner fetches this local asset and samples it bilinearly, accounting for cell centres.
+It shows each waypoint's elevation minus the previous waypoint's elevation, including the
+return to landing. Missing samples or points outside coverage show a dash. This is an
+approximate regional endpoint difference: grid spacing limits detail and it is not cumulative
+ascent, a native-resolution landing-site estimate, or evidence of a traversable route.
+The route backend's path remains independent and ignores terrain.

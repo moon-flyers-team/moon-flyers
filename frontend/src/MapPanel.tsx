@@ -15,6 +15,7 @@ import { HeatmapLegends } from './map/HeatmapLegends';
 
 interface Props {
   sites: LandingSite[];
+  landingSiteId?: string | null;
   constraints: Constraints;
   mission: MissionParams;
   active: boolean;
@@ -61,7 +62,7 @@ function HeatmapImages({ data, opacity }: { data?: MapHeatmapsResponse; opacity:
     width={2 * MAP_RADIUS} height={2 * MAP_RADIUS} preserveAspectRatio="none" />)}</g>;
 }
 
-export function MapPanel({ sites, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
+export function MapPanel({ sites, landingSiteId, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -307,6 +308,7 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
               onKeyDown={site.custom ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); choose(site, undefined, undefined, site); } } : undefined}>
               <title>{`${site.name}: ${formatCoordinates(site)}${site.enabled ? '' : ' (disabled)'}`}</title>
               {site.custom && <circle className="map-waypoint-hit" cx={point.x} cy={point.y} r={11 / zoom} />}
+              {site.id === landingSiteId && <circle className="map-landing-ring" cx={point.x} cy={point.y} r={10 / zoom}><title>Selected landing site</title></circle>}
               <circle cx={point.x} cy={point.y} r={5 / zoom} />
               <text x={point.x + 8 / zoom} y={point.y - 8 / zoom} fontSize={10 / zoom} strokeWidth={2 / zoom}>{site.name}</text>
             </g>;

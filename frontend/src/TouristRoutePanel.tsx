@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { project, MAP_CENTER, MAP_RADIUS, METRES_TO_SVG } from './map/projection';
-import type { MapPoint } from './map/projection';
-import { zoomAt, panBy } from './map/navigation';
+import { project, unproject, MAP_CENTER, MAP_RADIUS, METRES_TO_SVG } from './map/projection';
+import type { Coordinates, MapPoint } from './map/projection';
+import { zoomAt, panBy, wheelAction } from './map/navigation';
 import type { MapCamera } from './map/navigation';
 import { ROUTE_LAYERS, visibleTiles } from './map/routeTiles';
 import type { RouteLayer } from './map/routeTiles';
-import { FitBadge } from './FitBadge';
+import { api, siteReference } from './api';
+import { useRequest } from './useRequest';
+import { elevationChange, loadElevations } from './map/elevations';
+import type { ElevationGrid } from './map/elevations';
 import { formatUtc } from './time';
-import type { FitStatus, Recommendation, RouteResponse } from './types';
+import type { LandingSite, RouteResponse } from './types';
 
 const MAX_ZOOM = 600;
+// FastAPI accepts 100 entries, including the repeated landing at start and end.
+const MAX_WAYPOINTS = 100 - 2;
 const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // Bundled level-4 basemap, shown underneath while high-res tiles load or offline
@@ -25,22 +29,14 @@ const BASE_TILES = Array.from({ length: 36 }, (_, i) => {
   };
 });
 
-const FIT_COLOR: Record<FitStatus, string> = {
-  both_met: '#00e676',
-  power_short: '#f5a623',
-  comms_short: '#4fc3f7',
-  neither_met: '#8a8aa8',
-};
-const UNKNOWN_COLOR = '#ddddf8';
-const LEGEND: [string, string][] = [
-  [FIT_COLOR.both_met, 'Power + comms met'],
-  [FIT_COLOR.power_short, 'Power short'],
-  [FIT_COLOR.comms_short, 'Comms short'],
-  [FIT_COLOR.neither_met, 'Neither met'],
-];
+const WAYPOINT_COLOR = '#ddddf8';
+const LANDING_COLOR = '#00e676';
+const LEGEND: [string, string][] = [[LANDING_COLOR, 'Landing site'], [WAYPOINT_COLOR, 'Waypoints']];
+const DRAG_TYPE = 'application/x-moon-waypoint';
 
 function fitCamera(pts: MapPoint[]): MapCamera {
   if (!pts.length) return { x: MAP_CENTER, y: MAP_CENTER, zoom: 1 };
+  if (pts.length === 1) return { ...pts[0], zoom: 16 };
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
   const halfSpan = Math.max(
     (Math.max(...xs) - Math.min(...xs)) / 2,
@@ -96,24 +92,50 @@ function toCsv(r: RouteResponse) {
 }
 
 interface Props {
-  siteName: string;
+  landingSite: LandingSite;
   landingUtc: string;
-  route?: RouteResponse | null;
-  metrics?: Map<string, Recommendation>;
-  loading: boolean;
-  error?: string;
-  onRetry: () => void;
   onClose: () => void;
 }
 
-export function TouristRoutePanel({ siteName, landingUtc, route, metrics, loading, error, onRetry, onClose }: Props) {
+export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
+  const elevations = useRequest(loadElevations, 0);
+  const siteName = landingSite.name;
   const slug = siteName.replace(/\s+/g, '_');
-  let body: ReactNode;
-  if (error) body = <div className="request-error" role="alert">Route request failed: {error} <button className="ct-btn" onClick={onRetry}>Retry</button></div>;
-  else if (loading) body = <p className="request-status route-status" role="status">Planning route…</p>;
-  else if (!route) body = <p className="request-status route-status" role="status">No recommended sites within 150 km of {siteName} to visit.</p>;
-  else body = <RouteView route={route} metrics={metrics} />;
-
+  const [waypoints, setWaypoints] = useState<LandingSite[]>([]);
+  const [submitted, setSubmitted] = useState<LandingSite[] | null>(null);
+  const [announcement, setAnnouncement] = useState('');
+  const request = useMemo(() => submitted !== waypoints ? null
+    : (signal: AbortSignal) => api.getRoute({
+      waypoints: [siteReference(landingSite), ...waypoints.map(siteReference), siteReference(landingSite)],
+    }, signal), [submitted, waypoints, landingSite]);
+  const result = useRequest(request, 0);
+  const route = result.data;
+  const loading = result.loading;
+  // Draft markers are preview-only: no path or distances are invented before the response.
+  const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
+    waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite], path: [], legs: [], total_distance_m: 0,
+  }), [landingSite, waypoints]);
+  function addWaypoint(coordinates: Coordinates) {
+    if (waypoints.length >= MAX_WAYPOINTS) {
+      setAnnouncement(`Maximum of ${MAX_WAYPOINTS} waypoints reached. Remove a stop to add another.`);
+      return;
+    }
+    const next = { ...coordinates, id: crypto.randomUUID(), custom: true, enabled: true,
+      name: `Waypoint ${waypoints.length + 1}` };
+    setWaypoints(previous => previous.length < MAX_WAYPOINTS ? [...previous, next] : previous);
+    setAnnouncement(`Added ${next.name}. Calculate the round trip to update the route.`);
+  }
+  function moveWaypoint(from: number, to: number) {
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from === to
+      || from < 0 || to < 0 || from >= waypoints.length || to >= waypoints.length) return;
+    setWaypoints(previous => {
+      const reordered = [...previous];
+      const [moved] = reordered.splice(from, 1);
+      reordered.splice(to, 0, moved);
+      return reordered;
+    });
+    setAnnouncement(`Waypoint moved to position ${to + 1}. Recalculate to update the route.`);
+  }
   return (
     <section className="route-wrap" aria-label="Tourist route" aria-busy={loading}>
       <div className="route-hdr">
@@ -141,12 +163,35 @@ export function TouristRoutePanel({ siteName, landingUtc, route, metrics, loadin
           Straight-line route: the planner doesn't consider terrain, slope or shadow yet.
         </div>
       )}
-      {body}
+      <div className="route-editor">
+        <p>Click the map to add up to {MAX_WAYPOINTS} waypoints. Drag stops to reorder, or use ↑/↓. Right-drag to pan; wheel to zoom.</p>
+        <span>{waypoints.length}/{MAX_WAYPOINTS} waypoints · returns to {siteName}</span>
+        <button className="ct-btn" disabled={!waypoints.length || loading}
+          onClick={() => { setAnnouncement(''); if (submitted === waypoints) result.retry(); else setSubmitted(waypoints); }}>Calculate round trip</button>
+        <button className="ct-btn" disabled={!waypoints.length} onClick={() => setWaypoints([])}>Clear waypoints</button>
+
+      </div>
+      {loading && <p className="request-status" role="status">Calculating round trip…</p>}
+      {result.error && <div className="request-error" role="alert">Route request failed: {result.error}
+        {' '}<button className="ct-btn" onClick={result.retry}>Retry</button></div>}
+      <span className="map-announcement" role="status">{announcement}</span>
+      <p className="route-elevation-note">Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent.
+        {elevations.loading && ' Loading elevations…'}
+        {elevations.error && <> Elevation data unavailable. <button className="ct-btn" onClick={elevations.retry}>Retry elevations</button></>}
+      </p>
+      <RouteView onWaypointRemove={index => {
+        setWaypoints(previous => previous.filter((_, i) => i !== index));
+        setAnnouncement(`Removed waypoint ${index + 1}. Recalculate to update the route.`);
+      }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={route ?? preview} onMapPick={addWaypoint} calculated={!!route} />
     </section>
   );
 }
 
-function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<string, Recommendation> }) {
+function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapPick, calculated }: {
+  onWaypointRemove: (index: number) => void;
+  route: RouteResponse; elevations?: ElevationGrid; onWaypointMove: (from: number, to: number) => void;
+  onMapPick: (coordinates: Coordinates) => void; calculated: boolean;
+}) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
@@ -155,14 +200,7 @@ function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<str
   const [active, setActive] = useState<number | null>(null);
   const [px, setPx] = useState(600);
 
-  const stopInfo = (i: number) => {
-    const id = route.waypoints[i].id;
-    return id ? metrics?.get(id) : undefined;
-  };
-  const colorOf = (i: number) => {
-    const fit = stopInfo(i)?.fit.status;
-    return fit ? FIT_COLOR[fit] : UNKNOWN_COLOR;
-  };
+  const colorOf = (i: number) => i === 0 ? LANDING_COLOR : WAYPOINT_COLOR;
 
   const pathPts = useMemo(() => route.path.map(p => project(p)), [route]);
   const stops = useMemo(() => route.waypoints.map(w => project(w)), [route]);
@@ -181,7 +219,7 @@ function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<str
 
   const fit = useMemo(() => fitCamera(stops), [stops]);
   const [camera, setCamera] = useState<MapCamera>(fit);
-  useEffect(() => setCamera(fit), [fit]);
+  useEffect(() => { if (calculated) setCamera(fit); }, [fit, calculated]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -203,7 +241,12 @@ function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<str
       if (!inv) return;
       const anchor = new DOMPoint(e.clientX, e.clientY).matrixTransform(inv);
       const m = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? svg.clientHeight : 1;
-      setCamera(c => zoomAt(c, Math.exp(-e.deltaY * m * 0.002), anchor, MAX_ZOOM));
+      if (wheelAction(e) === 'zoom') {
+        setCamera(c => zoomAt(c, Math.exp(-e.deltaY * m * (e.ctrlKey ? 0.01 : 0.002)), anchor, MAX_ZOOM));
+      } else {
+        const to = new DOMPoint(e.clientX + e.deltaX * m, e.clientY + e.deltaY * m).matrixTransform(inv);
+        setCamera(c => panBy(c, to.x - anchor.x, to.y - anchor.y, MAX_ZOOM));
+      }
     };
     svg.addEventListener('wheel', onWheel, { passive: false });
     return () => svg.removeEventListener('wheel', onWheel);
@@ -238,14 +281,24 @@ function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<str
           viewBox={`${camera.x - half} ${camera.y - half} ${2 * half} ${2 * half}`}
           preserveAspectRatio="xMidYMid slice"
           role="img"
-          aria-label="Terrain map of the tourist route"
-          onContextMenu={e => e.preventDefault()}
-          onDoubleClick={e => {
-            const inv = e.currentTarget.getScreenCTM()?.inverse();
-            if (inv) setCamera(c => zoomAt(c, 2, new DOMPoint(e.clientX, e.clientY).matrixTransform(inv), MAX_ZOOM));
+          aria-label="Terrain map of the tourist route. Arrow keys pan; Enter adds a waypoint at the map center."
+          tabIndex={0}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault(); const coordinates = unproject(camera); if (coordinates) onMapPick(coordinates);
+            }
+            const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+            if (delta) { event.preventDefault(); setCamera(c => panBy(c, delta[0] * half / 5, delta[1] * half / 5, MAX_ZOOM)); }
           }}
+          onClick={event => {
+            if (event.button !== 0) return;
+            const inverse = event.currentTarget.getScreenCTM()?.inverse();
+            const coordinates = inverse ? unproject(new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse)) : null;
+            if (coordinates) onMapPick(coordinates);
+          }}
+          onContextMenu={e => e.preventDefault()}
           onPointerDown={e => {
-            if (e.button !== 0 && e.button !== 2) return;
+            if (e.button !== 1 && e.button !== 2) return;
             e.currentTarget.setPointerCapture(e.pointerId);
             drag.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY };
             setPanning(true);
@@ -303,11 +356,11 @@ function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<str
             const on = active === i;
             const color = colorOf(i);
             return (
-              <g key={i} className="route-marker" onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
-                onClick={() => focus(i)}>
+              <g key={i} className={`route-marker${base ? ' route-marker--landing' : ''}`}  onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
+                onClick={event => { event.stopPropagation(); focus(i); }}>
                 {(base || on) && (
                   <circle cx={pt.x} cy={pt.y} r={r + 6 * k} fill="none" stroke={color}
-                    strokeWidth={2 * k} opacity={on ? 0.9 : 0.5} />
+                    strokeWidth={2 * k} opacity={base ? 1 : on ? 0.9 : 0.5} />
                 )}
                 <circle cx={pt.x} cy={pt.y} r={r} fill={base ? '#f2f2ff' : '#11111d'}
                   stroke={color} strokeWidth={2.5 * k} />
@@ -365,17 +418,20 @@ function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<str
               <th className="route-th-wide">Stop</th>
               <th>Leg</th>
               <th>Total</th>
-              <th title="Sunlight over the stay">Sun</th>
-              <th title="Earth contact over the stay">Earth</th>
-              <th>Fit</th>
+              <th title="Elevation at this stop minus elevation at the previous stop; positive uphill, negative downhill">Elevation change</th>
+              <th>Order</th>
             </tr>
           </thead>
           <tbody>
             {route.waypoints.map((wp, i) => {
-              const info = stopInfo(i);
+              const editable = i > 0 && !(isLoop && i === route.waypoints.length - 1);
+              const change = i > 0 ? elevationChange(elevations, route.waypoints[i - 1], wp) : null;
               return (
                 <tr key={i} className={active === i ? 'route-row--active' : ''} tabIndex={0}
-                  data-wtype={i === 0 || (isLoop && i === route.waypoints.length - 1) ? 'base' : 'stop'}
+                  data-wtype={editable ? 'stop' : 'base'} draggable={editable}
+                  onDragStart={event => { if (!editable) return; event.dataTransfer.setData(DRAG_TYPE, String(i - 1)); event.dataTransfer.effectAllowed = 'move'; }}
+                  onDragOver={event => { if (editable && event.dataTransfer.types.includes(DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
+                  onDrop={event => { event.preventDefault(); const from = event.dataTransfer.getData(DRAG_TYPE); if (editable && from !== '') onWaypointMove(Number(from), i - 1); }}
                   onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)}
                   onClick={() => focus(i)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focus(i); } }}>
@@ -384,14 +440,23 @@ function RouteView({ route, metrics }: { route: RouteResponse; metrics?: Map<str
                     <span className="route-dot" style={{ background: colorOf(i) }} />
                     <span>
                       {wp.name}
+                      <span className="route-location-details">
+                        <span className="route-coordinates">{wp.latitude_deg.toFixed(4)}°, {wp.longitude_deg.toFixed(4)}°</span>
+                        {editable && <button className="ct-btn" aria-label={`Remove waypoint ${i}`}
+                          onClick={event => { event.stopPropagation(); onWaypointRemove(i - 1); }}
+                          onKeyDown={event => event.stopPropagation()}>Remove</button>}
+                      </span>
                       {wp.group && <span className="route-note">{wp.group}</span>}
                     </span>
                   </td>
-                  <td className="route-num">{i ? km(route.legs[i - 1].distance_m) : '—'}</td>
-                  <td className="route-num">{km(cumulative[i])}</td>
-                  <td className="route-num">{info ? `${info.metrics.sun_visible_pct}%` : '—'}</td>
-                  <td className="route-num">{info ? `${info.metrics.earth_visible_pct}%` : '—'}</td>
-                  <td>{info ? <FitBadge fit={info.fit.status} /> : '—'}</td>
+                  <td className="route-num">{i && calculated ? km(route.legs[i - 1].distance_m) : '—'}</td>
+                  <td className="route-num">{calculated ? km(cumulative[i]) : '—'}</td>
+                  <td className="route-num">{change === null ? '—' : `${change > 0 ? '+' : ''}${Math.round(change)} m`}</td>
+                  <td>{editable ? <div className="route-order-controls" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+                    <span className="route-drag-handle" aria-hidden="true">⠿</span>
+                    <button className="ct-btn" aria-label={`Move stop ${i} up`} disabled={i === 1} onClick={() => onWaypointMove(i - 1, i - 2)}>↑</button>
+                    <button className="ct-btn" aria-label={`Move stop ${i} down`} disabled={i === route.waypoints.length - 2} onClick={() => onWaypointMove(i - 1, i)}>↓</button>
+                  </div> : i === 0 ? 'Start' : 'Return'}</td>
                 </tr>
               );
             })}

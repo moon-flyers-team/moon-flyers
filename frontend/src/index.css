@@ -1073,3 +1073,23 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); out
   .route-map-wrap { border-right: 0; border-bottom: 1px solid var(--border); }
   .route-table-wrap { height: auto; max-height: 320px; }
 }
+
+/* Route planning is a separate workspace; draft waypoints stay local to it. */
+.ct-landing-hint { display: block; max-width: 290px; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 400; }
+.route-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; font-size: 12px; border-bottom: 1px solid var(--border); }
+.route-editor p { flex-basis: 100%; margin: 0; color: var(--muted); }
+.route-svg { cursor: crosshair; }
+.route-svg:focus-visible { outline: 2px solid var(--comms); outline-offset: -2px; }
+
+.ct tbody tr.row-landing { outline: 2px solid #00e676; outline-offset: -2px; box-shadow: inset 0 0 15px rgba(0,230,118,.23), 0 0 8px rgba(0,230,118,.5); }
+.ct-landing-badge { display: block; color: #00e676; font-size: 10px; margin-top: 3px; }
+.route-marker--landing { filter: drop-shadow(0 0 4px #00e676); }
+.route-order-controls { display: flex; align-items: center; gap: 4px; }
+.route-drag-handle { cursor: grab; color: var(--muted); }
+.route-table tr[draggable="true"] { cursor: grab; }
+.route-table tr[draggable="true"]:active { cursor: grabbing; }
+.route-elevation-note { color: var(--muted); font-size: 11px; line-height: 1.4; padding: 6px 12px; margin: 0; }
+.map-waypoint .map-landing-ring { fill: none; stroke: #00e676; stroke-width: 2.5; filter: drop-shadow(0 0 4px #00e676); }
+
+.route-location-details { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.route-coordinates { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
