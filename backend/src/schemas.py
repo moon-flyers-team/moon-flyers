@@ -290,6 +290,9 @@ class RoutePoint(BaseModel):
     distance_m: float  # cumulative from the first waypoint
     elevation_m: Optional[float] = None  # terrain planner samples; null for straight_line
     waypoint_index: Optional[int] = None  # set when this point is one of the requested waypoints
+    # True on the straight great-circle filler drawn for a terrain leg that found no route:
+    # it only connects the waypoints visually and is not a drivable path.
+    placeholder: bool = False
 
 
 class RouteLeg(BaseModel):
@@ -306,6 +309,7 @@ class RouteLeg(BaseModel):
     max_uphill_grade_deg: Optional[float] = None
     max_downhill_grade_deg: Optional[float] = None
     expanded_nodes: Optional[int] = None
+    padding_m: Optional[float] = None  # detour space actually searched (may exceed the request)
     cost: Optional[float] = None  # distance + slope/climb preference charges, not physical
     start_check: Optional[EndpointCheck] = None
     goal_check: Optional[EndpointCheck] = None
@@ -315,12 +319,13 @@ class RouteResponse(BaseModel):
     method: RouteMethod
     status: RouteStatus
     reason: Optional[str] = None
-    failing_leg: Optional[int] = None  # index into `legs` whose planning stopped the route
+    failing_leg: Optional[int] = None  # first leg without a terrain route
+    failed_legs: list[int] = []  # every leg without a terrain route (all legs are still attempted)
     terrain_source: Optional[Literal["lola_dem"]] = None  # null when terrain was not used
     rover: Optional[RoverSettings] = None
     waypoints: list[Site]
     legs: list[RouteLeg]
-    total_distance_m: float  # planned prefix only when status != "route_found"
+    total_distance_m: float  # sum of planned legs; placeholder legs are not counted
     path: list[RoutePoint]
 
 

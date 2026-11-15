@@ -96,12 +96,19 @@ export interface RoutePoint {
   longitude_deg: number;
   distance_m: number;
   waypoint_index: number | null;
+  // True on straight filler for a terrain leg with no route: drawn to connect stops, not drivable.
+  placeholder?: boolean;
 }
 // distance_m is null for a terrain leg that could not be planned.
-export interface RouteLeg { from_index: number; to_index: number; distance_m: number | null; status?: string }
+export interface RouteLeg {
+  from_index: number; to_index: number; distance_m: number | null; status?: string; reason?: string | null;
+}
 export interface RouteResponse {
   method: 'straight_line' | 'astar_terrain';
   status?: string;
+  reason?: string | null;
+  // Legs without a terrain route; every leg is still attempted and drawn.
+  failed_legs?: number[];
   waypoints: (SiteDefinition & { id: string | null })[];
   legs: RouteLeg[];
   total_distance_m: number;

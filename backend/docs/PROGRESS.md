@@ -4,6 +4,20 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Route fixes: every leg planned, failures visible (2026-11-15, branch `fix/route-all-legs`).**
+  Diagnosis on production (real LOLA): the terrain A* is correct, but (1) `_terrain` stopped at
+  the first failed leg, so later legs were never drawn; (2) the default 1 km corridor leaves no
+  room to detour (failures after ~2k expansions); (3) at 15° most south-pole site pairs have no
+  route (ridge → de Gerlache rim needs ~19.6° at 60 m cells); (4) the UI never showed
+  `status`/`reason`; (5) **`shackleton_rim` (-89.667, 129.783) is the IAU crater centre**: DEM
+  −2785 m, on the floor (ridge +1829 m). It is the UI's default landing site, so every default
+  route failed on leg 0. POIs are crater centres (floors) too. Fix: all legs attempted; failed
+  legs → `placeholder: true` straight filler, `failed_legs`, `legs[].padding_m`; one automatic
+  retry at 5 km padding on `no_route`. Frontend: failure banner, dashed failed legs, "no route"
+  in the table. Not changed: catalogue coordinate (needs a sourced rim point), 15° default
+  (rover owner), per-leg endpoint-slope inconsistency (same waypoint 14.4° as goal vs 16.0° as
+  start, because the grid is oriented per leg). Tested with fake planners + synthetic fixture;
+  not yet re-run against the real DEM.
 - **Rover route exposed through `POST /route` (2026-11-15, branch `feat/rover-route-api`).**
   `app/Functions/rover_path.py` moved to `src/rover_path.py`, so the Dockerfile (`COPY src`)
   deploys it; the packaging blocker from `docs/ROVER_PATH_REVIEW.md` is gone. `POST /route`
@@ -201,6 +215,10 @@ _(date: decision, then why)_
 - 2026-11-14: The user owns the backend; the frontend is out of scope unless asked.
 
 ## Open questions
+- `shackleton_rim` sits at Shackleton's IAU centre (crater floor, permanently shadowed): which
+  sourced rim coordinate should replace it? Affects power/comms results too, not only routes.
+- Rover slope limit: 15° default connects almost no south-pole sites at 60 m cells; rover owner
+  to choose (20–25°?). Should POI stops target the nearest rim point instead of the crater centre?
 - From the requirements PDF (ask the team):
   - "Days on surface (lunar or Earth days?)": which unit? Proposal: return both Earth days
     (hours / 24) and lunar days (÷ 29.53).

@@ -218,6 +218,9 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
         {nearby.data && <span>{nearby.data.recommendations.length} nearby POIs: add them from the list or the amber map markers.</span>}
       </div>
       {loading && <p className="request-status" role="status">Calculating route…</p>}
+      {route?.failed_legs?.length ? <div className="request-error" role="status">
+        No terrain route for {route.failed_legs.length} of {route.legs.length} leg{route.legs.length !== 1 ? 's' : ''} (dashed
+        straight lines only connect the stops). {route.reason}</div> : null}
       {result.error && <div className="request-error" role="alert">Route request failed: {result.error}
         {' '}<button className="ct-btn" onClick={result.retry}>Retry</button></div>}
       <span className="map-announcement" role="status">{announcement}</span>
@@ -435,7 +438,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
             strokeWidth={9 * k} strokeLinejoin="round" strokeLinecap="round" />
           {legPaths.map((d, i) => (
             <path key={i} d={d} fill="none" stroke={colorOf(route.legs[i]?.to_index ?? i + 1)}
-              strokeWidth={4.5 * k} strokeLinejoin="round" strokeLinecap="round" />
+              strokeWidth={4.5 * k} strokeLinejoin="round" strokeLinecap="round"
+              {...(route.failed_legs?.includes(i) ? { strokeDasharray: `${10 * k} ${8 * k}`, strokeOpacity: 0.6 } : {})} />
           ))}
           <path d={fullD} fill="none" stroke="#fff" strokeOpacity={0.85}
             strokeWidth={1.5 * k} strokeDasharray={`${2 * k} ${14 * k}`} strokeLinecap="round">
@@ -549,7 +553,9 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
                       {wp.group && <span className="route-note">{wp.group}</span>}
                     </span>
                   </td>
-                  <td className="route-num">{i && calculated && route.legs[i - 1]?.distance_m != null ? km(route.legs[i - 1].distance_m) : '—'}</td>
+                  <td className="route-num" title={i && route.failed_legs?.includes(i - 1) ? route.legs[i - 1]?.reason ?? undefined : undefined}>
+                    {i && calculated ? (route.failed_legs?.includes(i - 1) ? 'no route'
+                      : route.legs[i - 1]?.distance_m != null ? km(route.legs[i - 1].distance_m) : '—') : '—'}</td>
                   <td className="route-num">{calculated && cumulative[i] != null ? km(cumulative[i]!) : '—'}</td>
                   <td className="route-num">{change === null ? '—' : `${change > 0 ? '+' : ''}${Math.round(change)} m`}</td>
                   <td>{editable ? <div className="route-order-controls" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>

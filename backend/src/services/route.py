@@ -23,6 +23,8 @@ MAX_PATH_POINTS = 100_000
 # Total terrain cells sampled across all legs of one request. A leg is planned whole, so the
 # actual count can overshoot by at most one leg; this bounds a multi-stop route's runtime.
 MAX_TERRAIN_CELLS = 1_000_000
+# Detour space for the one automatic retry of a leg that found no route in the requested corridor.
+WIDE_PADDING_M = 5_000.0
 
 
 def _unit_vector(lat_deg: float, lon_deg: float) -> tuple[float, float, float]:
@@ -101,7 +103,38 @@ def _endpoint_check(raw: dict | None) -> EndpointCheck | None:
         nearby_terrain_candidates=[TerrainCandidate(**c) for c in raw["nearby_terrain_candidates"]])
 
 
+def _region_cells(distance_m: float, cell_size_m: float, padding_m: float) -> int:
+    """Grid cells the planner samples for one leg (same arithmetic as `plan_rover_route`)."""
+    pad = max(1, math.ceil(padding_m / cell_size_m))
+    segments = max(1, math.ceil(distance_m / cell_size_m))
+    return (2 * pad + 1) * (segments + 2 * pad + 1)
+
+
+def _plan_leg(dem, a: Site, b: Site, rover: RoverSettings, padding_m: float) -> dict:
+    return plan_rover_route(
+        dem, (a.latitude_deg, a.longitude_deg), (b.latitude_deg, b.longitude_deg),
+        max_slope_deg=rover.max_slope_deg, cell_size_m=rover.cell_size_m,
+        padding_m=padding_m, max_uphill_grade_deg=rover.max_uphill_grade_deg,
+        max_downhill_grade_deg=rover.max_downhill_grade_deg,
+        climb_weight=rover.climb_weight, slope_weight=rover.slope_weight,
+        max_region_radius_m=rover.max_region_radius_m)
+
+
+def _placeholder_points(a: Site, b: Site, step_m: float) -> list[RoutePoint]:
+    """Straight great-circle filler for a leg without a terrain route; never a drivable path."""
+    angle = central_angle(a, b)
+    steps = max(1, math.ceil(angle * MOON_RADIUS_M / step_m))
+    points = []
+    for k in range(steps + 1):
+        lat, lon = ((b.latitude_deg, b.longitude_deg) if k == steps
+                    else _slerp(a, b, angle, k / steps))
+        points.append(RoutePoint(latitude_deg=lat, longitude_deg=lon, distance_m=0.0, placeholder=True))
+    return points
+
+
 def _terrain(sites: list[Site], rover: RoverSettings) -> RouteResponse:
+    """Plan every leg; a leg without a terrain route keeps its status and is drawn as a
+    flagged straight placeholder so later legs are still planned and shown."""
     directory = os.environ.get("LOLA_DEM_DIR")
     if not directory:
         raise TerrainUnavailableError(
@@ -111,27 +144,38 @@ def _terrain(sites: list[Site], rover: RoverSettings) -> RouteResponse:
 
     legs: list[RouteLeg] = []
     path: list[RoutePoint] = []
-    travelled = 0.0
+    planned_distance = 0.0
     sampled_cells = 0
-    status, reason, failing_leg = "route_found", None, None
+    failed: list[int] = []
+    reasons: list[str] = []
 
     for i, (a, b) in enumerate(zip(sites, sites[1:])):
         if sampled_cells > MAX_TERRAIN_CELLS:
             raise LimitExceededError(
                 f"route already samples {sampled_cells} terrain cells (max {MAX_TERRAIN_CELLS}); "
                 "split the route into fewer stops per request or increase cell_size_m")
+        padding = rover.padding_m
         try:
-            result = plan_rover_route(
-                dem, (a.latitude_deg, a.longitude_deg), (b.latitude_deg, b.longitude_deg),
-                max_slope_deg=rover.max_slope_deg, cell_size_m=rover.cell_size_m,
-                padding_m=rover.padding_m, max_uphill_grade_deg=rover.max_uphill_grade_deg,
-                max_downhill_grade_deg=rover.max_downhill_grade_deg,
-                climb_weight=rover.climb_weight, slope_weight=rover.slope_weight,
-                max_region_radius_m=rover.max_region_radius_m)
+            result = _plan_leg(dem, a, b, rover, padding)
         except ValueError as exc:
             raise InvalidInputError(f"leg {i} ({a.name} -> {b.name}): {exc}") from exc
         sampled_cells += result["search"]["grid_shape"][0] * result["search"]["grid_shape"][1]
 
+        # A narrow corridor often has no way around a crater or down a slope. Retry once with
+        # more detour space when it fits the region radius and the request's cell budget.
+        distance = central_angle(a, b) * MOON_RADIUS_M
+        if result["status"] == "no_route" and WIDE_PADDING_M > padding:
+            wide_cells = _region_cells(distance, rover.cell_size_m, WIDE_PADDING_M)
+            if sampled_cells + wide_cells <= MAX_TERRAIN_CELLS:
+                try:
+                    wide = _plan_leg(dem, a, b, rover, WIDE_PADDING_M)
+                except ValueError:
+                    wide = None  # region radius or per-leg cell limit: keep the narrow result
+                if wide is not None:
+                    sampled_cells += wide_cells
+                    result, padding = wide, WIDE_PADDING_M
+
+        found = result["status"] == "route_found"
         leg = RouteLeg(from_index=i, to_index=i + 1, status=result["status"], reason=result["reason"],
                        terrain_distance_m=result["terrain_distance_m"],
                        elevation_gain_m=result["elevation_gain_m"],
@@ -140,36 +184,42 @@ def _terrain(sites: list[Site], rover: RoverSettings) -> RouteResponse:
                        max_uphill_grade_deg=result["max_uphill_grade_deg"],
                        max_downhill_grade_deg=result["max_downhill_grade_deg"],
                        expanded_nodes=result["expanded_nodes"], cost=result["cost"],
+                       padding_m=result["search"]["padding_m"],
                        start_check=_endpoint_check(result["endpoint_checks"]["start"]),
                        goal_check=_endpoint_check(result["endpoint_checks"]["goal"]))
         legs.append(leg)
-        if result["status"] != "route_found":
-            status, failing_leg = result["status"], i
-            reason = f"leg {i} ({a.name} -> {b.name}): {result['reason']}"
-            break
+        if found:
+            points = [RoutePoint(latitude_deg=p["latitude_deg"], longitude_deg=p["longitude_deg"],
+                                 distance_m=0.0, elevation_m=p["elevation_m"]) for p in result["path"]]
+        else:
+            failed.append(i)
+            reasons.append(f"leg {i} ({a.name} -> {b.name}): {result['reason']}")
+            points = _placeholder_points(a, b, rover.cell_size_m)
 
-        points = [RoutePoint(latitude_deg=p["latitude_deg"], longitude_deg=p["longitude_deg"],
-                            distance_m=0.0, elevation_m=p["elevation_m"]) for p in result["path"]]
         end = points[-1]
         if path:
-            # The planner repeats the shared waypoint exactly; the junction point already carries
-            # `waypoint_index == i` from the previous leg.
+            # Legs share the waypoint exactly; the junction already carries `waypoint_index == i`.
             points = points[1:]
         else:
             points[0].waypoint_index = 0
+        travelled = path[-1].distance_m if path else 0.0
         leg_distance = 0.0
         for point in points:
             if path:
                 leg_distance += _arc_m(path[-1], point)
             point.distance_m = travelled + leg_distance
             path.append(point)
-        end.waypoint_index = i + 1 if end.waypoint_index is None else end.waypoint_index
         # A zero-length leg (repeated waypoint) keeps the earlier marker instead of overwriting it.
-        leg.distance_m = leg_distance
-        travelled += leg_distance
-    return RouteResponse(method="astar_terrain", status=status, reason=reason, failing_leg=failing_leg,
+        end.waypoint_index = i + 1 if end.waypoint_index is None else end.waypoint_index
+        if found:
+            leg.distance_m = leg_distance
+            planned_distance += leg_distance
+
+    status = legs[failed[0]].status if failed else "route_found"
+    return RouteResponse(method="astar_terrain", status=status, reason="; ".join(reasons) or None,
+                         failing_leg=failed[0] if failed else None, failed_legs=failed,
                          terrain_source="lola_dem", rover=rover, waypoints=sites, legs=legs,
-                         total_distance_m=travelled, path=path)
+                         total_distance_m=planned_distance, path=path)
 
 
 def plan_route(sites: list[Site], req: RouteRequest) -> RouteResponse:
