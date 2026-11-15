@@ -20,10 +20,10 @@ def dataset(tmp_path):
 @pytest.fixture(autouse=True)
 def clear_caches():
     """The DEM stack and skylines are cached per directory; tests must not share them."""
-    horizon._dem.cache_clear()
+    horizon.open_dem.cache_clear()
     horizon._dem_site.cache_clear()
     yield
-    horizon._dem.cache_clear()
+    horizon.open_dem.cache_clear()
     horizon._dem_site.cache_clear()
 
 
@@ -36,7 +36,7 @@ def test_mounted_dataset_drives_the_api_horizon(dataset, monkeypatch):
     monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
     model = horizon.for_site(site(-88.0, 45.0))
     assert isinstance(model, horizon.DemHorizon)
-    expected = lunar_horizon_dem.horizon(-88.0, 45.0, dem=horizon._dem(str(dataset)))
+    expected = lunar_horizon_dem.horizon(-88.0, 45.0, dem=horizon.open_dem(str(dataset)))
     assert [model.elevation_deg(a) for a in range(360)] == [
         round(v, 3) for v in expected["horizon_elevation_deg"]]
     # A terrain horizon is not the mock shape: it must be able to sit below 0 degrees.
@@ -58,7 +58,7 @@ def test_coordinates_outside_the_rasters_fall_back_to_flat(monkeypatch):
             return np.full(np.asarray(lat).shape, np.nan)
 
     monkeypatch.setenv("LOLA_DEM_DIR", "/does/not/matter")
-    monkeypatch.setattr(horizon, "_dem", lambda directory: EmptyDem())
+    monkeypatch.setattr(horizon, "open_dem", lambda directory: EmptyDem())
     assert isinstance(horizon.for_site(site(0.0, 0.0)), horizon.FlatHorizon)
 
 
@@ -82,7 +82,7 @@ def test_api_serves_the_terrain_profile(dataset, monkeypatch):
 def test_slope_comes_from_the_dem(dataset, monkeypatch):
     monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
     model = horizon.for_site(site(-88.0, 45.0))
-    expected = lunar_horizon_dem.horizon(-88.0, 45.0, dem=horizon._dem(str(dataset)))["slope_deg"]
+    expected = lunar_horizon_dem.horizon(-88.0, 45.0, dem=horizon.open_dem(str(dataset)))["slope_deg"]
     assert model.slope_deg == round(expected, 1) and model.slope_deg > 0
 
 

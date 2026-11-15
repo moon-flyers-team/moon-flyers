@@ -79,8 +79,11 @@ class DemHorizon:
 
 
 @lru_cache(maxsize=4)
-def _dem(directory: str) -> "lunar_horizon_dem.DEM":
-    """Open a DEM stack once per directory; it memory-maps the rasters."""
+def open_dem(directory: str) -> "lunar_horizon_dem.DEM":
+    """Open a DEM stack once per directory; it memory-maps the rasters.
+
+    Shared with the route service so skylines and route region sampling read one stack.
+    """
     return lunar_horizon_dem.DEM(directory)
 
 
@@ -88,7 +91,7 @@ def _dem(directory: str) -> "lunar_horizon_dem.DEM":
 def _dem_site(directory: str, latitude_deg: float, longitude_deg: float) -> tuple[tuple[float, ...], float | None]:
     """Skyline and slope for one site, rounded to the precision the API reports."""
     out = lunar_horizon_dem.horizon(latitude_deg, longitude_deg,
-                                    height_above_terrain=0.0, dem=_dem(directory))
+                                    height_above_terrain=0.0, dem=open_dem(directory))
     slope = out["slope_deg"]
     return tuple(round(v, 3) for v in out["horizon_elevation_deg"]), None if slope is None else round(slope, 1)
 

@@ -27,6 +27,17 @@ when agreed behavior changes.
   references at published feature centres, not selected landing points. Sources/coverage are
   in `docs/poi-sources.md`; Node mock/offline catalogues are unchanged. App currently enables
   every returned site by default, so the larger catalogue increases initial analysis work.
+- Python `POST /route` now serves the terrain planner as well as the mock. `planner`
+  (`straight_line` default, or `terrain`) plus an optional `rover` block; `terrain` runs the
+  bounded A* in `backend/src/rover_path.py` over the DEMs at `LOLA_DEM_DIR` (moved out of
+  `app/Functions` so the Dockerfile ships it) and returns `method: astar_terrain`, per-point
+  `elevation_m`, per-leg status/metrics and endpoint checks. It returns **503** rather than
+  substituting terrain when no dataset is mounted, and 422 for planner limits/geometry or a
+  request over 1,000,000 sampled cells. Rover limits are illustrative, not a vehicle spec;
+  results are suggested candidate routes, with no travel-time, energy, illumination,
+  keep-out or waypoint-order model. The frontend still requests `straight_line` and must be
+  updated (types, `planner`, failure/503 rendering) before using it; root `API.md` documents
+  both modes and the required frontend work.
 
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including
@@ -87,6 +98,7 @@ when agreed behavior changes.
 | `frontend/tests/mock-pipeline.mjs` | Live HTTP checks through Vite and the mock, using the real frontend client |
 | `frontend/vite.config.ts` | React plugin, `@` alias, dev port, and API proxy |
 | `backend/src/main.py`, `backend/requirements.txt` | FastAPI endpoints and Python runtime dependencies |
+| `backend/src/services/route.py`, `backend/src/rover_path.py` | `/route` legs (straight-line default, terrain A*) and the bounded rover planner |
 | `backend/app/Functions/rover_path.py`, `backend/docs/ROVER_PATH_REVIEW.md` | Standalone rover route calculations and algorithm review; no route endpoint/UI yet |
 | `backend/src/lunar_horizon_dem.py`, `backend/tools/lola_data.py`, `deploy/compose.terrain.yaml` | LOLA DEM loader/verifier, host dataset checks, and the optional read-only deployment mount |
 | `frontend/src/mock/server.mjs` | Standalone Node HTTP mock API on port 8000 |

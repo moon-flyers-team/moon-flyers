@@ -28,7 +28,8 @@ from directly evaluating a higher-resolution horizon model.
   main uses `backend/src`. Main's Dockerfile copies only `src`, so these files would
   be absent from the container. Move the calculation package under `src` and update
   imports/tests, or explicitly package/copy `app` too. Include NumPy in main's runtime
-  requirements; this branch already declares it.
+  requirements; this branch already declares it. (`app/Functions/rover_path.py` has
+  already moved to `src/rover_path.py` for that reason and is now served by `POST /route`.)
 - **Explicit mission bounds:** main generates samples including the history end.
   These window functions require every supplied timestamp to be strictly before the
   explicit end. Slice consistently to `[landing, mission_end)`; do not extend the end

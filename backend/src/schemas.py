@@ -149,10 +149,35 @@ class RecommendedSitesRequest(BaseModel):
     radius_km: float = Field(40, gt=0)
 
 
+class RoverSettings(BaseModel):
+    """Terrain-planner limits for one rover. Defaults are illustrative, not a vehicle specification.
+
+    `max_slope_deg` bounds the estimated terrain gradient; the uphill/downhill limits bound
+    each directed move and default to it. `climb_weight` and `slope_weight` are route
+    preferences in equivalent metres, not energy or risk models. Hard limits apply regardless.
+    """
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True)
+
+    max_slope_deg: float = Field(15, gt=0, lt=90)
+    max_uphill_grade_deg: Optional[float] = Field(None, gt=0, lt=90)
+    max_downhill_grade_deg: Optional[float] = Field(None, gt=0, lt=90)
+    cell_size_m: float = Field(20, gt=0)
+    padding_m: float = Field(1000, gt=0)
+    climb_weight: float = Field(0, ge=0)
+    slope_weight: float = Field(1, ge=0)
+    max_region_radius_m: float = Field(25_000, gt=0, le=50_000)
+
+
+Planner = Literal["straight_line", "terrain"]
+
+
 class RouteRequest(BaseModel):
-    """Sites to visit, in order. The route is densified to one point every `step_m` metres."""
+    """Sites to visit, in order. `straight_line` densifies to one point every `step_m` metres;
+    `terrain` plans each leg over the mounted LOLA DEM at `rover.cell_size_m` spacing."""
     waypoints: list[SiteRef] = Field(min_length=2, max_length=100)
     step_m: float = Field(100, gt=0)
+    planner: Planner = "straight_line"
+    rover: RoverSettings = RoverSettings()
 
 
 # ---------- shared response blocks ----------
@@ -229,27 +254,73 @@ class CompareResult(BaseModel):
     timeline: Windows
 
 
-RouteMethod = Literal["straight_line"]
+RouteMethod = Literal["straight_line", "astar_terrain"]
+
+# "not_evaluated" means terrain was never checked (straight_line); the rest are planner outcomes.
+RouteStatus = Literal["not_evaluated", "route_found", "start_blocked", "goal_blocked",
+                      "no_route", "search_limit_reached"]
+
+
+class TerrainCandidate(BaseModel):
+    """A passable cell near a blocked endpoint. Not a route and not proof of access."""
+    grid_cell: list[int]
+    latitude_deg: float
+    longitude_deg: float
+    elevation_m: float
+    terrain_slope_deg: float
+    offset_m: float
+
+
+class EndpointCheck(BaseModel):
+    """Why a leg endpoint was accepted or blocked, at the planner's resolution."""
+    grid_cell: list[int]
+    latitude_deg: float
+    longitude_deg: float
+    elevation_m: Optional[float] = None
+    terrain_slope_deg: Optional[float] = None
+    max_slope_deg: float
+    passable: bool
+    blocked_reasons: list[str] = []
+    nearby_terrain_candidates: list[TerrainCandidate] = []
 
 
 class RoutePoint(BaseModel):
     latitude_deg: float
     longitude_deg: float
     distance_m: float  # cumulative from the first waypoint
+    elevation_m: Optional[float] = None  # terrain planner samples; null for straight_line
     waypoint_index: Optional[int] = None  # set when this point is one of the requested waypoints
 
 
 class RouteLeg(BaseModel):
     from_index: int
     to_index: int
-    distance_m: float
+    distance_m: Optional[float] = None  # null when this leg could not be planned
+    status: RouteStatus = "not_evaluated"
+    reason: Optional[str] = None
+    # Terrain diagnostics; null for straight_line and for unplanned legs.
+    terrain_distance_m: Optional[float] = None
+    elevation_gain_m: Optional[float] = None
+    elevation_loss_m: Optional[float] = None
+    max_terrain_slope_deg: Optional[float] = None
+    max_uphill_grade_deg: Optional[float] = None
+    max_downhill_grade_deg: Optional[float] = None
+    expanded_nodes: Optional[int] = None
+    cost: Optional[float] = None  # distance + slope/climb preference charges, not physical
+    start_check: Optional[EndpointCheck] = None
+    goal_check: Optional[EndpointCheck] = None
 
 
 class RouteResponse(BaseModel):
-    method: RouteMethod  # "straight_line" = mock: great-circle segments, terrain ignored
+    method: RouteMethod
+    status: RouteStatus
+    reason: Optional[str] = None
+    failing_leg: Optional[int] = None  # index into `legs` whose planning stopped the route
+    terrain_source: Optional[Literal["lola_dem"]] = None  # null when terrain was not used
+    rover: Optional[RoverSettings] = None
     waypoints: list[Site]
     legs: list[RouteLeg]
-    total_distance_m: float
+    total_distance_m: float  # planned prefix only when status != "route_found"
     path: list[RoutePoint]
 
 

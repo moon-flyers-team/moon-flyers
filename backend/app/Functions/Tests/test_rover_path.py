@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from Functions.rover_path import MOON_RADIUS_M, plan_rover_grid, plan_rover_route
+from src.rover_path import MOON_RADIUS_M, plan_rover_grid, plan_rover_route
 
 
 class FlatDEM:

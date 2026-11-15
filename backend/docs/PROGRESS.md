@@ -4,6 +4,26 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Rover route exposed through `POST /route` (2026-11-15, branch `feat/rover-route-api`).**
+  `app/Functions/rover_path.py` moved to `src/rover_path.py`, so the Dockerfile (`COPY src`)
+  deploys it; the packaging blocker from `docs/ROVER_PATH_REVIEW.md` is gone. `POST /route`
+  takes `planner: "straight_line" | "terrain"` (default `straight_line`, contract unchanged)
+  and an optional `rover` block (`max_slope_deg` 15, uphill/downhill default to it,
+  `cell_size_m` 20, `padding_m` 1000, `climb_weight` 0, `slope_weight` 1,
+  `max_region_radius_m` 25000/50000). `terrain` plans each leg with `plan_rover_route` over
+  the DEMs at `LOLA_DEM_DIR` (same cached stack as the horizon service), returns
+  `method: astar_terrain`, per-point `elevation_m`, cumulative `distance_m`, per-leg status,
+  terrain metrics, `expanded_nodes`, `cost`, and `start_check`/`goal_check`. Failures are
+  statuses (`start_blocked`/`goal_blocked`/`no_route`/`search_limit_reached`) with
+  `failing_leg` and the planned prefix, not HTTP errors; **503** when no dataset is mounted
+  (no terrain substitution), 422 for planner limits/geometry or more than 1,000,000 sampled
+  cells across the request. `open_dem` (renamed from `horizon._dem`) is shared. 10 route tests
+  on the synthetic LOLA fixture (contract, elevations vs DEM, chord distances, blocked
+  endpoints with nearby candidates, 503, radius 422, settings 422); backend suite 115 passed,
+  3 skipped. Not done: exclusion masks/keep-out buffers, travel time/energy/illumination,
+  waypoint-order optimisation, frontend types/renderer, Node mock support. Limits are
+  illustrative; the rover owner must set them. Real-raster validation still opt-in
+  (`MOON_FLYERS_REAL_ROVER=1`).
 - **Rover route calculation ready for review (2026-11-15).**
   `app/Functions/rover_path.py` adds bounded A* over a metre grid or `DEM.sample()`;
   configurable terrain slope, uphill/downhill grade and exclusions; optional ascent

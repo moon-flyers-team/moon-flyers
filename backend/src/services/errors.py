@@ -19,3 +19,7 @@ class InvalidInputError(DomainError):
 
 class EphemerisUnavailableError(DomainError):
     """The upstream ephemeris (JPL Horizons) failed or returned unusable data (HTTP 502)."""
+
+
+class TerrainUnavailableError(DomainError):
+    """Terrain routing was requested but no verified LOLA DEM is mounted (HTTP 503)."""
