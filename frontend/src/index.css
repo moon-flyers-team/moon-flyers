@@ -1143,3 +1143,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); out
 
 .route-location-details { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
 .route-coordinates { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Recommended sites (POST /recommended-sites) listed under the route stops table. */
+.route-recs { border-top: 1px solid var(--border-hi); font-size: 11px; }
+.route-recs-hdr { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px; background: var(--bg-surf); border-bottom: 1px solid var(--border-hi); }
+.route-recs-title { color: #ffb74d; font-weight: 600; letter-spacing: .02em; }
+.route-recs-radius { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.route-recs-radius select { background: var(--input-bg); color: var(--text); border: 1px solid var(--border-hi); border-radius: 3px; padding: 2px 5px; font: inherit; }
+.route-recs-list { list-style: none; margin: 0; padding: 0; }
+.route-rec { display: flex; align-items: flex-start; gap: 6px; padding: 6px; border-bottom: 1px solid var(--border); }
+.route-rec:hover { background: var(--bg-hover); }
+.route-rec--added { opacity: .6; }
+.route-rec-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.route-rec-btn { flex-shrink: 0; min-width: 62px; }
+.route-rec--added .route-rec-btn { border-color: #ffb74d; color: #ffb74d; }
+.route-recs-empty, .route-recs-foot { margin: 0; padding: 8px 6px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.route-poi { cursor: pointer; }
+.route-poi:hover path { fill: #2a2016; }

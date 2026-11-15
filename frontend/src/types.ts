@@ -108,6 +108,7 @@ export interface PointOfInterest {
   location_uncertainty_km: number | null; notes: string;
   sources: { title: string; url: string; record_id: string | null }[];
 }
+export type PoiCategory = PointOfInterest['category'];
 export interface RecommendedSitesResponse {
   method: 'catalogue_proximity'; data_source: 'published_catalogue'; catalogue_version: string;
   site: SiteDefinition; radius_km: number;

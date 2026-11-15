@@ -245,6 +245,12 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-15 (branch `feature/route-recommended-sites`, frontend, at user's request): Route
+  Planner results from main's "Find nearby POIs" search (radius = Settings `poiRadiusKm`) are
+  listed under the stops table and shown as amber map markers; Add/Remove turns a POI into an
+  ordinary custom waypoint (`id: poi:<id>`), so `/route` is unchanged. Merged main (#26), which
+  had added the read-only POI list and its own `RecommendedSites*` types (kept). `tsc` clean,
+  frontend tests 58/58. No backend changes.
 - 2026-11-15: Added POI-adjacent catalogue defaults with source/safety labels and a measured
   >=80% coverage regression test. New IDs resolve through GET catalogue, site analysis and
   POI search without changing response shapes. Checked after rebasing onto current main
