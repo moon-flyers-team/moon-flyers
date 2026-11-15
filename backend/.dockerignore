@@ -2,6 +2,9 @@
 venv
 .python
 data
+# Small published POI catalogue ships with src; large terrain data stays excluded.
+!src/data/
+!src/data/points_of_interest.json
 __pycache__
 *.py[cod]
 .env*

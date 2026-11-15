@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FitStatus = Literal["both_met", "power_short", "comms_short", "neither_met"]
 
@@ -114,9 +114,39 @@ class LandingWindowsRequest(WindowRequest):
     limit: int = Field(5, ge=1, le=100)
 
 
-class RecommendedSitesRequest(WindowRequest):
-    """The app's current window and constraints; recommends from the catalogue."""
-    limit: int = Field(5, ge=1, le=100)
+class POISiteRef(BaseModel):
+    """Existing landing-site ID or explicit coordinates (name optional)."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True)
+
+    id: Optional[str] = Field(None, min_length=1)
+    name: Optional[str] = Field(None, min_length=1)
+    latitude_deg: Optional[float] = Field(None, ge=-90, le=90)
+    longitude_deg: Optional[float] = Field(None, ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def id_or_coordinates(self):
+        if self.id is not None:
+            if any(v is not None for v in (self.name, self.latitude_deg, self.longitude_deg)):
+                raise ValueError("give id or coordinates, not both")
+        elif self.latitude_deg is None or self.longitude_deg is None:
+            raise ValueError("latitude_deg and longitude_deg are required without id")
+        if self.name is not None and not self.name.strip():
+            raise ValueError("name must not be blank")
+        return self
+
+    def site_ref(self) -> SiteRef:
+        if self.id is not None:
+            return SiteRef(id=self.id)
+        return SiteRef(name=self.name or "Landing site",
+                       latitude_deg=self.latitude_deg, longitude_deg=self.longitude_deg)
+
+
+class RecommendedSitesRequest(BaseModel):
+    """Published south-polar POIs near a landing location, not mission suitability."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True)
+
+    site: POISiteRef
+    radius_km: float = Field(40, gt=0)
 
 
 class RouteRequest(BaseModel):
@@ -230,14 +260,50 @@ class RouteResponse(BaseModel):
     path: list[RoutePoint]
 
 
+class POISource(BaseModel):
+    title: str
+    url: str
+    record_id: Optional[str] = None
+
+
+class POIBoundary(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    kind: Literal["point", "approximate_circle"]
+    radius_km: float = Field(0, ge=0)
+
+    @model_validator(mode="after")
+    def consistent_radius(self):
+        if (self.kind == "point" and self.radius_km != 0
+                or self.kind == "approximate_circle" and self.radius_km <= 0):
+            raise ValueError("points require zero radius; approximate circles require positive radius")
+        return self
+
+
+class PointOfInterest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    category: Literal["lander", "rover", "impact", "natural_feature"]
+    feature_type: str
+    latitude_deg: float = Field(ge=-90, le=90)
+    longitude_deg: float = Field(ge=-180, le=180)
+    boundary: POIBoundary
+    location_uncertainty_km: Optional[float] = Field(None, ge=0)
+    notes: str
+    sources: list[POISource] = Field(min_length=1)
+
+
 class Recommendation(BaseModel):
-    rank: int
-    site: Site
-    landing_utc: str
-    metrics: Metrics
-    fit: Fit
+    poi: PointOfInterest
+    distance_km: float = Field(ge=0)
 
 
 class RecommendedSitesResponse(BaseModel):
-    method: Literal["mock_heuristic"]  # mock: estimates from latitude/longitude, no ephemeris or terrain
+    method: Literal["catalogue_proximity"] = "catalogue_proximity"
+    data_source: Literal["published_catalogue"] = "published_catalogue"
+    catalogue_version: str
+    site: Site
+    radius_km: float
     recommendations: list[Recommendation]
