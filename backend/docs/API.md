@@ -269,15 +269,25 @@ sampled from the DEM, and `method` is `astar_terrain`. `step_m` does not apply; 
   (25000, cap 50000) rejects routes that are not local. Defaults are illustrative, not a
   vehicle specification — the rover owner must choose the real limits.
 - `status`: `route_found`, `start_blocked`, `goal_blocked`, `no_route`,
-  `search_limit_reached`. On failure `failing_leg` names the leg, `legs` keeps the failed leg
-  with `distance_m: null`, and `path`/`total_distance_m` keep only the planned prefix.
+  `search_limit_reached`. **Every leg is attempted**, even after one fails. The top-level
+  `status` is the first failed leg's status (else `route_found`), `failing_leg` is that leg,
+  `failed_legs` lists all of them, and `reason` joins their reasons. A failed leg keeps its
+  diagnostics with `distance_m: null`; in `path` it is drawn as a straight great-circle
+  filler (one point per `cell_size_m`, `elevation_m: null`) with `placeholder: true` on each
+  point — it only connects the waypoints and is **not drivable**. `total_distance_m` sums the
+  planned legs only; `path[].distance_m` stays cumulative along everything drawn.
+- A leg that returns `no_route` in the requested corridor is retried once with
+  `padding_m` 5000 (when that fits `max_region_radius_m`, the per-leg cell limit and the
+  request cell budget). `legs[].padding_m` reports the padding actually searched.
   `start_check`/`goal_check` explain blocking (`missing_elevation`, `unknown_slope`,
   `terrain_slope_exceeds_limit`, `excluded_by_mask`) and may list
   `nearby_terrain_candidates`: passable cells only, never a route or proof of access.
 - `cost` = `distance_m` + slope/climb preference charges; `terrain_distance_m` follows the
   elevation profile. Neither is measured driving distance, and no travel time, energy,
   illumination or communications model is included.
-- `distance_m` is cumulative along `path`; `waypoint_index` marks the requested waypoints.
+- `distance_m` is cumulative along `path`; `waypoint_index` marks the requested waypoints;
+  `placeholder` is `false` except on filler for failed terrain legs (always `false` for
+  `straight_line`).
 - 404 for an unknown site id; 422 for invalid waypoints, limits or geometry (leg beyond
   `max_region_radius_m`, region beyond the cell budget), too many path points, or more than
   `1_000_000` sampled terrain cells across the request; **503 when `LOLA_DEM_DIR` is not set**

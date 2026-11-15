@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.main import app
 from src.services import horizon
+from src.services import route as route_service
 from src.services.route import MOON_RADIUS_M
 from tools.lola_fixture import write_dataset
 
@@ -166,8 +167,11 @@ def test_terrain_endpoint_blocked_reports_status_and_cause(dataset, monkeypatch)
     data = r.json()
 
     assert data["status"] in {"start_blocked", "goal_blocked"}
-    assert data["failing_leg"] == 0 and data["reason"]
-    assert data["path"] == [] and data["total_distance_m"] == 0
+    assert data["failing_leg"] == 0 and data["failed_legs"] == [0] and data["reason"]
+    assert data["total_distance_m"] == 0
+    # The unplanned leg is still drawn, as a flagged straight placeholder between its waypoints.
+    assert data["path"] and all(p["placeholder"] and p["elevation_m"] is None for p in data["path"])
+    assert [p["waypoint_index"] for p in (data["path"][0], data["path"][-1])] == [0, 1]
     leg = data["legs"][0]
     assert leg["status"] == data["status"] and leg["distance_m"] is None
     check = leg["start_check"] if data["status"] == "start_blocked" else leg["goal_check"]
@@ -221,3 +225,66 @@ def test_terrain_settings_are_validated():
                   {"slope_weight": -1}, {"max_region_radius_m": 50_001}, {"unknown": 1}):
         assert client.post("/route", json=body(waypoints, planner="terrain", rover=rover)).status_code == 422
     assert client.post("/route", json=body(waypoints, planner="great_circle")).status_code == 422
+
+
+def _fake_result(start, goal, status, padding_m):
+    """Minimal planner output in the shape `plan_rover_route` returns."""
+    found = status == "route_found"
+    check = {"grid_cell": [0, 0], "latitude_deg": start[0], "longitude_deg": start[1], "elevation_m": 0.0,
+             "terrain_slope_deg": 1.0, "max_slope_deg": 15.0, "passable": True, "blocked_reasons": [],
+             "nearby_terrain_candidates": []}
+    path = [{"latitude_deg": lat, "longitude_deg": lon, "elevation_m": 0.0} for lat, lon in (start, goal)]
+    return {"status": status, "reason": None if found else "no route here", "path": path if found else [],
+            "endpoint_checks": {"start": check, "goal": {**check, "latitude_deg": goal[0],
+                                                          "longitude_deg": goal[1]}},
+            "terrain_distance_m": 1.0 if found else None, "elevation_gain_m": 0.0 if found else None,
+            "elevation_loss_m": 0.0 if found else None, "max_terrain_slope_deg": 1.0 if found else None,
+            "max_uphill_grade_deg": 0.0 if found else None, "max_downhill_grade_deg": 0.0 if found else None,
+            "expanded_nodes": 10, "cost": 1.0 if found else None,
+            "search": {"grid_shape": [3, 3], "padding_m": padding_m}}
+
+
+C = (-88.0, 45.1)
+
+
+def test_terrain_plans_every_leg_after_a_failed_one(dataset, monkeypatch):
+    """A failed middle leg must not hide the legs after it; it becomes a placeholder."""
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+    calls = []
+
+    def planner(dem, start, goal, **kw):
+        calls.append(kw["padding_m"])
+        return _fake_result(start, goal, "no_route" if start == GOAL else "route_found", kw["padding_m"])
+    monkeypatch.setattr(route_service, "plan_rover_route", planner)
+
+    payload = body([custom("A", START), custom("B", GOAL), custom("C", C), custom("A", START)],
+                   planner="terrain", rover={"padding_m": 200})
+    data = client.post("/route", json=payload).json()
+    assert [leg["status"] for leg in data["legs"]] == ["route_found", "no_route", "route_found"]
+    assert data["status"] == "no_route" and data["failing_leg"] == 1 and data["failed_legs"] == [1]
+    assert "leg 1 (B -> C)" in data["reason"]
+    assert data["legs"][1]["distance_m"] is None and data["legs"][2]["distance_m"] > 0
+    assert data["total_distance_m"] == pytest.approx(data["legs"][0]["distance_m"] + data["legs"][2]["distance_m"])
+    # The failed leg was retried once with the wider corridor; found legs were not.
+    assert calls == [200, 200, route_service.WIDE_PADDING_M, 200]
+    assert data["legs"][1]["padding_m"] == route_service.WIDE_PADDING_M
+    markers = [p["waypoint_index"] for p in data["path"] if p["waypoint_index"] is not None]
+    assert markers == [0, 1, 2, 3]
+    flags = {p["placeholder"] for p in data["path"][1:-1]}
+    assert flags == {True, False}
+    distances = [p["distance_m"] for p in data["path"]]
+    assert distances == sorted(distances)
+
+
+def test_terrain_wider_retry_can_find_the_route(dataset, monkeypatch):
+    monkeypatch.setenv("LOLA_DEM_DIR", str(dataset))
+
+    def planner(dem, start, goal, **kw):
+        wide = kw["padding_m"] >= route_service.WIDE_PADDING_M
+        return _fake_result(start, goal, "route_found" if wide else "no_route", kw["padding_m"])
+    monkeypatch.setattr(route_service, "plan_rover_route", planner)
+
+    data = client.post("/route", json=body([custom("A", START), custom("B", GOAL)], planner="terrain")).json()
+    assert data["status"] == "route_found" and data["failed_legs"] == []
+    assert data["legs"][0]["padding_m"] == route_service.WIDE_PADDING_M
+    assert not any(p["placeholder"] for p in data["path"])
