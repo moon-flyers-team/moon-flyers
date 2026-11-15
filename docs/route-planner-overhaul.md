@@ -90,6 +90,9 @@ Ordered by user impact. Each item is a reviewable increment with its own tests.
   snapped position, a dotted connector from the cursor, and a cursor label stating the reason
   ("Steep 21° (limit 20°) · moves 120 m"). Enter/click uses the previewed position. Pointer moves
   are coalesced to one React update per animation frame so a long path does not jank.
+- Fixed regression: rendering the stale response wholesale froze the stop list and made clicks look
+  ignored, and the elevation profile rescanned the whole path on every hover frame. Both are
+  addressed (draft-authoritative display, memoised profile series).
 - Open: the hover probe is one small `/route/stops` request per 30 m bucket rather than a local
   slope raster; a bundled slope grid would remove the latency and the server round trip if hover
   traffic ever matters. Keyboard picking (Enter at the map centre) has no preview yet.
@@ -99,8 +102,12 @@ Ordered by user impact. Each item is a reviewable increment with its own tests.
   dashed amber, with the elevation range in the caption.
 - B4. Done: the elevation column reads `path[].elevation_m` for terrain routes (connectors show a
   dash) and only falls back to the bundled grid for `straight_line`, labelled `coarse grid`.
-- B5. Done: the last route stays on screen with a "stops or limits changed" banner, optional
-  debounced auto-recalculation (off above 12 stops), and the Calculate button becomes Recalculate.
+- B5. Done: the last route stays on screen with a "stops or limits changed" banner, debounced
+  auto-recalculation (on by default, off above 12 stops), and the Calculate button becomes
+  Recalculate. The stale result contributes geometry only (`routeDisplay.displayRoute`):
+  markers, table rows and order controls always come from the draft, so a click is visible
+  immediately; per-row numbers are dashed out while stale because the old legs no longer match
+  the new stop order. Auto-recalculation never retries a failing request.
 - B6. Done: slope limit (15/20/25°), cell size (40/60/100 m), corridor (1/5/10 km) and a smoother
   preset, sent in `rover` and reused by the stop preflight and the hover probe.
 - B7. Done: the failed-leg banner offers "Widen corridor" and "Allow 25°", then recalculate; per-stop

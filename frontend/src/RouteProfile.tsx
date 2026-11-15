@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { RouteResponse } from './types';
 
 // Signed elevation change at a stop, from the terrain the route actually sampled.
@@ -39,7 +40,7 @@ function path(series: ProfilePoint[], x: (m: number) => number, y: (m: number) =
 
 // Small profile of the planned route: distance along the route against sampled elevation.
 export function RouteProfile({ route, height = 84 }: { route: RouteResponse; height?: number }) {
-  const series = profileSeries(route);
+  const series = useMemo(() => profileSeries(route), [route]);
   if (!series) return null;
   const width = 600;
   const pad = 6;
