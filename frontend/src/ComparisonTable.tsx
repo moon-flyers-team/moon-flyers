@@ -70,6 +70,18 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
   const canGoPrev = viewStartMs > startMs;
   const canGoNext = viewEndMs  < sliderEndMs;
 
+  const fitPoints = useMemo(() => {
+    if (!results) return [] as string[];
+    const seen = new Set<string>();
+    for (const result of results) {
+      if (!result) continue;
+      for (const entry of result.window_metrics) {
+        if (entry.fit.status === 'both_met') seen.add(entry.landing_utc);
+      }
+    }
+    return [...seen];
+  }, [results]);
+
   function goPrev() { setViewStartMs(ms => Math.max(startMs, ms - THREE_MONTHS_MS)); }
   function goNext() { setViewStartMs(ms => Math.min(sliderEndMs - THREE_MONTHS_MS, ms + THREE_MONTHS_MS)); }
 
@@ -173,6 +185,15 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
           >
             {!disabled && <SurfaceStayWindow landingUtc={landingTime} daysOnSurface={c.days_on_surface}
               missionStart={viewStart} missionEnd={viewEnd} />}
+            {!disabled && fitPoints.map(utc => {
+              const ms = Date.parse(utc);
+              if (!Number.isFinite(ms) || ms < viewStartMs || ms > viewEndMs) return null;
+              const pct = (ms - viewStartMs) / (viewEndMs - viewStartMs) * 100;
+              return <button key={utc} type="button" className="ts-fit-point"
+                style={{ left: `${pct}%` }} aria-label={`Select ${utc}`} title={utc}
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); onTimeSeek(utc); }} />;
+            })}
             {thumbPct !== null && <div className="ts-thumb" style={{ left: `${thumbPct}%` }} />}
           </div>
           <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoNext} onClick={goNext}>▶</button>
@@ -189,7 +210,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
     </div>
     <div className="ct-body">
       <div className="ct-card">
-      {loading && <p className="request-status" role="status">Comparing sites. This can take 10–30 seconds…</p>}
+      {loading && <p className="request-status" role="status">Comparing sites…</p>}
       {error && <div className="request-error" role="alert">Comparison failed: {error} <button className="ct-btn" onClick={onRetry}>Retry comparison</button></div>}
       <div className="ct-scroll" ref={scrollRef}><table className="ct">
         <thead>

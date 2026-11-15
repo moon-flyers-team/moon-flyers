@@ -82,7 +82,7 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
   }, [analysis]);
   const y = (el: number) => MT + (max - el) / (max - min) * CH;
   const terrainPoints = terrain?.horizon_azimuth_deg.map((az, i) => `${azToX(az)},${y(terrain.horizon_elevation_deg[i])}`) ?? [];
-  const status = loading ? 'Loading a lunar day of positions. This can take 10–30 seconds…'
+  const status = loading ? 'Loading a lunar day of positions…'
     : !analysis ? 'Select a site to load its horizon.' : !samples.length ? 'No time samples returned for this lunar day.' : '';
 
   return <section className={`hz-wrap${selected ? ' hz-wrap--selected' : ''}`} aria-label={`Lunar day horizon, ${siteName}`}

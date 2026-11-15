@@ -11,17 +11,29 @@ import { landingWindowError } from './time';
 import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams } from './types';
 import type { Coordinates } from './map/projection';
 
+const DEFAULT_ENABLED_SITES = new Set(['shackleton_rim', 'de_gerlache_rim', 'change6_apollo_basin']);
+
+const DEFAULT_MISSION: MissionParams = { windowStart: '2027-08-01', windowEnd: '2027-10-31', daysOnSurface: 14, horizonClearance: 0.3, poiRadiusKm: 40 };
+const DEFAULT_POWER: PowerParams = { minSunlight: 60, maxNight: 96 };
+const DEFAULT_COMMS: CommsParams = { minEarthContact: 45, maxCommsGap: 240 };
+const DEFAULT_TERRAIN: TerrainParams = { maxSlope: 8 };
+
+function loadStored<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
+  } catch { return fallback; }
+}
+
 export default function App() {
-  const [mission, setMission] = useState<MissionParams>({
-    windowStart: '2027-08-01',
-    windowEnd: '2027-10-31',
-    daysOnSurface: 14,
-    horizonClearance: 0.3,
-    poiRadiusKm: 40,
-  });
-  const [power, setPower] = useState<PowerParams>({ minSunlight: 60, maxNight: 96 });
-  const [comms, setComms] = useState<CommsParams>({ minEarthContact: 45, maxCommsGap: 240 });
-  const [terrain, setTerrain] = useState<TerrainParams>({ maxSlope: 8 });
+  const [mission, setMission] = useState<MissionParams>(() => loadStored('missionParams', DEFAULT_MISSION));
+  const [power, setPower] = useState<PowerParams>(() => loadStored('powerParams', DEFAULT_POWER));
+  const [comms, setComms] = useState<CommsParams>(() => loadStored('commsParams', DEFAULT_COMMS));
+  const [terrain, setTerrain] = useState<TerrainParams>(() => loadStored('terrainParams', DEFAULT_TERRAIN));
+  useEffect(() => { localStorage.setItem('missionParams', JSON.stringify(mission)); }, [mission]);
+  useEffect(() => { localStorage.setItem('powerParams', JSON.stringify(power)); }, [power]);
+  useEffect(() => { localStorage.setItem('commsParams', JSON.stringify(comms)); }, [comms]);
+  useEffect(() => { localStorage.setItem('terrainParams', JSON.stringify(terrain)); }, [terrain]);
   const [sites, setSites] = useState<LandingSite[]>([]);
   const [usingMock, setUsingMock] = useState(false);
   const [backendMock, setBackendMock] = useState(false);
@@ -33,12 +45,13 @@ export default function App() {
     if (catalogue.data) {
       const catalogueSites = catalogue.data.sites;
       setSites(previous => [...catalogueSites.map(site => ({ ...site,
-        enabled: previous.find(existing => existing.id === site.id)?.enabled ?? false })),
+        enabled: previous.find(existing => existing.id === site.id)?.enabled ?? DEFAULT_ENABLED_SITES.has(site.id) })),
         ...previous.filter(site => site.custom)]);
       setUsingMock(false);
       setBackendMock(catalogue.data.isMock);
     } else if (catalogue.error) {
-      setSites(previous => [...mockSites, ...previous.filter(site => site.custom)]);
+      setSites(previous => [...mockSites.map(site => ({ ...site, enabled: DEFAULT_ENABLED_SITES.has(site.id) })),
+        ...previous.filter(site => site.custom)]);
       setBackendMock(false);
       setUsingMock(true);
     }
