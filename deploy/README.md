@@ -96,6 +96,78 @@ Tags do not change the test deployment. Do not move published tags; create a new
 
 Deployments are serialized per environment and also protected by a host-side lock. A test build superseded by a newer `main` commit fails before connecting to the tailnet, preventing out-of-order builds from publishing stale code. Different environments can deploy concurrently. This is a small single-host Compose setup, not a zero-downtime release system: brief interruptions are possible during replacement.
 
+## 5. Optional: LOLA terrain dataset
+
+The API can validate a **host-provided** LOLA DEM dataset. It is opt-in per environment, mounted
+read-only, and never baked into images, release bundles, or GitHub Actions artifacts.
+
+With the dataset mounted, `services/horizon.py` serves the real terrain horizon (cached per
+site, 22-69 ms on the archive). Environments without `LOLA_DEM_DIR` keep the mock hills, so the
+data is strictly opt-in. `metrics.slope_deg` is still reported as `null`: the DEM computes a
+slope, but exposing it changes the API contract and is left to the contract owner.
+
+### What the dataset is
+
+`src/lunar_horizon_dem.py` owns the format: eight `LDEM_*.IMG`/`.LBL` pairs (~15.9 GB) plus
+`calibration.json`, which records each polar grid's axis convention. The `lola_dem.rar`
+distribution (3.8 GB) unpacks to exactly that, so no conversion is needed.
+
+### Prepare on Beelink
+
+Unpack or copy the files so that the directory contains all eight IMG/LBL pairs and
+`calibration.json`, then verify it:
+
+```sh
+mkdir -p ~/moon-flyers/data/lola/v1
+# copy lola_dem/{*.IMG,*.LBL,calibration.json} from the unpacked archive into that directory
+cd ~/moon-flyers/src            # a checkout of this branch; needs the backend's numpy
+python3 backend/tools/lola_data.py verify --root ~/moon-flyers/data/lola/v1
+```
+
+`verify` fails loudly instead of warning, and checks:
+
+- every file is present and complete (the label's `LINES`/`LINE_SAMPLES` must match the file size),
+- 16-bit little-endian samples and `SCALING_FACTOR = 0.5` (metres above the 1 737.4 km sphere),
+- the published grid shapes and 5 m/20 m polar pixels,
+- `calibration.json` covers exactly the four polar products with valid variants,
+- polar terrain agrees with the independent global tiles at 83°/88° within 1 km. The
+  2026-11-14 archive measures **0.9–2.5 m median** (14 m worst), which confirms the
+  calibration rather than merely accepting it.
+
+`--hash` also records SHA-256 over the 15.9 GB (minutes, for transfer verification).
+`--allow-any-shape` exists only for the synthetic CI fixture; never use it for real data.
+
+Delete the `.rar` once unpacked: it is not needed to serve. The dataset lives outside
+`~/moon-flyers/test`/`production`, so releases never touch it and rollbacks never move it.
+
+### Enable per environment
+
+```sh
+printf '%s
+' "$HOME/moon-flyers/data/lola/v1" > "$HOME/moon-flyers/test/terrain-directory"
+bash ~/moon-flyers/test/current/deploy.sh test
+```
+
+(`production` likewise.) `deploy.sh` snapshots the path into that release's `.env`, adds
+`compose.terrain.yaml`, and mounts it read-only at `/data/lola` with `LOLA_DEM_DIR=/data/lola`,
+which is the variable the loader reads. Because the path is snapshotted per release, a rollback
+keeps using the path that release was deployed with.
+
+Disable it by removing `terrain-directory` and redeploying. A relative path, a path with
+whitespace, a directory without `calibration.json`, or a release bundle lacking
+`compose.terrain.yaml` aborts **before** Docker is touched, so the live site keeps running.
+
+At startup the backend validates the dataset (labels, sizes, calibration, polar/global agreement;
+about 0.4 s on the archive) and refuses to serve if anything fails, so a half-copied or
+mis-calibrated directory causes a normal deploy rollback. Look for
+`LOLA DEM dataset validated at /data/lola` in the backend logs.
+
+### Disk and access notes
+
+- Budget ~16 GB for the dataset plus the usual Docker images and two releases.
+- The mount is read-only and unprivileged; no new ports or Tailscale rules are involved.
+- Do not put the dataset inside a release directory or a Git checkout.
+
 ## Operations
 
 ### OIDC token exchange returns 403

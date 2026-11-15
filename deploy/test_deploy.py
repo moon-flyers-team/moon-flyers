@@ -41,15 +41,26 @@ printf 'smoke %s\\n' "$*" >> "$COMMAND_LOG"
         executable.write_text(contents)
         executable.chmod(0o755)
 
-    def release(self, name: str, revision: str = "a" * 40) -> Path:
+    def release(self, name: str, revision: str = "a" * 40, with_terrain_overlay: bool = True) -> Path:
         directory = self.root / "releases" / name
         directory.mkdir(parents=True)
         shutil.copyfile(Path(__file__).with_name("deploy.sh"), directory / "deploy.sh")
         (directory / "compose.yaml").write_text("services: {}\n")
+        if with_terrain_overlay:
+            shutil.copyfile(Path(__file__).with_name("compose.terrain.yaml"), directory / "compose.terrain.yaml")
         (directory / "images.tar").touch()
         (directory / "smoke-test.py").touch()
         (directory / "REVISION").write_text(revision + "\n")
         return directory
+
+    def terrain_dataset(self, name: str = "dem") -> Path:
+        directory = self.home / "moon-flyers" / "data" / "lola" / "v1" / name
+        directory.mkdir(parents=True)
+        (directory / "calibration.json").write_text("{}\n")
+        return directory
+
+    def enable_terrain(self, directory: Path | str) -> None:
+        (self.root / "terrain-directory").write_text(f"{directory}\n")
 
     def run_release(self, directory: Path, target: str = "test", **overrides: str) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -139,6 +150,88 @@ printf 'smoke %s\\n' "$*" >> "$COMMAND_LOG"
         result = self.run_release(self.release("first"), "production")
         self.assertEqual(result.returncode, 2)
         self.assertFalse(self.log.exists())
+
+    def test_terrain_is_opt_in_and_absent_by_default(self) -> None:
+        release = self.release("first")
+        self.terrain_dataset()
+        self.assertEqual(self.run_release(release).returncode, 0)
+        self.assertNotIn("LOLA_DATA_DIR", (release / ".env").read_text())
+        self.assertNotIn("compose.terrain.yaml", self.log.read_text())
+
+    def test_terrain_directory_is_snapshotted_and_overlay_applied(self) -> None:
+        dataset = self.terrain_dataset()
+        release = self.release("first")
+        self.enable_terrain(dataset)
+        result = self.run_release(release)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((release / ".env").read_text(),
+                         f"REVISION={'a' * 40}\nHTTP_PORT=18081\nLOLA_DATA_DIR={dataset}\n")
+        commands = self.log.read_text()
+        self.assertIn(f"-f {release}/compose.yaml -f {release}/compose.terrain.yaml up", commands)
+
+    def test_rollback_restores_the_previous_release_dataset_path(self) -> None:
+        """A rollback keeps the dataset path that release was deployed with.
+
+        Each release records its own path, so removing or changing the host
+        `terrain-directory` afterwards must not move an older release onto a
+        different dataset - or drop the mount it was deployed with.
+        """
+        first = self.release("first")
+        second = self.release("second", "b" * 40)
+        third = self.release("third", "c" * 40)
+        first_dataset = self.terrain_dataset("v1")
+        second_dataset = self.terrain_dataset("v2")
+        self.enable_terrain(first_dataset)
+        self.assertEqual(self.run_release(first).returncode, 0)
+        self.enable_terrain(second_dataset)
+        self.assertEqual(self.run_release(second).returncode, 0)
+
+        # The host configuration disappears; the next release fails and rolls back to `second`.
+        (self.root / "terrain-directory").unlink()
+        self.log.write_text("")
+        result = self.run_release(third, FAIL_RELEASE=str(third))
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(
+            (second / ".env").read_text(),
+            f"REVISION={'b' * 40}\nHTTP_PORT=18081\nLOLA_DATA_DIR={second_dataset}\n")
+        commands = self.log.read_text()
+        self.assertIn(f"--env-file {second}/.env -f {second}/compose.yaml "
+                      f"-f {second}/compose.terrain.yaml up", commands)
+        self.assertIn(f"--env-file {third}/.env -f {third}/compose.yaml up", commands)
+        self.assertNotIn(str(first_dataset), commands)
+
+    def test_redeploying_a_release_resnapshots_the_host_configuration(self) -> None:
+        """Re-running deploy.sh on a release directory re-records the current host config."""
+        release = self.release("first")
+        self.enable_terrain(self.terrain_dataset())
+        self.assertEqual(self.run_release(release).returncode, 0)
+        self.assertIn("LOLA_DATA_DIR=", (release / ".env").read_text())
+
+        (self.root / "terrain-directory").unlink()
+        self.log.write_text("")
+        self.assertEqual(self.run_release(release).returncode, 0)
+        self.assertNotIn("LOLA_DATA_DIR", (release / ".env").read_text())
+        self.assertNotIn("compose.terrain.yaml", self.log.read_text())
+
+    def test_invalid_terrain_directory_is_rejected_before_docker(self) -> None:
+        release = self.release("first")
+        for value in ("relative/dem", "/does/not/exist", "/tmp/with space/dem"):
+            self.enable_terrain(value)
+            result = self.run_release(release)
+            self.assertEqual(result.returncode, 2, value)
+            self.assertIn("Invalid terrain-directory", result.stderr)
+            self.assertFalse(self.log.exists(), value)
+
+    def test_terrain_directory_requires_calibration_and_overlay(self) -> None:
+        dataset = self.terrain_dataset()
+        without_calibration = self.terrain_dataset("empty")
+        (without_calibration / "calibration.json").unlink()
+        for directory, release in ((without_calibration, self.release("first")),
+                                   (dataset, self.release("second", with_terrain_overlay=False))):
+            self.enable_terrain(directory)
+            result = self.run_release(release)
+            self.assertEqual(result.returncode, 2, str(directory))
+            self.assertFalse(self.log.exists(), str(directory))
 
 
 if __name__ == "__main__":

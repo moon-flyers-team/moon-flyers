@@ -146,7 +146,7 @@ class Interval(BaseModel):
 class Windows(BaseModel):
     sun: list[Interval]
     earth: list[Interval]
-    eclipse: list[Interval]  # Earth covering the Sun, while Earth is visible
+    eclipse: list[Interval] = []  # Earth covering the Sun, while Earth is visible
 
 
 class TimeseriesPoint(BaseModel):

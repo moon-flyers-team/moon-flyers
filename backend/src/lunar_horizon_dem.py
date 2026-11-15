@@ -344,8 +344,9 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
         verbose: print diagnostics and timing.
 
     Returns dict:
-        latitude_deg, longitude_deg: the inputs, echoed back unchanged (a check
-            that the result belongs to the requested site).
+        latitude_deg, longitude_deg, height_above_terrain: the inputs, echoed
+            back unchanged (a check that the result belongs to the requested
+            site and observer height).
         horizon_azimuth_deg: [0.0 .. 359.0], north=0, east=90.
         horizon_elevation_deg: same length; elevation of the terrain relative to
             the plane perpendicular to the vector to the Moon's centre,
@@ -422,6 +423,7 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
     return {
         "latitude_deg": latitude_deg,
         "longitude_deg": longitude_deg,
+        "height_above_terrain": height_above_terrain,
         "horizon_azimuth_deg": [float(i) for i in range(360)],
         "horizon_elevation_deg": [float(v) for v in prof],
         "altitude_m": float(alt),
@@ -429,6 +431,154 @@ def horizon(latitude_deg, longitude_deg, max_range_km=50.0,
         "slope_deg": None if slope is None else float(slope),
         "slope_az_deg": None if slope_az is None else float(slope_az),
     }
+
+
+# --------------------------------------------------------------------------
+# Dataset integrity and placement checks
+# --------------------------------------------------------------------------
+# Raster shapes of the published products (lines, samples), used to catch a
+# wrong or truncated release before a deploy serves it.
+PRODUCT_SHAPES = {
+    "LDEM_256_00N_90N_000_180": (23040, 46080),
+    "LDEM_256_00N_90N_180_360": (23040, 46080),
+    "LDEM_256_90S_00S_000_180": (23040, 46080),
+    "LDEM_256_90S_00S_180_360": (23040, 46080),
+    "LDEM_80N_20M": (30400, 30400),
+    "LDEM_80S_20M": (30400, 30400),
+    "LDEM_875N_5M": (30336, 30336),
+    "LDEM_875S_5M": (30336, 30336),
+}
+POLAR_PIXEL_M = {"LDEM_80N_20M": 20.0, "LDEM_80S_20M": 20.0,
+                 "LDEM_875N_5M": 5.0, "LDEM_875S_5M": 5.0}
+# Cross-product placement check: at these latitudes the polar and the global
+# tiles overlap, so the same lon/lat must give a similar height.
+VERIFY_CROSS_CHECK_LON_STEP = 30
+VERIFY_CROSS_CHECK_MIN_SAMPLES = 8
+VERIFY_CROSS_CHECK_TOLERANCE_M = 1_000.0
+CROSS_CHECK_LATITUDE = {"LDEM_875N_5M": 88.0, "LDEM_875S_5M": -88.0,
+                        "LDEM_80N_20M": 83.0, "LDEM_80S_20M": -83.0}
+
+
+def _product_paths(data_dir, name):
+    base = os.path.join(data_dir, name)
+    return base + ".LBL", base + ".IMG"
+
+
+def _check_product(data_dir, name, published_shapes=False):
+    """Label, shape, size and scaling of one product. Returns a summary dict.
+
+    `published_shapes` additionally requires the published release (exact grid shapes
+    and 5/20 m polar pixels), which is the right check for a real dataset and the wrong
+    one for a synthetic test fixture. Without it, the label must merely be internally
+    consistent with the file and the grid it describes.
+    """
+    lbl, img = _product_paths(data_dir, name)
+    for path in (lbl, img):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"{path} not found; copy the LOLA DEM files into {data_dir}")
+    label = _parse_label(lbl)
+    lines, samples = int(_num(label, "LINES")), int(_num(label, "LINE_SAMPLES"))
+    size = os.path.getsize(img)
+    if size != lines * samples * 2:
+        raise RuntimeError(f"{name}: {img} is {size} bytes, expected {lines}x{samples}x2 "
+                           f"({lines * samples * 2}); the copy or download is incomplete")
+    if int(_num(label, "SAMPLE_BITS", 0)) != 16 or "LSB" not in label.get("SAMPLE_TYPE", ("",))[0].upper():
+        raise RuntimeError(f"{name}: expected little-endian 16-bit samples, got {label.get('SAMPLE_TYPE')}")
+    scale = _num(label, "SCALING_FACTOR")
+    if scale is None or abs(scale - 0.5) > 1e-9:
+        raise RuntimeError(f"{name}: expected SCALING_FACTOR 0.5, got {scale}")
+    projection = label.get("MAP_PROJECTION_TYPE", ("",))[0].upper()
+    pixel = None
+    if name in POLAR_PIXEL_M:
+        if "POLAR STEREOGRAPHIC" not in projection:
+            raise RuntimeError(f"{name}: expected POLAR STEREOGRAPHIC, got {projection!r}")
+        pixel = _num(label, "MAP_SCALE")
+        if pixel is not None and "KM" in label["MAP_SCALE"][1]:
+            pixel *= 1000.0
+        lat_limit = next(lim for grid, _, lim in POLAR_GRIDS if grid == name)
+        geometric = 2 * MOON_RADIUS_M * math.tan(math.radians(90.0 - lat_limit) / 2.0) / (lines / 2.0)
+        if pixel is None or abs(pixel / geometric - 1.0) > 0.05:
+            raise RuntimeError(f"{name}: MAP_SCALE {pixel} m does not match its {lines}-line grid "
+                               f"({geometric:.0f} m/pixel)")
+        if published_shapes and abs(pixel - POLAR_PIXEL_M[name]) > 0.01 * POLAR_PIXEL_M[name]:
+            raise RuntimeError(f"{name}: this is not the published release; expected "
+                               f"{POLAR_PIXEL_M[name]} m pixels, got {pixel} m")
+    else:
+        if "CYLINDRICAL" not in projection:
+            raise RuntimeError(f"{name}: expected SIMPLE CYLINDRICAL, got {projection!r}")
+        if published_shapes and (lines, samples) != PRODUCT_SHAPES[name]:
+            raise RuntimeError(f"{name}: label says {lines}x{samples}, published release is "
+                               f"{PRODUCT_SHAPES[name][0]}x{PRODUCT_SHAPES[name][1]}")
+    _open_raster(os.path.join(data_dir, name))  # verifies the memmap opens
+    return {"lines": lines, "samples": samples, "image_bytes": size, "scaling_factor": scale,
+            "map_scale_m": None if pixel is None else pixel}
+
+
+def _cross_check_polar(data_dir, name, sign, lat_limit, variant, cylindrical_cache):
+    """Compare one polar grid with the independent global tile at the same lon/lat.
+
+    Metadata cannot tell whether a polar raster's axis orientation is right: the
+    label does not state it. A wrong `calibration.json` entry, rotation or mirror
+    shows up as kilometre-scale disagreement once the terrain is sampled.
+    """
+    latitude = CROSS_CHECK_LATITUDE[name]
+    polar = _PolarGrid(os.path.join(data_dir, name), sign, lat_limit, variant=variant)
+    differences = []
+    for lon in range(0, 360, VERIFY_CROSS_CHECK_LON_STEP):
+        tile = next(t for t in CYL_TILES if t[1] <= latitude <= t[2] and t[3] <= lon % 360.0 < t[4])
+        cyl = cylindrical_cache.get(tile[0])
+        if cyl is None:
+            cyl = cylindrical_cache[tile[0]] = _CylGrid(os.path.join(data_dir, tile[0]), *tile[1:])
+        here = float(polar.sample(np.array([latitude]), np.array([lon], dtype=float))[0])
+        there = float(cyl.sample(np.array([latitude]), np.array([lon], dtype=float))[0])
+        if math.isfinite(here) and math.isfinite(there):
+            differences.append(abs(here - there))
+    if len(differences) < VERIFY_CROSS_CHECK_MIN_SAMPLES:
+        raise RuntimeError(f"{name}: only {len(differences)} usable cross-check samples at "
+                           f"{latitude} deg; check the global tiles")
+    median = float(np.median(differences))
+    if median > VERIFY_CROSS_CHECK_TOLERANCE_M:
+        raise RuntimeError(
+            f"{name}: polar and global terrain disagree at {latitude} deg "
+            f"(median {median:.0f} m > {VERIFY_CROSS_CHECK_TOLERANCE_M:.0f} m). "
+            f"Check calibration.json entry {variant!r}: run `python lunar_horizon_dem.py calibrate` "
+            f"if the raw LOLA comparison is available")
+    return {"latitude_deg": latitude, "samples": len(differences),
+            "median_abs_difference_m": round(median, 1),
+            "max_abs_difference_m": round(float(max(differences)), 1)}
+
+
+def verify_dataset(data_dir=DATA_DIR, cross_check=True, published_shapes=False):
+    """Check a LOLA DEM directory before serving it; never downloads anything.
+
+    Verifies every expected file is present and complete, that labels agree with
+    the published grid shapes and scaling, that `calibration.json` covers exactly
+    the polar products, and (unless disabled) that polar terrain agrees with the
+    independent global tiles. Cheap enough for API startup when `cross_check=False`.
+    """
+    data_dir = str(data_dir)
+    products = {name: _check_product(data_dir, name, published_shapes) for name in PRODUCT_SHAPES}
+    cal_path = os.path.join(data_dir, "calibration.json")
+    if not os.path.exists(cal_path):
+        raise FileNotFoundError(f"{cal_path} not found; it is required for polar grid orientation")
+    with open(cal_path) as f:
+        calibration = json.load(f)
+    names = {name for name, _, _ in POLAR_GRIDS}
+    if set(calibration) != names:
+        raise RuntimeError(f"{cal_path}: expected exactly the polar products {sorted(names)}, "
+                           f"got {sorted(calibration)}")
+    for name, variant in calibration.items():
+        if not isinstance(variant, int) or isinstance(variant, bool) or not 0 <= variant < len(VARIANTS):
+            raise RuntimeError(f"{cal_path}: {name} variant {variant!r} is not an integer in "
+                               f"0..{len(VARIANTS) - 1}")
+    results = {}
+    if cross_check:
+        cylindrical_cache = {}
+        for name, sign, lat_limit in POLAR_GRIDS:
+            results[name] = _cross_check_polar(data_dir, name, sign, lat_limit,
+                                               calibration[name], cylindrical_cache)
+    return {"data_dir": data_dir, "products": products,
+            "calibration": calibration, "cross_check": results}
 
 
 # --------------------------------------------------------------------------

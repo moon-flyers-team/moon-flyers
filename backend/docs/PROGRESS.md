@@ -7,6 +7,18 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 - **Earth eclipse windows (2026-11-15).** `timeline.eclipse` / `windows.eclipse`: Sun–Earth
   separation < 0.267° + 0.95° and Earth visible. Live Horizons shows the 2027-08-17 penumbral
   lunar eclipse (06:00–10:00Z) at near-side sites. Hourly sampling can miss very short events.
+- **LOLA DEM dataset is provisioned, verified and deployable (2026-11-14, branch
+  `feat/beelink-lola-terrain`, rebased on `main`).** The real archive (`lola_dem.rar`: eight
+  IMG/LBL pairs + `calibration.json`, 15.9 GB) passes `tools/lola_data.py verify`: polar vs global
+  terrain agree to 0.9-2.5 m median (14 m worst), so the recorded polar variants are correct.
+  `deploy.sh` mounts it read-only per environment (`LOLA_DEM_DIR=/data/lola`) and startup refuses a
+  broken dataset. Real timings at the site: 22-69 ms per `horizon()` call, and
+  `tests/test_calculation_data.py -k live_terrain` passes against live JPL in 1.5 s.
+  **The API now serves that terrain horizon.** `services/horizon.py` returns a `DemHorizon`
+  built from `lunar_horizon_dem.horizon()` whenever `LOLA_DEM_DIR` is set, cached per site
+  (22-69 ms per site; `/sites` with mock ephemeris answers in 0.01 s). Without the variable it
+  keeps `MockTerrainHorizon`, so existing deployments are unchanged. At (-89.9, 0) the skyline
+  runs -3.2 to +23.8 deg and the first hourly sample is in shadow.
 - **Real Sun/Earth positions from JPL Horizons are live (2026-11-14, branch `plug-positions-py`).**
   `services/ephemeris.py` calls `positions.positions()`; header `X-Moon-Flyers-Data-Source: horizons`.
   Terrain is still the mock hills. `MOON_FLYERS_EPHEMERIS=mock` switches back to synthetic data
@@ -16,6 +28,12 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
   Horizons calls), ≈ 0.7 MB. The frontend's parallel burst (`/compare` + 7 `GET /sites`) ≈ 33 s, all 200.
 
 ## Next up (backend)
+1. Agree the `slope_deg` contract with the frontend: the DEM already returns slope and
+   downslope azimuth, but `visibility.metrics()` hardcodes `slope_deg=None` and `fit()` ignores
+   `max_slope_deg`. Decide whether slope violations should affect `fit.status` before wiring it.
+2. Check the terrain defaults against the team's PDF: `horizon()` uses `max_range_km=50`,
+   `min_range_m=20`, `height_above_terrain=0`; catalogue sites are rim/massif sites, so the
+   observer height and clearance conventions deserve a review.
 1. Open a PR for `plug-positions-py`. Tell the frontend team: header is now `horizons`,
    `/compare` takes about 25 s, there's a new 502, and the frontend fires `/compare` plus one `GET /sites`
    per site in parallel (≈ 28 Horizons calls per param change).
@@ -42,6 +60,9 @@ To raise with the frontend team:
   scaffold. There are now two mocks (theirs in Node, ours in Python), so agree which one they use.
 - Site ids and list: ours (7 sites in `services/catalogue.py`) were invented. Their mock UI shows 10.
 - The Node mock's 0.4 s artificial delay isn't in the Python mock.
+- With LOLA terrain mounted, horizon elevations reach about -3 to +24 deg; the mock hills
+  stayed within 0-1.5 deg. Check the chart's y-axis range, clearance labels and any
+  hard-coded 0 deg assumptions against real profiles.
 
 Implementation choices where API.md is silent:
 - `GET /sites` analysis: `timeseries`/`windows` span window_start → window_end + days.
@@ -56,6 +77,25 @@ Implementation choices where API.md is silent:
 
 ## Decisions
 _(date: decision, then why)_
+- 2026-11-14: **Terrain data is the archive's IMG/LBL + calibration, read by `lunar_horizon_dem.py`;
+  no conversion, no rasterio.** An earlier attempt on this branch downloaded JP2s and converted
+  them to COGs, but `main` already had a loader (memmap + PDS labels) and the team had the IMG
+  archive, so the pipeline validates and mounts what that loader reads. Drops the extra
+  GDAL/libexpat dependency from the image.
+- 2026-11-14: **`LOLA_DEM_DIR` is the one variable** (read by the loader, set by the compose
+  overlay). The host path is snapshotted per release as `LOLA_DATA_DIR` in `.env`.
+- 2026-11-14: **Verification is strict and offline.** `verify_dataset` fails on incomplete files,
+  wrong scaling/sample type, non-published grids, bad calibration keys, and polar/global
+  disagreement > 1 km. Startup runs the same checks (0.4 s) so a bad mount rolls the deploy back;
+  SHA-256 stays in the CLI (`--hash`) because reading 15.9 GB does not belong in a boot.
+- 2026-11-14: **The DEM horizon is opt-in and cached per site.** `for_site()` reads
+  `LOLA_DEM_DIR` at call time, keeps one `DEM` per directory (memory-mapped) and one 360-value
+  skyline per rounded coordinate. An uncovered coordinate or unreadable DEM falls back to a flat
+  horizon with a warning instead of failing the request; startup has already refused broken
+  datasets. `slope_deg` stays `null` until the contract question is settled.
+- 2026-11-14: **Fixtures must not be mirror-symmetric in longitude.** A synthetic DEM that varies
+  only as `cos(lon)` cannot distinguish axis variants 0 and 2 (lon negated); the fixture adds a
+  `sin(2*lon)` term, and a test proves a wrong variant is caught by the cross-check.
 - 2026-11-14: Ephemeris source is chosen by env var `MOON_FLYERS_EPHEMERIS` (default Horizons; `mock` for
   tests/offline), not FastAPI `Depends`. Why: simplest switch, and tests stay offline. Horizons failures → 502,
   and a step `positions()` can't express → 422.
@@ -122,6 +162,22 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-14: Measured request cost of the DEM horizon (mock ephemeris, real 15.9 GB archive,
+  `TestClient`, so no HTTP overhead): `/compare` for 7 sites over 3 months is 0.88 s with a cold
+  DEM cache and 0.18 s warm, versus 0.21 s for the mock hills; `/sites` for one site is 21-36 ms.
+  Per site the first skyline costs roughly 30-95 ms (memory-mapped rasters, page cache cold), and
+  repeats are free. Against ~24 s of live Horizons latency that is negligible; using real terrain
+  is not a latency problem.
+- 2026-11-14: **The API serves real terrain** when a dataset is mounted: `DemHorizon` in
+  `services/horizon.py` plus `tests/test_horizon_dem.py` (mock without the variable, DEM profile
+  through `/sites` with it, cache reuse, flat fallback). Real-data check: `/sites` 200 in 0.01 s.
+- 2026-11-14: **Dataset provisioning, verification and read-only mount** (branch
+  `feat/beelink-lola-terrain`, rebased onto `main`): `lunar_horizon_dem.verify_dataset()` (labels,
+  sizes, scaling, published shapes, calibration, polar/global cross-check),
+  `tools/lola_data.py verify|--hash`, `deploy/compose.terrain.yaml`, per-environment
+  `terrain-directory` in `deploy.sh`, startup validation via `LOLA_DEM_DIR`, stdlib fixture
+  (`tools/lola_fixture.py`) and a CI step that boots the real image on it. Verified on the real
+  archive: cross-check medians 1.5/0.9/2.5/1.1 m, `horizon()` 22-69 ms, live JPL test passing.
 - 2026-11-14: Fixed 502s in the UI ("HTTP Error 503" from Horizons). Horizons answers 503 when one IP has
   more than about 2 requests open (measured: 2 parallel OK, 4 → half fail). `ephemeris.py` now allows at most 2
   `positions()` calls in flight (process-wide semaphore) and retries 503 with 1/2/4/8 s backoff.
