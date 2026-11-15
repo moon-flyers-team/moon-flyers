@@ -4,6 +4,19 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Rover route calculation ready for review (2026-11-15).**
+  `app/Functions/rover_path.py` adds bounded A* over a metre grid or `DEM.sample()`;
+  configurable terrain slope, uphill/downhill grade and exclusions; optional ascent
+  cost plus a direction-independent slope penalty (default weight 1, 15° scale);
+  exact geographic endpoints, pole/dateline handling, no diagonal corner
+  cutting, and explicit blocked/no-route/budget statuses. No route endpoint or
+  frontend wiring. Twenty-four focused offline tests cover graph optimality against
+  Dijkstra and compatibility with the LOLA loader fixture. Reviewer handoff:
+  `docs/ROVER_PATH_REVIEW.md`. An opt-in real-raster test is now available:
+  `MOON_FLYERS_REAL_ROVER=1` plus `LOLA_DEM_DIR`, run `tests/test_rover_dem.py`
+  with `-k on_real_lola_dataset -v -s`. It requires a found route and independently
+  checks DEM heights, distances, grades and costs; writes a temporary JSON report.
+  Real-raster execution remains with the data owner; API wiring is separate.
 - **Default POI-adjacent references (2026-11-15, branch `feat/poi-default-sites`).** Preserved
   the seven original sites; added Athena's published observed landing location plus 13
   explicitly unvetted exploration references at published feature centres. NASA candidate
