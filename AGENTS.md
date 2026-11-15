@@ -162,8 +162,10 @@ Keep **mission scoring duration** separate from **visualization coverage**:
    altitude-axis bounds. The custom timeline slider updates time locally; ±6 h buttons
    are no longer mounted.
 4. Applied mission dates/constraints or enabled sites load new batches. Comparison returns
-   `window_metrics`; the table currently matches timestamp strings exactly, falling back to
-   the first entry on a miss. Do not describe this fallback as analysis of an arbitrary instant.
+   `window_metrics`; the table matches numeric UTC instants exactly, accepting equivalent
+   timestamp spellings. Missing samples show “Not sampled”, never first-candidate evidence.
+   The native Landing time (UTC) field supports keyboard editing on the 6-hour grid and
+   changes selection locally without fetching; retain the custom timeline as another input.
 
 Use each body's own azimuth/elevation and the current sample's `sun_visible`/`earth_visible`
 flags. Do not label peak elevations as current positions or infer visibility from elevation

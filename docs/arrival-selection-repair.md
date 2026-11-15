@@ -20,4 +20,8 @@ Before stacking with the provenance PR: `npm --prefix frontend test` passed **44
 
 Edge 157 on Windows: filled the arrival field with 7 August 2027 06:00 UTC, then used ArrowUp twice to move the day segment to 8 and 9 August. Table metrics and horizon timestamp changed together. The six initial `/api/` resource entries remained six after the keyboard change: no additional analysis request was observed. The demonstration used the default 14-day synthetic stay, not a scientific prediction or the blinded participant's 3-day task.
 
+After stacking on the provenance PR, the combined branch passed **45/45** frontend tests,
+both TypeScript checks/build, isolated mock HTTP, and **45 backend tests with 2 skips**.
+All were actually executed; pnpm was unavailable so frontend scripts ran through npm.
+
 The participant audit ran against unchanged main in a different worktree/browser; no UI improvements were introduced into its baseline. See the separate audit report for participant outcomes and methodological limitations.

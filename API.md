@@ -122,9 +122,10 @@ site analysis run when applied settings or enabled sites change.
 On events 2–3, the frontend fires **one `POST /compare`** for all enabled sites and **one `GET /sites` per enabled site** in parallel to pre-load every horizon dataset.
 
 The time slider **never** triggers an API call. It slices pre-loaded data client-side:
-- `ComparisonTable` currently looks for an exact timestamp-string match in `window_metrics`,
-  then falls back to the first candidate if no match exists. This is an implementation
-  limitation, not a guarantee that an arbitrary selected instant was evaluated.
+- `ComparisonTable` matches `window_metrics` by numeric UTC instant, accepting equivalent
+  `Z`/`.000Z`/offset forms. A missing candidate says “Not sampled”; it never substitutes
+  the first candidate. The labeled Landing time (UTC) input provides a native keyboard
+  alternative to the custom timeline, bounded to the window and 6-hour samples.
 - `HorizonChart` filters the pre-loaded `timeseries` to the one lunar day starting at the slider position — switching sites is instant.
 
 ## 1. `GET /sites`: the sites catalogue and per-site horizon data
@@ -196,8 +197,9 @@ Response, one entry per site in the order you sent them:
                  "eclipse": [{ "start_utc": "...", "end_utc": "..." }] } }]
 ```
 - `window_metrics` pre-computes metrics and fit for every `candidate_step_hours` step in the
-  window. The frontend looks up the entry matching the slider's current `landing_utc` to update
-  the table instantly without a new request. The ±6 h buttons shift the slider position only.
+  window. The frontend looks up the entry matching the selected UTC instant to update
+  the table without a new request. Timeline seeking and the native Landing time (UTC)
+  field update selection locally; the older ±6 h buttons are no longer mounted.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
 - `eclipse` lists Earth eclipses (Earth's disc overlapping the Sun's, i.e. a lunar eclipse seen
