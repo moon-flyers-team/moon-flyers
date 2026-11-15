@@ -25,7 +25,7 @@ The mock returns `X-Moon-Flyers-Data-Source: mock`, exposed through CORS. The fr
 that header from the catalogue response to show a synthetic-data banner; the catalogue JSON
 shape is unchanged. Data is deterministic, varies with site/date, and recomputes visibility
 metrics, fit violations, and timelines from the same generated samples. Custom sites are
-accepted without being stored. Slope remains `null`. The standalone Node mock returns a
+accepted without being stored. Slope is `null` (no DEM). The standalone Node mock returns a
 flat horizon and synthetic ephemerides; its eclipse intervals are synthetic fixtures.
 
 **The Python backend (`backend/`) uses real Sun/Earth positions from JPL Horizons by
@@ -107,8 +107,12 @@ optional, and the defaults match the mock UI:
 - `violations` lists the metric names that broke a limit, so you can show the red ⚠ markers, for
   example `["sun_visible_pct", "longest_darkness_hours"]`.
 - Power covers sunlight % and longest night. Comms covers Earth contact % and longest gap.
-- `slope_deg` remains `null` even with a DEM mounted. Show "—";
-  `max_slope_deg` is accepted but is not evaluated by `fit`.
+- `slope_deg` is the **real terrain slope at the site** in degrees from horizontal, fitted from the
+  LOLA DEM (rounded to 0.1°). It is a site property, so it is the same for every landing time.
+  It is `null` when the server has no DEM mounted (or the site is outside its coverage); show "—".
+- If `slope_deg > max_slope_deg`, `violations` includes `"slope_deg"` (show the ⚠), but
+  `fit.status` is unchanged: status only describes power and comms. A `null` slope is never a
+  violation.
 - Earth visibility does not establish a communications link, sunlight is not an energy
   budget, and matching visibility limits does not establish mission safety.
 

@@ -4,6 +4,19 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Real `slope_deg` (2026-11-15, branch `feat/real-slope`).** `DemHorizon` carries the DEM's
+  site slope (`lunar_horizon_dem.horizon()["slope_deg"]`, 0.1°); `metrics.slope_deg` reports it,
+  `null` without a DEM (mock hills never invent a slope). `fit` adds `"slope_deg"` to
+  `violations` when over `max_slope_deg` but keeps `status` (power/comms only). The frontend
+  already renders it (Terrain column + ⚠ from violations). Tested on the synthetic fixture only:
+  no local copy of the real dataset.
+- **No ranking; `POST /landing-windows` removed (2026-11-15, branch `chore/remove-landing-windows`).**
+  User decision: the choice of site and landing time is manual, from the `/compare` data (whole
+  window in one response; slider and ◀ ▶ arrows are frontend-only). Removed the router,
+  `services/ranking.py`, `LandingWindow`/`LandingWindowsRequest` and the test. The UI never
+  called it (`api.landingWindows` in `frontend/src/api.ts` is dead code; tell the frontend to drop it).
+  A headroom ranking (per-constraint margins) was built and dropped; it is in `git stash`
+  ("compare-rank (discarded)") if ever needed.
 - **`POST /recommended-sites` published POIs (2026-11-15, branch `feat/real-poi-recommendations`).**
   Replaces the mocked mission ranking, including its request/response contract. Takes a landing
   `site` (catalogue ID or coordinates) and optional `radius_km` (40); returns all nearby POIs
@@ -40,9 +53,6 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
   Horizons calls), ≈ 0.7 MB. The frontend's parallel burst (`/compare` + 7 `GET /sites`) ≈ 33 s, all 200.
 
 ## Next up (backend)
-1. Agree the `slope_deg` contract with the frontend: the DEM already returns slope and
-   downslope azimuth, but `visibility.metrics()` hardcodes `slope_deg=None` and `fit()` ignores
-   `max_slope_deg`. Decide whether slope violations should affect `fit.status` before wiring it.
 2. Check the terrain defaults against the team's PDF: `horizon()` uses `max_range_km=50`,
    `min_range_m=20`, `height_above_terrain=0`; catalogue sites are rim/massif sites, so the
    observer height and clearance conventions deserve a review.
