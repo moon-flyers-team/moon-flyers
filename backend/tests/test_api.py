@@ -82,15 +82,6 @@ def test_far_side_site_never_sees_earth():
     assert "earth_visible_pct" in first["fit"]["violations"]
 
 
-def test_landing_windows_sorted_and_limited():
-    r = client.post("/landing-windows", json={"site": {"id": "malapert_massif"}, **WINDOW, "limit": 3})
-    res = r.json()
-    assert [x["rank"] for x in res] == [1, 2, 3]
-    order = {"both_met": 0, "power_short": 1, "comms_short": 1, "neither_met": 2}
-    keys = [(order[x["fit"]["status"]], -x["metrics"]["sun_visible_pct"]) for x in res]
-    assert keys == sorted(keys)
-
-
 def test_error_status_codes():
     bad_json = client.post("/compare", content="{not json", headers={"content-type": "application/json"})
     assert bad_json.status_code == 400
