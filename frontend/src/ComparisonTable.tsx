@@ -143,7 +143,9 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
 
   return <section className="ct-wrap" aria-label="Site comparison" aria-busy={loading}>
     <div className="ct-topbar" ref={topbarRef}>
-      <span className="ct-tab">Comparison{onLandingSelect && <small className="ct-landing-hint">Double-click a site to choose landing · keyboard: Shift+Enter</small>}</span>
+      <span className="ct-tab">Comparison{onLandingSelect && <span className="ct-info" tabIndex={0} role="img"
+        aria-label="Double-click a site to choose landing · keyboard: Shift+Enter"
+        data-tip="Double-click a site to choose landing · keyboard: Shift+Enter">i</span>}</span>
       <div className="ct-time">
         <span className="ct-time-label">Landing (UTC)</span>
         <input type="datetime-local" className="ct-time-val ct-time-input"
@@ -227,7 +229,8 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
               <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
               <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
                 missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime}
-                daysOnSurface={disabled ? undefined : c.days_on_surface} onChange={disabled ? undefined : onTimeSeek} />
+                daysOnSurface={disabled ? undefined : c.days_on_surface} onChange={disabled ? undefined : onTimeSeek}
+                allMet={entry?.fit.status === 'both_met'} />
             </tr>;
           })}
         </tbody>

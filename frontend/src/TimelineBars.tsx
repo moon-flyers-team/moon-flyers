@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { TimeWindow } from './types';
 import { DAY_MS, formatUtc } from './time';
 
@@ -12,6 +12,7 @@ interface Props {
   landingUtc?: string;
   daysOnSurface?: number;
   onChange?: (iso: string) => void;
+  allMet?: boolean;
 }
 export function normalise(windows: TimeWindow[], missionStart: string, missionEnd: string) {
   const start = Date.parse(missionStart);
@@ -41,7 +42,7 @@ export function SurfaceStayWindow({ landingUtc, daysOnSurface, missionStart, mis
     style={{ left: `${segment.left * 100}%`, width: `${segment.width * 100}%` }} />;
 }
 
-export function TimelineBars({ powerWindows, commsWindows, missionStart, missionEnd, landingUtc, daysOnSurface, onChange }: Props) {
+export function TimelineBars({ powerWindows, commsWindows, missionStart, missionEnd, landingUtc, daysOnSurface, onChange, allMet }: Props) {
   const startMs = Date.parse(missionStart);
   const endMs   = Date.parse(missionEnd);
   const tracksRef = useRef<HTMLDivElement>(null);
@@ -68,11 +69,6 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [onChange, startMs, endMs]);
 
-  const bothVisible = useMemo(() => {
-    const t = landingUtc ? Date.parse(landingUtc) : NaN;
-    const inside = (w: TimeWindow) => Date.parse(w.start_utc) <= t && t < Date.parse(w.end_utc);
-    return Number.isFinite(t) && !!powerWindows?.some(inside) && !!commsWindows?.some(inside);
-  }, [landingUtc, powerWindows, commsWindows]);
   return (
     <td>
       <div className="tl-wrap">
@@ -98,7 +94,7 @@ export function TimelineBars({ powerWindows, commsWindows, missionStart, mission
             ))}
           </div>
           <SurfaceStayWindow landingUtc={landingUtc} daysOnSurface={daysOnSurface} missionStart={missionStart} missionEnd={missionEnd} />
-          {markerPct !== null && <div className={`tl-marker${bothVisible ? ' tl-marker--both' : ''}`} style={{ left: `${markerPct}%` }} />}
+          {markerPct !== null && <div className={`tl-marker${allMet ? ' tl-marker--both' : ''}`} style={{ left: `${markerPct}%` }} />}
         </div>
       </div>
     </td>

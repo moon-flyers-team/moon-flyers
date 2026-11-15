@@ -37,6 +37,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
   function chooseLandingSite(id: string) {
     setSelectedId(id);
     setLandingSiteId(id);
+    setTab('route');
   }
 
   useEffect(() => {

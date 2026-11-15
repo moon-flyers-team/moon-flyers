@@ -122,7 +122,7 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
     const next = { ...coordinates, id: crypto.randomUUID(), custom: true, enabled: true,
       name: `Waypoint ${waypoints.length + 1}` };
     setWaypoints(previous => previous.length < MAX_WAYPOINTS ? [...previous, next] : previous);
-    setAnnouncement(`Added ${next.name}. Calculate the round trip to update the route.`);
+    setAnnouncement('');
   }
   function moveWaypoint(from: number, to: number) {
     if (!Number.isInteger(from) || !Number.isInteger(to) || from === to
@@ -141,6 +141,9 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
         <div className="route-title">
           <span className="route-kicker">Tourist route</span>
           <strong>{siteName}</strong>
+          <span className="ct-info map-info-tip" tabIndex={0} role="img"
+            aria-label={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent. Click the map to add up to ${MAX_WAYPOINTS} waypoints. Drag stops to reorder, or use up/down arrows. Right-drag to pan; wheel to zoom.`}
+            data-tip={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent.\nClick the map to add up to ${MAX_WAYPOINTS} waypoints. Drag stops to reorder, or use ↑/↓. Right-drag to pan; wheel to zoom.`}>i</span>
           <span className="route-sub">Landing {formatUtc(landingUtc)}</span>
         </div>
         <div className="route-stats">
@@ -150,6 +153,9 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
           </>}
         </div>
         <div className="route-actions">
+          <button className="ct-btn route-primary-btn route-calc-btn" disabled={!waypoints.length || loading}
+            onClick={() => { setAnnouncement(''); if (submitted === waypoints) result.retry(); else setSubmitted(waypoints); }}>Calculate route</button>
+          <button className="ct-btn route-primary-btn" disabled={!waypoints.length} onClick={() => setWaypoints([])}>Clear waypoints</button>
           {route && <>
             <button className="ct-btn" onClick={() => download(toKml(route, siteName), `${slug}_route.kml`, 'application/vnd.google-earth.kml+xml')}>KML</button>
             <button className="ct-btn" onClick={() => download(toCsv(route), `${slug}_route.csv`, 'text/csv')}>CSV</button>
@@ -158,21 +164,16 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
         </div>
       </div>
 
-      <div className="route-editor">
-        <p>Click the map to add up to {MAX_WAYPOINTS} waypoints. Drag stops to reorder, or use ↑/↓. Right-drag to pan; wheel to zoom.</p>
-<button className="ct-btn" disabled={!waypoints.length || loading}
-          onClick={() => { setAnnouncement(''); if (submitted === waypoints) result.retry(); else setSubmitted(waypoints); }}>Calculate round trip</button>
-        <button className="ct-btn" disabled={!waypoints.length} onClick={() => setWaypoints([])}>Clear waypoints</button>
-
-      </div>
-      {loading && <p className="request-status" role="status">Calculating round trip…</p>}
+      {(elevations.loading || elevations.error) && (
+        <div className="route-editor">
+          {elevations.loading && <p>Loading elevations…</p>}
+          {elevations.error && <p>Elevation data unavailable. <button className="ct-btn" onClick={elevations.retry}>Retry elevations</button></p>}
+        </div>
+      )}
+      {loading && <p className="request-status" role="status">Calculating route…</p>}
       {result.error && <div className="request-error" role="alert">Route request failed: {result.error}
         {' '}<button className="ct-btn" onClick={result.retry}>Retry</button></div>}
       <span className="map-announcement" role="status">{announcement}</span>
-      <p className="route-elevation-note">Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent.
-        {elevations.loading && ' Loading elevations…'}
-        {elevations.error && <> Elevation data unavailable. <button className="ct-btn" onClick={elevations.retry}>Retry elevations</button></>}
-      </p>
       <RouteView onWaypointRemove={index => {
         setWaypoints(previous => previous.filter((_, i) => i !== index));
         setAnnouncement(`Removed waypoint ${index + 1}. Recalculate to update the route.`);

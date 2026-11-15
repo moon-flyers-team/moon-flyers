@@ -4,9 +4,6 @@ export const HEATMAPS: { criterion: HeatmapCriterion; label: string; unit: Heatm
   color: [number, number, number]; direction: string }[] = [
   { criterion: 'sun_visible_pct', label: 'Sunlight', unit: '%', color: [245, 166, 35], direction: 'Higher is better' },
   { criterion: 'earth_visible_pct', label: 'Earth contact', unit: '%', color: [79, 195, 247], direction: 'Higher is better' },
-  { criterion: 'longest_darkness_hours', label: 'Longest night', unit: 'h', color: [180, 138, 244], direction: 'Lower is better' },
-  { criterion: 'longest_earth_blackout_hours', label: 'Comms blackout', unit: 'h', color: [239, 127, 116], direction: 'Lower is better' },
-  { criterion: 'slope_deg', label: 'Slope', unit: 'deg', color: [112, 205, 162], direction: 'Lower is better' },
 ];
 
 // Fail visibly instead of placing an incompatible raster over the wrong coordinates.

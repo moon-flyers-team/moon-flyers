@@ -200,7 +200,13 @@ export function MapPanel({ sites, landingSiteId, constraints, mission, active, v
       <label className="map-opacity">Opacity <input type="range" aria-label="Heatmap opacity" title="Opacity for all displayed overlays" min="0" max="1" step="0.05"
         value={opacity} onChange={event => setOpacity(Number(event.target.value))} /></label>
     </div>
-    <div className="map-heading"><div><h2>South polar cap</h2><p>80°S–90°S · Polar stereographic · East-positive longitude</p></div>
+    <div className="map-heading">
+      <div className="map-heading-title">
+        <h2>South polar cap</h2>
+        <span className="ct-info map-info-tip" tabIndex={0} role="img"
+          aria-label="80°S–90°S · Polar stereographic · East-positive longitude. Click map to add a site; Sun/Earth: reference averages, other heatmaps: mission analysis. Pinch/wheel: zoom; two-finger scroll/right-drag: pan; Shift+scroll: pan."
+          data-tip={'80°S–90°S · Polar stereographic · East-positive longitude\nClick map to add a site · Sun/Earth: reference averages · Other heatmaps: mission analysis\nPinch/wheel: zoom · Two-finger scroll/right-drag: pan · Shift+scroll: pan'}>i</span>
+      </div>
       <div className="map-zoom" role="group" aria-label="Map zoom">
         <button className="ct-btn" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => { setCamera(previous => zoomAt(previous, 0.5, previous)); setSelection(null); }}>−</button>
         <span>{Number(zoom.toFixed(1))}×</span>
@@ -216,7 +222,6 @@ export function MapPanel({ sites, landingSiteId, constraints, mission, active, v
       {/^(404|405|501)\b/.test(heatmaps.error) ? 'Heatmaps unavailable: the backend does not yet implement POST /map/heatmaps.' : `Heatmap request failed: ${heatmaps.error}`}
       {' '}<button className="ct-btn" onClick={heatmaps.retry}>Retry overlays</button>
     </p>}
-    {!criteria.length && !referenceCriteria.length && <p className="map-hint">Click map to add a site · Sun/Earth: reference averages · Other heatmaps: mission analysis</p>}
     {referenceCriteria.length > 0 && <p className="map-reference-notice" role="note">
       LOLA averages (~18.6 years), unaffected by mission settings. Any-disc visibility; mission scoring uses whole-disc clearance.
       {referenceCriteria.length > 1 && ' Layers blend; view individually to read their scales.'}
@@ -225,7 +230,6 @@ export function MapPanel({ sites, landingSiteId, constraints, mission, active, v
       A reference overlay could not load. Turn its checkbox off and on to retry.
     </p>}
     <div className="map-preamble-controls">
-      <p className="map-hint">Pinch/wheel: zoom · Two-finger scroll/right-drag: pan · Shift+scroll: pan</p>
       <div className="map-site-legend"><span className="map-site-key map-site-key--default">Default sites</span><span className="map-site-key map-site-key--custom">Your sites · click to edit</span></div>
     </div>
     {showBasemap && basemap === 'topography' && <p className="map-hint">LOLA elevation · 500 m contours · Reference radius: 1,737.4 km</p>}
