@@ -201,23 +201,17 @@ Response, one entry per site in the order you sent them:
   window. The frontend looks up the entry matching the selected UTC instant to update
   the table without a new request. Timeline seeking and the native UTC field update
   selection locally; the older ±6 h buttons are no longer mounted.
+- **Everything for the whole window comes in one response.** Slider and ◀ ▶ span arrows are
+  visualization only: no request. A new request is only needed when the sites, the window or
+  the constraints (e.g. `days_on_surface`) change. No ranking: the user compares and chooses.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
 - `eclipse` lists Earth eclipses (Earth's disc overlapping the Sun's, i.e. a lunar eclipse seen
   from the Moon) while Earth is visible from the site. Drawn in purple on top of the Earth
   (cyan) bar. Same interval rules as `sun`/`earth`; also present in `GET /sites` `windows`.
 
-## 3. `POST /landing-windows`: ranked candidate times (API available; no current UI table)
-```json
-{ "site": { "id": "malapert_massif" },
-  "window_start_utc": "2027-08-01T00:00:00Z", "window_end_utc": "2027-10-31T00:00:00Z",
-  "constraints": { "...": "..." }, "candidate_step_hours": 6, "limit": 5 }
-```
-Response:
-```json
-[{ "rank": 1, "landing_utc": "2027-08-05T12:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }]
-```
-- Results are sorted by fit first, then sunlight %, then Earth contact %.
+## 3. `POST /landing-windows`: removed (2026-11-15)
+The app does not rank; the user chooses the site and landing time from the `/compare` data.
 
 ## 4. `GET /health`
 Returns `{"status": "ok"}`.
@@ -256,7 +250,7 @@ Response:
   "recommendations": [{ "rank": 1, "site": { "id": "malapert_massif", "...": "..." },
                         "landing_utc": "2027-08-01T00:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }] }
 ```
-- Sorted by fit first, then sunlight %, then Earth contact % (same as `/landing-windows`).
+- Sorted by fit first, then sunlight %, then Earth contact %.
 - **Mock:** metrics are estimated from latitude/longitude (polar = more sun, near side = more Earth,
   far side = none), for a landing at `window_start_utc`. No ephemeris, no terrain. `fit` uses the
   real constraint check. A real version will keep this shape and change `method`.

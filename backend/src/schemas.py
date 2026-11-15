@@ -109,11 +109,6 @@ class CompareRequest(WindowRequest):
     sites: list[SiteRef] = Field(min_length=1)
 
 
-class LandingWindowsRequest(WindowRequest):
-    site: SiteRef
-    limit: int = Field(5, ge=1, le=100)
-
-
 class RecommendedSitesRequest(WindowRequest):
     """The app's current window and constraints; recommends from the catalogue."""
     limit: int = Field(5, ge=1, le=100)
@@ -197,13 +192,6 @@ class CompareResult(BaseModel):
     site: Site
     window_metrics: list[WindowMetric]
     timeline: Windows
-
-
-class LandingWindow(BaseModel):
-    rank: int
-    landing_utc: str
-    metrics: Metrics
-    fit: Fit
 
 
 RouteMethod = Literal["straight_line"]
