@@ -1,0 +1,165 @@
+{
+  "status": "Administrator synthetic cross-check only, not scientific ground truth",
+  "request": {
+    "sites": [
+      {
+        "id": "connecting_ridge"
+      },
+      {
+        "id": "malapert_massif"
+      },
+      {
+        "name": "Survey Ridge",
+        "latitude_deg": -89.2,
+        "longitude_deg": 45
+      }
+    ],
+    "window_start_utc": "2027-08-01T00:00:00Z",
+    "window_end_utc": "2027-08-10T00:00:00Z",
+    "constraints": {
+      "days_on_surface": 3,
+      "horizon_clearance_deg": 0.3,
+      "min_sun_visible_pct": 60,
+      "max_darkness_hours": 96,
+      "min_earth_visible_pct": 45,
+      "max_earth_blackout_hours": 240,
+      "max_slope_deg": 8
+    },
+    "candidate_step_hours": 6,
+    "timestep_seconds": 3600
+  },
+  "rows": [
+    {
+      "site": {
+        "id": "connecting_ridge",
+        "name": "Connecting Ridge",
+        "latitude_deg": -89.458,
+        "longitude_deg": -140.2,
+        "group": "Demo south-pole sites",
+        "notes": "Synthetic demo data; not NASA ephemerides or terrain calculations."
+      },
+      "candidates": [
+        {
+          "landing_utc": "2027-08-07T06:00:00Z",
+          "metrics": {
+            "sun_visible_pct": 100,
+            "longest_darkness_hours": 0,
+            "earth_visible_pct": 0,
+            "longest_earth_blackout_hours": 72,
+            "slope_deg": null
+          },
+          "fit": {
+            "status": "comms_short",
+            "violations": [
+              "earth_visible_pct"
+            ]
+          }
+        },
+        {
+          "landing_utc": "2027-08-08T06:00:00Z",
+          "metrics": {
+            "sun_visible_pct": 100,
+            "longest_darkness_hours": 0,
+            "earth_visible_pct": 0,
+            "longest_earth_blackout_hours": 72,
+            "slope_deg": null
+          },
+          "fit": {
+            "status": "comms_short",
+            "violations": [
+              "earth_visible_pct"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "site": {
+        "id": "malapert_massif",
+        "name": "Malapert massif",
+        "latitude_deg": -86,
+        "longitude_deg": 0,
+        "group": "Demo south-pole sites",
+        "notes": "Synthetic demo data; not NASA ephemerides or terrain calculations."
+      },
+      "candidates": [
+        {
+          "landing_utc": "2027-08-07T06:00:00Z",
+          "metrics": {
+            "sun_visible_pct": 100,
+            "longest_darkness_hours": 0,
+            "earth_visible_pct": 0,
+            "longest_earth_blackout_hours": 72,
+            "slope_deg": null
+          },
+          "fit": {
+            "status": "comms_short",
+            "violations": [
+              "earth_visible_pct"
+            ]
+          }
+        },
+        {
+          "landing_utc": "2027-08-08T06:00:00Z",
+          "metrics": {
+            "sun_visible_pct": 100,
+            "longest_darkness_hours": 0,
+            "earth_visible_pct": 11.11,
+            "longest_earth_blackout_hours": 64,
+            "slope_deg": null
+          },
+          "fit": {
+            "status": "comms_short",
+            "violations": [
+              "earth_visible_pct"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "site": {
+        "name": "Survey Ridge",
+        "latitude_deg": -89.2,
+        "longitude_deg": 45,
+        "id": "custom_d69048085230",
+        "group": "Custom demo site",
+        "notes": "Synthetic demo data; not NASA ephemerides or terrain calculations."
+      },
+      "candidates": [
+        {
+          "landing_utc": "2027-08-07T06:00:00Z",
+          "metrics": {
+            "sun_visible_pct": 100,
+            "longest_darkness_hours": 0,
+            "earth_visible_pct": 13.89,
+            "longest_earth_blackout_hours": 62,
+            "slope_deg": null
+          },
+          "fit": {
+            "status": "comms_short",
+            "violations": [
+              "earth_visible_pct"
+            ]
+          }
+        },
+        {
+          "landing_utc": "2027-08-08T06:00:00Z",
+          "metrics": {
+            "sun_visible_pct": 100,
+            "longest_darkness_hours": 0,
+            "earth_visible_pct": 0,
+            "longest_earth_blackout_hours": 72,
+            "slope_deg": null
+          },
+          "fit": {
+            "status": "comms_short",
+            "violations": [
+              "earth_visible_pct"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
