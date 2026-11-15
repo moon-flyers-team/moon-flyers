@@ -136,6 +136,14 @@ The time slider **never** triggers an API call. It slices pre-loaded data client
    "latitude_deg": -86.0, "longitude_deg": 0.0, "notes": "..." }]
 ```
 
+The Python catalogue includes the original seven sites plus 14 published-location additions
+(21 total), covering 49/61 bundled POIs within the default 40 km proximity radius. Most additions
+are explicitly labelled **exploration references, not vetted landing sites**; feature centres
+are not selected candidate rim points. Existing site IDs/coordinates and the response shape
+are unchanged. Coordinate sources and coverage limits: [`docs/poi-sources.md`](docs/poi-sources.md#default-landing-site--exploration-reference-coverage).
+The current frontend enables all returned sites by default, so this increases initial
+analysis work. Node mock/offline catalogues are unchanged.
+
 *With analysis parameters* it also returns `analysis` for one site, which feeds the horizon
 chart. The frontend calls this **once per enabled site in parallel** on mission params change
 or site toggle — not on slider moves, and not only for the selected site.
@@ -220,6 +228,91 @@ Response:
 
 ## 4. `GET /health`
 Returns `{"status": "ok"}`.
+
+## 5. `POST /recommended-sites`: published POIs near a landing site (Python backend)
+
+**Replaces the former mocked mission-ranking contract.** The path is retained, but the
+request and response intentionally change. This is a catalogue proximity search, not
+recommended landing coordinates or mission suitability. The standalone Node mock does
+not implement this endpoint; it has no synthetic fallback.
+
+Request using a predefined landing site:
+```json
+{ "site": { "id": "shackleton_rim" }, "radius_km": 40 }
+```
+Or explicit coordinates (name optional; no custom UUIDs):
+```json
+{ "site": { "name": "My landing", "latitude_deg": -89.2, "longitude_deg": 45 } }
+```
+
+- `site` is required: either an existing `GET /sites` catalogue ID, or both coordinates.
+  Do not mix ID with name/coordinates. Coordinates may be anywhere on the Moon, but the
+  **POI catalogue covers only footprints intersecting 80°S–90°S**. A far-away reference
+  normally returns no matches; it does not broaden catalogue coverage.
+- `radius_km` is optional, defaults to **40**, and must be a finite positive JSON number.
+  Default rationale: user scenario of 10 km/h and eight hours total out-and-back driving.
+  No claim of realistic terrain-aware reachability; stops, detours and reserve are excluded.
+- Unknown fields are rejected, including old mission dates, constraints, candidate/sample
+  steps and `limit`. No mission scoring or best-time search is performed.
+
+Successful response shape (one illustrative match shown; actual results include all matches):
+```json
+{
+  "method": "catalogue_proximity",
+  "data_source": "published_catalogue",
+  "catalogue_version": "south-pole-20261115",
+  "site": {
+    "id": "shackleton_rim", "name": "Shackleton rim", "group": "Artemis III region",
+    "latitude_deg": -89.667, "longitude_deg": 129.783, "notes": "Rim of Shackleton crater."
+  },
+  "radius_km": 40,
+  "recommendations": [{
+    "poi": {
+      "id": "iau-5450", "name": "Shackleton", "category": "natural_feature",
+      "feature_type": "Crater, craters", "latitude_deg": -89.625776,
+      "longitude_deg": 132.321845,
+      "boundary": { "kind": "approximate_circle", "radius_km": 10.5 },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [{
+        "title": "NASA Moon Trek combined south-polar nomenclature",
+        "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+        "record_id": "71"
+      }, {
+        "title": "Feature reference", "url": "https://planetarynames.wr.usgs.gov/Feature/5450",
+        "record_id": null
+      }]
+    },
+    "distance_km": 0
+  }]
+}
+```
+
+- `recommendations` contains **POIs**, not `Site` objects. POI IDs identify catalogue
+  objects; do not send them as landing-site IDs to other endpoints. Explicit coordinates
+  can be used for analysis, but a POI centre need not be safe or reachable for landing.
+- Categories: `natural_feature`, `lander`, `rover`, `impact`. `feature_type` gives the source
+  subtype. The initial snapshot has 55 natural features, two landers, four impacts, and no
+  independently verified rover locations. No in-cap caves/collapse pits were found in the
+  checked LROC Pits Atlas; do not relabel ordinary craters as caves.
+- `boundary.kind: approximate_circle` means a spherical circular area derived from a
+  published centre/diameter; **not an exact outline**. `point` means a published point,
+  with `radius_km: 0`. Null location uncertainty is unquantified, not zero.
+- `distance_km` is unrounded surface great-circle distance to that point/area on a
+  1,737.4 km sphere. Inside an approximate footprint it is zero. The radius comparison is
+  inclusive. Results include boundary-crossing features whose centres may be outside the
+  cap; their full footprints are used, not clipped to the cap.
+- All matches are returned, nearest first with POI ID breaking ties. There are **no rank,
+  score, metrics, fit or landing-time fields**, no pagination and no silent truncation.
+  An empty result is `recommendations: []` with HTTP 200.
+- Successful responses use `X-Moon-Flyers-Data-Source: catalogue`, independently of the
+  ephemeris/terrain configuration. For other existing endpoints the header retains its
+  existing meaning. Data is bundled published-source information, not live ephemerides.
+- 404: unknown landing-site ID. 422: invalid/ambiguous input, nonfinite coordinates/radius,
+  or unknown fields. 400: malformed JSON. Missing/invalid bundled data is a server/deployment
+  error, never a synthetic or empty substitute catalogue.
+- Provenance, cave/pit research, source discrepancies, approximation limits and refresh
+  instructions: [`docs/poi-sources.md`](docs/poi-sources.md). This catalogue is not exhaustive.
 
 ## Not in v0
 - Terrain slope calculations (`slope_deg` remains null). Terrain-aware horizons are already

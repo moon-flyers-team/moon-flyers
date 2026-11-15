@@ -17,6 +17,40 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
   with `-k on_real_lola_dataset -v -s`. It requires a found route and independently
   checks DEM heights, distances, grades and costs; writes a temporary JSON report.
   Real-raster execution remains with the data owner; API wiring is separate.
+- **Default POI-adjacent references (2026-11-15, branch `feat/poi-default-sites`).** Preserved
+  the seven original sites; added Athena's published observed landing location plus 13
+  explicitly unvetted exploration references at published feature centres. NASA candidate
+  region context informed Nobile/Faustini; their centres are not candidate rim points.
+  All additions are in 80°S–90°S. The 21-site catalogue covers 49/61 POIs (80.3%) within
+  40 km versus 14/61 before, using the POI endpoint's area/point distance semantics.
+  Sources, remaining gaps and frontend loading impact: root `docs/poi-sources.md`.
+  No frontend/mock catalogue changes; App currently enables every returned site, increasing
+  initial analysis work. References are not certified landing locations or reachable routes.
+- **Real `slope_deg` (2026-11-15, branch `feat/real-slope`).** `DemHorizon` carries the DEM's
+  site slope (`lunar_horizon_dem.horizon()["slope_deg"]`, 0.1°); `metrics.slope_deg` reports it,
+  `null` without a DEM (mock hills never invent a slope). `fit` adds `"slope_deg"` to
+  `violations` when over `max_slope_deg` but keeps `status` (power/comms only). The frontend
+  already renders it (Terrain column + ⚠ from violations). Tested on the synthetic fixture only:
+  no local copy of the real dataset.
+- **No ranking; `POST /landing-windows` removed (2026-11-15, branch `chore/remove-landing-windows`).**
+  User decision: the choice of site and landing time is manual, from the `/compare` data (whole
+  window in one response; slider and ◀ ▶ arrows are frontend-only). Removed the router,
+  `services/ranking.py`, `LandingWindow`/`LandingWindowsRequest` and the test. The UI never
+  called it (`api.landingWindows` in `frontend/src/api.ts` is dead code; tell the frontend to drop it).
+  A headroom ranking (per-constraint margins) was built and dropped; it is in `git stash`
+  ("compare-rank (discarded)") if ever needed.
+- **`POST /recommended-sites` published POIs (2026-11-15, branch `feat/real-poi-recommendations`).**
+  Replaces the mocked mission ranking, including its request/response contract. Takes a landing
+  `site` (catalogue ID or coordinates) and optional `radius_km` (40); returns all nearby POIs
+  nearest first without scores/ranks. Bundled 61-record NASA Moon Trek/NASA/LROC snapshot:
+  55 natural features, four impacts, two landers; footprint intersection with 80°S–90°S.
+  Circular feature extents are explicitly approximate; hardware points have unquantified
+  uncertainty. No in-cap caves/pits in the checked 278-entry LROC atlas; not evidence of absence.
+  No synthetic fallback or ephemeris/terrain dependency. Sources: root `docs/poi-sources.md`.
+  Frontend integration is out of scope. Root `API.md` owns this revised endpoint contract.
+- **`POST /route` mock (2026-11-15, branch `make-mock-path`).** Ordered waypoints (SiteRef) →
+  densified path every `step_m` m, legs, total distance. `method: "straight_line"` = great-circle
+  segments, terrain ignored. Logic in `services/route.py`; contract in API.md section 5.
 - **Earth eclipse windows (2026-11-15).** `timeline.eclipse` / `windows.eclipse`: Sun–Earth
   separation < 0.267° + 0.95° and Earth visible. Live Horizons shows the 2027-08-17 penumbral
   lunar eclipse (06:00–10:00Z) at near-side sites. Hourly sampling can miss very short events.
@@ -41,9 +75,6 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
   Horizons calls), ≈ 0.7 MB. The frontend's parallel burst (`/compare` + 7 `GET /sites`) ≈ 33 s, all 200.
 
 ## Next up (backend)
-1. Agree the `slope_deg` contract with the frontend: the DEM already returns slope and
-   downslope azimuth, but `visibility.metrics()` hardcodes `slope_deg=None` and `fit()` ignores
-   `max_slope_deg`. Decide whether slope violations should affect `fit.status` before wiring it.
 2. Check the terrain defaults against the team's PDF: `horizon()` uses `max_range_km=50`,
    `min_range_m=20`, `height_above_terrain=0`; catalogue sites are rim/massif sites, so the
    observer height and clearance conventions deserve a review.
@@ -58,10 +89,12 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
    branch (ours count whole sample steps).
 
 ## API contract
-**The source of truth is [API.md](API.md)** (v0, agreed with the frontend team on 2026-11-14).
+**The shared source of truth is root [API.md](../../API.md)**; [backend API notes](API.md)
+retain backend-specific route documentation. The POI contract was revised on 2026-11-15.
 Endpoints: `GET /sites` (catalogue, plus single-site `analysis` over the whole window),
 `POST /compare` (per-site `window_metrics` for every `candidate_step_hours` landing, plus
-`timeline`), `POST /landing-windows`, `GET /health`.
+`timeline`), `POST /landing-windows`, `GET /health`, `POST /route` (mock, straight lines),
+`POST /recommended-sites` (published POI proximity, not mission ranking).
 
 `docs/API.md` was replaced with the team's new contract on 2026-11-14 (it had been my outdated v0
 draft). Error policy (user decision): **only the HTTP status codes matter**. 400 = malformed JSON,
@@ -71,11 +104,17 @@ draft). Error policy (user decision): **only the HTTP status codes matter**. 400
 To raise with the frontend team:
 - API.md still says the mock lives in `frontend/src/mock/` (Node) and the backend is the bare
   scaffold. There are now two mocks (theirs in Node, ours in Python), so agree which one they use.
-- Site ids and list: ours (7 sites in `services/catalogue.py`) were invented. Their mock UI shows 10.
+- Site IDs/list: seven legacy approximate entries remain, now supplemented by 14 sourced
+  location additions (21 total). The Node mock/offline catalogues are unchanged. App enables
+  all returned entries by default; review initial loading cost and selection policy separately.
 - The Node mock's 0.4 s artificial delay isn't in the Python mock.
 - With LOLA terrain mounted, horizon elevations reach about -3 to +24 deg; the mock hills
   stayed within 0-1.5 deg. Check the chart's y-axis range, clearance labels and any
   hard-coded 0 deg assumptions against real profiles.
+
+Decisions:
+- 2026-11-15: no backend ranking of sites or landing times; the person chooses manually.
+  `/landing-windows` removed (the UI never called it).
 
 Implementation choices where API.md is silent:
 - `GET /sites` analysis: `timeseries`/`windows` span window_start → window_end + days.
@@ -90,6 +129,17 @@ Implementation choices where API.md is silent:
 
 ## Decisions
 _(date: decision, then why)_
+- 2026-11-15: Keep `/recommended-sites`, replace its mocked ranking with real POI discovery.
+  No dates/constraints/synthetic metrics. Default 40 km = user scenario 10 km/h × eight total
+  driving hours / two for return; not terrain-aware reachability. ID or coordinates accepted,
+  extra/ambiguous/nonfinite inputs rejected. All matches returned, distance then ID order,
+  no rank field. Successful provenance header is `catalogue`, overriding ephemeris default.
+  Real POIs stay distinct from landing sites; no inferred cave or rover coordinates.
+- 2026-11-15: Bundle a reviewed source snapshot, not per-request external lookups. Radius uses
+  published point or explicitly approximate diameter-derived spherical area (zero inside).
+  Full footprints that intersect the cap are retained. Known LCROSS layer discrepancies and
+  lack of in-cap atlas pits are documented. Refresh tool stops on truncation or a new in-cap
+  pit requiring review; missing/invalid runtime catalogue fails rather than inventing data.
 - 2026-11-14: **Terrain data is the archive's IMG/LBL + calibration, read by `lunar_horizon_dem.py`;
   no conversion, no rasterio.** An earlier attempt on this branch downloaded JP2s and converted
   them to COGs, but `main` already had a loader (memmap + PDS labels) and the team had the IMG
@@ -175,6 +225,22 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-15: Added POI-adjacent catalogue defaults with source/safety labels and a measured
+  >=80% coverage regression test. New IDs resolve through GET catalogue, site analysis and
+  POI search without changing response shapes. Checked after rebasing onto current main
+  (real-slope and landing-window removal preserved): backend pytest **107 passed, 2 skipped**;
+  ruff on both changed Python files clean; `git diff --check` clean. Tests use offline
+  ephemerides; no new real terrain or landing-safety validation is claimed. Frontend unchanged.
+- 2026-11-15: Replaced the mocked `/recommended-sites` implementation with sourced POI
+  proximity; added bundled catalogue, stdlib refresh/source-survey tool, source documentation,
+  strict request/geometry models and 40 focused tests. Nonfinite validation inputs now serialize
+  safely as 422 instead of crashing the error response. Explicit Docker-ignore exceptions keep
+  the small POI catalogue shippable while terrain stays excluded.
+  Verification: backend pytest **88 passed, 2 skipped** (opt-in live checks), changed-file ruff
+  clean, `git diff --check` clean. Real local Uvicorn HTTP checks passed for default 40 km
+  lookup, Athena point, 404/422, health and OpenAPI with default live ephemeris configuration.
+  Whole-backend ruff reports **14 pre-existing violations in untouched files**; no unrelated
+  lint cleanup. Docker build not run (Docker unavailable); frontend unchanged/not rebuilt.
 - 2026-11-14: Measured request cost of the DEM horizon (mock ephemeris, real 15.9 GB archive,
   `TestClient`, so no HTTP overhead): `/compare` for 7 sites over 3 months is 0.88 s with a cold
   DEM cache and 0.18 s warm, versus 0.21 s for the mock hills; `/sites` for one site is 21-36 ms.

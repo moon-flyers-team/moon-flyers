@@ -103,8 +103,8 @@ read-only, and never baked into images, release bundles, or GitHub Actions artif
 
 With the dataset mounted, `services/horizon.py` serves the real terrain horizon (cached per
 site, 22-69 ms on the archive). Environments without `LOLA_DEM_DIR` keep the mock hills, so the
-data is strictly opt-in. `metrics.slope_deg` is still reported as `null`: the DEM computes a
-slope, but exposing it changes the API contract and is left to the contract owner.
+data is strictly opt-in. With the dataset mounted, `metrics.slope_deg` is the real DEM slope at the
+site; without it, `slope_deg` is `null`.
 
 ### What the dataset is
 

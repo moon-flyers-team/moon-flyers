@@ -25,7 +25,7 @@ The mock returns `X-Moon-Flyers-Data-Source: mock`, exposed through CORS. The fr
 that header from the catalogue response to show a synthetic-data banner; the catalogue JSON
 shape is unchanged. Data is deterministic, varies with site/date, and recomputes visibility
 metrics, fit violations, and timelines from the same generated samples. Custom sites are
-accepted without being stored. Slope remains `null`. The standalone Node mock returns a
+accepted without being stored. Slope is `null` (no DEM). The standalone Node mock returns a
 flat horizon and synthetic ephemerides; its eclipse intervals are synthetic fixtures.
 
 **The Python backend (`backend/`) uses real Sun/Earth positions from JPL Horizons by
@@ -107,8 +107,12 @@ optional, and the defaults match the mock UI:
 - `violations` lists the metric names that broke a limit, so you can show the red ⚠ markers, for
   example `["sun_visible_pct", "longest_darkness_hours"]`.
 - Power covers sunlight % and longest night. Comms covers Earth contact % and longest gap.
-- `slope_deg` remains `null` even with a DEM mounted. Show "—";
-  `max_slope_deg` is accepted but is not evaluated by `fit`.
+- `slope_deg` is the **real terrain slope at the site** in degrees from horizontal, fitted from the
+  LOLA DEM (rounded to 0.1°). It is a site property, so it is the same for every landing time.
+  It is `null` when the server has no DEM mounted (or the site is outside its coverage); show "—".
+- If `slope_deg > max_slope_deg`, `violations` includes `"slope_deg"` (show the ⚠), but
+  `fit.status` is unchanged: status only describes power and comms. A `null` slope is never a
+  violation.
 - Earth visibility does not establish a communications link, sunlight is not an energy
   budget, and matching visibility limits does not establish mission safety.
 
@@ -136,6 +140,13 @@ The time slider **never** triggers an API call. It slices pre-loaded data client
 [{ "id": "malapert_massif", "name": "Malapert massif", "group": "Artemis III region",
    "latitude_deg": -86.0, "longitude_deg": 0.0, "notes": "..." }]
 ```
+
+The Python catalogue now has 21 sites: seven preserved entries and 14 published-location
+additions, mostly explicitly unvetted exploration references. They cover 49/61 POIs within
+40 km using the proximity endpoint's area/point semantics. See root
+[API.md](../../API.md) and [source/coverage notes](../../docs/poi-sources.md#default-landing-site--exploration-reference-coverage).
+No wire-format change; Node mock and frontend fallback catalogues are unchanged. The current
+frontend enables all returned catalogue sites by default, increasing initial analysis work.
 
 *With analysis parameters* it also returns `analysis` for one site, which feeds the horizon
 chart. The frontend calls this **once per enabled site in parallel** on mission params change
@@ -201,29 +212,74 @@ Response, one entry per site in the order you sent them:
   window. The frontend looks up the entry matching the selected UTC instant to update
   the table without a new request. Timeline seeking and the native UTC field update
   selection locally; the older ±6 h buttons are no longer mounted.
+- **Everything for the whole window comes in one response.** Slider and ◀ ▶ span arrows are
+  visualization only: no request. A new request is only needed when the sites, the window or
+  the constraints (e.g. `days_on_surface`) change. No ranking: the user compares and chooses.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
 - `eclipse` lists Earth eclipses (Earth's disc overlapping the Sun's, i.e. a lunar eclipse seen
   from the Moon) while Earth is visible from the site. Drawn in purple on top of the Earth
   (cyan) bar. Same interval rules as `sun`/`earth`; also present in `GET /sites` `windows`.
 
-## 3. `POST /landing-windows`: ranked candidate times (API available; no current UI table)
-```json
-{ "site": { "id": "malapert_massif" },
-  "window_start_utc": "2027-08-01T00:00:00Z", "window_end_utc": "2027-10-31T00:00:00Z",
-  "constraints": { "...": "..." }, "candidate_step_hours": 6, "limit": 5 }
-```
-Response:
-```json
-[{ "rank": 1, "landing_utc": "2027-08-05T12:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }]
-```
-- Results are sorted by fit first, then sunlight %, then Earth contact %.
+## 3. `POST /landing-windows`: removed (2026-11-15)
+The app does not rank; the user chooses the site and landing time from the `/compare` data.
 
 ## 4. `GET /health`
 Returns `{"status": "ok"}`.
 
-## Not in v0
-- `slope_deg` (terrain-aware horizons are supported by the Python backend when a DEM is mounted)
+## 5. `POST /route`: a detailed path through several sites (MOCK)
+```json
+{ "waypoints": [{ "id": "shackleton_rim" }, { "id": "connecting_ridge" },
+                { "name": "Spot", "latitude_deg": -89.0, "longitude_deg": 10.0 }],
+  "step_m": 100 }
+```
+Response:
+```json
+{ "method": "straight_line",
+  "waypoints": [{ "id": "shackleton_rim", "name": "...", "...": "..." }],
+  "legs": [{ "from_index": 0, "to_index": 1, "distance_m": 12345.6 }],
+  "total_distance_m": 23456.7,
+  "path": [{ "latitude_deg": -89.667, "longitude_deg": 129.783, "distance_m": 0.0, "waypoint_index": 0 },
+           { "latitude_deg": -89.66, "longitude_deg": 130.1, "distance_m": 100.0, "waypoint_index": null }] }
+```
+- Waypoints (2–100, same shape as `site` elsewhere) are visited in the given order.
+- `path` has a point at least every `step_m` metres (default 100); `waypoint_index` marks the
+  requested waypoints. `distance_m` is cumulative from the first waypoint.
+- **Mock:** `method: "straight_line"` means great-circle segments on a 1737.4 km sphere; terrain,
+  slope and shadow are ignored. A real planner will keep this shape and change `method`.
+- 404 for an unknown site id; 422 for fewer than 2 waypoints or more than 100,000 path points.
+
+## 6. `POST /recommended-sites`: published nearby points of interest
+
+**The root [API.md](../../API.md#5-post-recommended-sites-published-pois-near-a-landing-site-python-backend)
+now owns this revised contract.** The previous mocked window/constraint ranking body and
+response are deliberately removed; frontend UI/client changes are out of this backend task.
+
+```json
+{ "site": { "id": "shackleton_rim" }, "radius_km": 40 }
+```
+
+Alternatively, `site` accepts `latitude_deg` and `longitude_deg` with optional `name`.
+Radius defaults to 40 km (10 km/h, eight hours total out-and-back driving, no stops/reserve).
+All matches from the bundled 80°S–90°S POI footprint catalogue are returned as
+`recommendations: [{poi, distance_km}]`, nearest first, no ranks or suitability scores.
+Response metadata: `method: catalogue_proximity`, `data_source: published_catalogue`,
+`catalogue_version`, resolved landing `site`, and effective `radius_km`.
+
+Published natural-feature diameters define explicitly approximate circles; hardware/impacts
+are published points. Distances are great-circle distances to the area/point (zero inside),
+not rover routes. Boundary-crossing features are included even with centres outside the cap.
+No synthetic data, ephemeris calls, scoring, dates, slope or visibility constraints are used.
+Header: `X-Moon-Flyers-Data-Source: catalogue`, independent of the ephemeris mode.
+
+Sources and cave/pit research: [docs/poi-sources.md](../../docs/poi-sources.md).
+The initial 61-record snapshot has no in-cap cave/pit entries in the checked LROC atlas;
+ordinary craters are not caves. Unknown IDs give 404; invalid/ambiguous/extra inputs give 422;
+malformed JSON gives 400. Empty searches give HTTP 200 with an empty list.
+
+## Not implemented
+
+- `slope_deg`.
 - Error-response format. We'll use FastAPI's default `{"detail": ...}` for now.
 
 Questions and change requests are welcome. This is a draft, and it's easier to change before we
