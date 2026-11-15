@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from . import lunar_horizon_dem
-from .routers import compare, health, landing_windows, recommended_sites, route, sites
+from .routers import compare, health, recommended_sites, route, sites
 from .services import ephemeris
 from .services.errors import (DomainError, EphemerisUnavailableError, InvalidInputError, LimitExceededError,
                               UnknownSiteError)
@@ -84,6 +84,5 @@ async def validation_error(request: Request, exc: RequestValidationError):
 app.include_router(health.router)
 app.include_router(sites.router)
 app.include_router(compare.router)
-app.include_router(landing_windows.router)
 app.include_router(route.router)
 app.include_router(recommended_sites.router)

@@ -229,13 +229,6 @@ class CompareResult(BaseModel):
     timeline: Windows
 
 
-class LandingWindow(BaseModel):
-    rank: int
-    landing_utc: str
-    metrics: Metrics
-    fit: Fit
-
-
 RouteMethod = Literal["straight_line"]
 
 

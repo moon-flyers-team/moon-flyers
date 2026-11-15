@@ -78,6 +78,10 @@ To raise with the frontend team:
   stayed within 0-1.5 deg. Check the chart's y-axis range, clearance labels and any
   hard-coded 0 deg assumptions against real profiles.
 
+Decisions:
+- 2026-11-15: no backend ranking of sites or landing times; the person chooses manually.
+  `/landing-windows` removed (the UI never called it).
+
 Implementation choices where API.md is silent:
 - `GET /sites` analysis: `timeseries`/`windows` span window_start → window_end + days.
   `metrics`/`fit` are for a landing at window_start.
