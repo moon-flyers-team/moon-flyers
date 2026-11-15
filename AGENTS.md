@@ -18,8 +18,10 @@ when agreed behavior changes.
   site, not the former mocked mission ranking. Request: `site` (landing-site ID or coordinates)
   and optional `radius_km` (40 default). Response: published POIs and point/approximate-area
   distances, no scores/ranks. The 80°S–90°S cap includes boundary-crossing features. Successful
-  responses use data-source header `catalogue`, independent of ephemerides. No frontend UI or
-  client is wired yet; Node mock has no implementation. Root `API.md` owns the revised contract;
+  responses use data-source header `catalogue`, independent of ephemerides. Frontend client
+  now uses this contract. Mission Planner owns an applied search radius (40 km default);
+  Route Planner explicitly searches nearby POIs and displays names/footprint distances.
+  Radius changes hide prior results without reloading mission analysis. Node mock has no implementation. Root `API.md` owns the revised contract;
   `docs/poi-sources.md` records sources, cave/pit coverage limits and regeneration. POI IDs are
   not landing-site IDs. Do not invent cave, rover or suitability data for missing records.
 - Python `GET /sites` has 21 entries (seven preserved plus 14 sourced location additions),
@@ -208,7 +210,9 @@ Keep **mission scoring duration** separate from **visualization coverage**:
    timestamp spellings. Missing samples show “Not sampled”, never first-candidate evidence.
    The native Landing time (UTC) field supports keyboard editing on the 6-hour grid and
    changes selection locally without fetching; retain the custom timeline as another input.
-   `SurfaceStayWindow` in TimelineBars shades landing through `days_on_surface` on the
+   The timeline marker turns green only for the exact selected candidate's passing backend
+  fit (both_met with no violations), not instantaneous Sun/Earth visibility.
+  `SurfaceStayWindow` in TimelineBars shades landing through `days_on_surface` on the
    slider and every site's timeline. It follows selection locally and clips to the visible
    range; a dashed right edge indicates the stay continues beyond view. Keep its duration
    tied to applied scoring constraints, not the lunar-day chart coverage.
@@ -398,7 +402,8 @@ decisions change.
   FastAPI `/route` returns great-circle segments; retain its terrain/slope/shadow limitation.
   The Node mock does not implement `/route`: show its error instead of inventing a path.
 - The map starts centered on the landing. Picking stops preserves the camera; calculation
-  fits the returned route, and Fit can frame draft markers. KML/CSV appear only for a current
+  fits the returned route, and Fit can frame draft markers. Fit includes returned path points
+  and compensates for `xMidYMid slice` cropping using the measured viewport aspect ratio. KML/CSV appear only for a current
   successful response. Route distances and path come from the backend, not draft geometry.
 
 - Intermediate route-table rows support native drag-and-drop; there is no separate waypoint list.

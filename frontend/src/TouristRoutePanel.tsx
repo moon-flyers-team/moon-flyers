@@ -33,18 +33,24 @@ const LANDING_COLOR = '#00e676';
 const LEGEND: [string, string][] = [[LANDING_COLOR, 'Landing site'], [WAYPOINT_COLOR, 'Waypoints']];
 const DRAG_TYPE = 'application/x-moon-waypoint';
 
-function fitCamera(pts: MapPoint[]): MapCamera {
+export function fitCamera(pts: MapPoint[], width = 600, height = 600): MapCamera {
   if (!pts.length) return { x: MAP_CENTER, y: MAP_CENTER, zoom: 1 };
   if (pts.length === 1) return { ...pts[0], zoom: 16 };
-  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+  }
+  if (minX === maxX && minY === maxY) return { ...pts[0], zoom: 16 };
+  // xMidYMid slice crops the square viewBox along the shorter viewport dimension.
   const halfSpan = Math.max(
-    (Math.max(...xs) - Math.min(...xs)) / 2,
-    (Math.max(...ys) - Math.min(...ys)) / 2,
+    (maxX - minX) / 2 * Math.max(width, height) / width,
+    (maxY - minY) / 2 * Math.max(width, height) / height,
     0.5,
   );
   return {
-    x: (Math.min(...xs) + Math.max(...xs)) / 2,
-    y: (Math.min(...ys) + Math.max(...ys)) / 2,
+    x: (minX + maxX) / 2,
+    y: (minY + maxY) / 2,
     zoom: Math.min(MAX_ZOOM, Math.max(1, MAP_CENTER / (halfSpan * 1.45))),
   };
 }
@@ -93,10 +99,19 @@ function toCsv(r: RouteResponse) {
 interface Props {
   landingSite: LandingSite;
   landingUtc: string;
+  poiRadiusKm?: number;
   onClose: () => void;
 }
 
-export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
+export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, onClose }: Props) {
+  const [searchRadius, setSearchRadius] = useState<number | null>(null);
+  // A changed applied radius invalidates previous catalogue results without an automatic search.
+  useEffect(() => setSearchRadius(null), [poiRadiusKm]);
+  const poiRequest = useMemo(() => searchRadius !== poiRadiusKm || !Number.isFinite(poiRadiusKm) || poiRadiusKm <= 0
+    ? null : (signal: AbortSignal) => api.getRecommendedSites({
+      site: siteReference(landingSite), radius_km: poiRadiusKm,
+    }, signal), [searchRadius, poiRadiusKm, landingSite]);
+  const nearby = useRequest(poiRequest, 0);
   const elevations = useRequest(loadElevations, 0);
   const siteName = landingSite.name;
   const slug = siteName.replace(/\s+/g, '_');
@@ -170,6 +185,21 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
           {elevations.error && <p>Elevation data unavailable. <button className="ct-btn" onClick={elevations.retry}>Retry elevations</button></p>}
         </div>
       )}
+      <div className="route-editor">
+        <button className="ct-btn" disabled={nearby.loading || !Number.isFinite(poiRadiusKm) || poiRadiusKm <= 0}
+          onClick={() => { if (searchRadius === poiRadiusKm) nearby.retry(); else setSearchRadius(poiRadiusKm); }}>
+          Find nearby POIs ({poiRadiusKm} km)
+        </button>
+        {nearby.loading && <span role="status">Searching catalogue…</span>}
+        {nearby.error && <span className="request-error" role="alert">POI search failed: {nearby.error}</span>}
+        {nearby.data && searchRadius === poiRadiusKm && <details open>
+          <summary>{nearby.data.recommendations.length} nearby POIs</summary>
+          <p>Published features; distances are to approximate footprints, not driving routes.</p>
+          <ul>{nearby.data.recommendations.map(({ poi, distance_km }) => <li key={poi.id}>
+            {poi.name} · {distance_km.toFixed(1)} km
+          </li>)}</ul>
+        </details>}
+      </div>
       {loading && <p className="request-status" role="status">Calculating route…</p>}
       {result.error && <div className="request-error" role="alert">Route request failed: {result.error}
         {' '}<button className="ct-btn" onClick={result.retry}>Retry</button></div>}
@@ -192,7 +222,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
   const [active, setActive] = useState<number | null>(null);
-  const [px, setPx] = useState(600);
+  const [viewport, setViewport] = useState({ width: 600, height: 600 });
+  const px = Math.max(viewport.width, viewport.height);
 
   const colorOf = (i: number) => i === 0 ? LANDING_COLOR : WAYPOINT_COLOR;
 
@@ -211,7 +242,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   }, [route, pathPts]);
   const fullD = useMemo(() => pathPts.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' '), [pathPts]);
 
-  const fit = useMemo(() => fitCamera(stops), [stops]);
+  const fit = useMemo(() => fitCamera([...stops, ...pathPts], viewport.width, viewport.height),
+    [stops, pathPts, viewport]);
   const [camera, setCamera] = useState<MapCamera>(fit);
   useEffect(() => { if (calculated) setCamera(fit); }, [fit, calculated]);
 
@@ -220,7 +252,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
     if (!svg) return;
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
-      if (width && height) setPx(Math.max(width, height));
+      if (width && height) setViewport(previous => previous.width === width && previous.height === height
+        ? previous : { width, height });
     });
     ro.observe(svg);
     return () => ro.disconnect();

@@ -118,7 +118,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       {landingSite && <div className="main-body route-planner-body" id="panel-route" role="tabpanel"
         aria-labelledby="tab-route" hidden={activeTab !== 'route'}>
         <TouristRoutePanel key={`${landingSite.id}:${landingSite.latitude_deg}:${landingSite.longitude_deg}`}
-          landingSite={landingSite} landingUtc={landingUtc} onClose={() => { setLandingSiteId(null); setTab('profiles'); }} />
+          landingSite={landingSite} landingUtc={landingUtc} poiRadiusKm={mission.poiRadiusKm ?? 40} onClose={() => { setLandingSiteId(null); setTab('profiles'); }} />
       </div>}
     </main>
   );

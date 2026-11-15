@@ -17,6 +17,7 @@ export default function App() {
     windowEnd: '2027-10-31',
     daysOnSurface: 14,
     horizonClearance: 0.3,
+    poiRadiusKm: 40,
   });
   const [power, setPower] = useState<PowerParams>({ minSunlight: 60, maxNight: 96 });
   const [comms, setComms] = useState<CommsParams>({ minEarthContact: 45, maxCommsGap: 240 });
@@ -118,6 +119,7 @@ export function SettingsModal({ mission, power, comms, terrain, onMissionChange,
   const dateErrorId = useId();
   const fieldId = useId();
   const dateError = landingWindowError(mission.windowStart, mission.windowEnd);
+  const radiusError = !Number.isFinite(mission.poiRadiusKm ?? 40) || (mission.poiRadiusKm ?? 40) <= 0;
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -161,6 +163,18 @@ export function SettingsModal({ mission, power, comms, terrain, onMissionChange,
                 </div>
               </Field>
             </div>
+          </Section>
+
+          <Section title="Nearby POIs">
+            <Field label="Search radius" htmlFor={`${fieldId}-radius`}>
+              <div className="sb-unit">
+                <input id={`${fieldId}-radius`} type="number" className="sb-input" min="0" step="any"
+                  value={mission.poiRadiusKm ?? 40} aria-invalid={radiusError}
+                  onChange={e => onMissionChange({ ...mission, poiRadiusKm: +e.target.value })} />
+                <span>km</span>
+              </div>
+            </Field>
+            {radiusError && <p role="alert">Search radius must be greater than zero.</p>}
           </Section>
 
           <Section title="Power (Sun)" dot="#f5a623">
@@ -212,7 +226,7 @@ export function SettingsModal({ mission, power, comms, terrain, onMissionChange,
           </Section>
         </div>
         <div className="settings-modal-footer">
-          <button type="button" className="settings-compare-btn" onClick={onCompare} disabled={!!dateError}>
+          <button type="button" className="settings-compare-btn" onClick={onCompare} disabled={!!dateError || radiusError}>
             SET MISSION
           </button>
         </div>

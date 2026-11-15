@@ -116,7 +116,8 @@ The frontend loads heavyweight analysis data **only** on:
 3. A site being toggled on or off.
 
 Current UI: mission settings are edited in App's settings dialog and take effect on
-**SET MISSION**, not on each draft keystroke. Catalogue loads at startup; comparison and
+**SET MISSION**, not on each draft keystroke. The nearby-POI radius is separate from
+scoring constraints: applying it does not reload comparison or horizon analysis. Catalogue loads at startup; comparison and
 site analysis run when applied settings or enabled sites change.
 
 On events 2–3, the frontend fires **one `POST /compare`** for all enabled sites and **one `GET /sites` per enabled site** in parallel to pre-load every horizon dataset.
@@ -208,6 +209,10 @@ Response, one entry per site in the order you sent them:
   window. The frontend looks up the entry matching the selected UTC instant to update
   the table without a new request. Timeline seeking and the native Landing time (UTC)
   field update selection locally; the older ±6 h buttons are no longer mounted.
+- The timeline landing marker is green only when the selected site's exact sampled
+  candidate has `fit.status: both_met` and no violations, matching the comparison row.
+  Simultaneous Sun/Earth visibility at landing alone is not a passing mission fit.
+  Missing candidates stay neutral; the surface-stay shading indicates duration only.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
 - `eclipse` lists Earth eclipses (Earth's disc overlapping the Sun's, i.e. a lunar eclipse seen
@@ -313,6 +318,13 @@ Successful response shape (one illustrative match shown; actual results include 
   error, never a synthetic or empty substitute catalogue.
 - Provenance, cave/pit research, source discrepancies, approximation limits and refresh
   instructions: [`docs/poi-sources.md`](docs/poi-sources.md). This catalogue is not exhaustive.
+
+Current frontend: Mission Planner includes a positive **Search radius** in km (40 default).
+After selecting a landing site, Route Planner's explicit **Find nearby POIs** action sends
+that applied radius and landing reference to this endpoint. Custom landings send coordinates,
+not local UUIDs. Results show published POI names and point/approximate-footprint distances;
+they do not add waypoints or imply reachability. Changing radius hides previous results and
+requires another explicit search. Errors remain visible; no synthetic fallback is used.
 
 ## Not in v0
 - Terrain slope calculations (`slope_deg` remains null). Terrain-aware horizons are already

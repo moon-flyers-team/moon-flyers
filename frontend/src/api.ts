@@ -85,6 +85,6 @@ export const api = {
   getRoute: (params: RouteParams, signal?: AbortSignal) =>
     post<RouteResponse>('/route', { step_m: 100, ...params }, signal),
   getRecommendedSites: (params: RecommendedSitesParams, signal?: AbortSignal) =>
-    post<RecommendedSitesResponse>('/recommended-sites', { limit: 5, ...params }, signal),
+    post<RecommendedSitesResponse>('/recommended-sites', params, signal),
   health: (signal?: AbortSignal) => request<{ status: string }>('/health', { signal }),
 };
