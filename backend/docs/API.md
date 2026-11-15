@@ -222,8 +222,48 @@ Response:
 ## 4. `GET /health`
 Returns `{"status": "ok"}`.
 
-## Not in v0
-- `slope_deg` (terrain-aware horizons are supported by the Python backend when a DEM is mounted)
+## 5. `POST /route`: a detailed path through several sites (MOCK)
+```json
+{ "waypoints": [{ "id": "shackleton_rim" }, { "id": "connecting_ridge" },
+                { "name": "Spot", "latitude_deg": -89.0, "longitude_deg": 10.0 }],
+  "step_m": 100 }
+```
+Response:
+```json
+{ "method": "straight_line",
+  "waypoints": [{ "id": "shackleton_rim", "name": "...", "...": "..." }],
+  "legs": [{ "from_index": 0, "to_index": 1, "distance_m": 12345.6 }],
+  "total_distance_m": 23456.7,
+  "path": [{ "latitude_deg": -89.667, "longitude_deg": 129.783, "distance_m": 0.0, "waypoint_index": 0 },
+           { "latitude_deg": -89.66, "longitude_deg": 130.1, "distance_m": 100.0, "waypoint_index": null }] }
+```
+- Waypoints (2–100, same shape as `site` elsewhere) are visited in the given order.
+- `path` has a point at least every `step_m` metres (default 100); `waypoint_index` marks the
+  requested waypoints. `distance_m` is cumulative from the first waypoint.
+- **Mock:** `method: "straight_line"` means great-circle segments on a 1737.4 km sphere; terrain,
+  slope and shadow are ignored. A real planner will keep this shape and change `method`.
+- 404 for an unknown site id; 422 for fewer than 2 waypoints or more than 100,000 path points.
+
+## 6. `POST /recommended-sites`: catalogue sites ranked for the current inputs (MOCK)
+Same body as `/compare` without `sites`, plus `limit` (default 5, max 100):
+```json
+{ "window_start_utc": "2027-08-01T00:00:00Z", "window_end_utc": "2027-08-08T00:00:00Z",
+  "constraints": { "...": "..." }, "limit": 5 }
+```
+Response:
+```json
+{ "method": "mock_heuristic",
+  "recommendations": [{ "rank": 1, "site": { "id": "malapert_massif", "...": "..." },
+                        "landing_utc": "2027-08-01T00:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }] }
+```
+- Sorted by fit first, then sunlight %, then Earth contact % (same as `/landing-windows`).
+- **Mock:** metrics are estimated from latitude/longitude (polar = more sun, near side = more Earth,
+  far side = none), for a landing at `window_start_utc`. No ephemeris, no terrain. `fit` uses the
+  real constraint check. A real version will keep this shape and change `method`.
+- 422 for an invalid window or constraints.
+
+- Terrain-aware horizon (LOLA data).
+- `slope_deg`.
 - Error-response format. We'll use FastAPI's default `{"detail": ...}` for now.
 
 Questions and change requests are welcome. This is a draft, and it's easier to change before we

@@ -114,6 +114,17 @@ class LandingWindowsRequest(WindowRequest):
     limit: int = Field(5, ge=1, le=100)
 
 
+class RecommendedSitesRequest(WindowRequest):
+    """The app's current window and constraints; recommends from the catalogue."""
+    limit: int = Field(5, ge=1, le=100)
+
+
+class RouteRequest(BaseModel):
+    """Sites to visit, in order. The route is densified to one point every `step_m` metres."""
+    waypoints: list[SiteRef] = Field(min_length=2, max_length=100)
+    step_m: float = Field(100, gt=0)
+
+
 # ---------- shared response blocks ----------
 
 class Site(BaseModel):
@@ -193,3 +204,40 @@ class LandingWindow(BaseModel):
     landing_utc: str
     metrics: Metrics
     fit: Fit
+
+
+RouteMethod = Literal["straight_line"]
+
+
+class RoutePoint(BaseModel):
+    latitude_deg: float
+    longitude_deg: float
+    distance_m: float  # cumulative from the first waypoint
+    waypoint_index: Optional[int] = None  # set when this point is one of the requested waypoints
+
+
+class RouteLeg(BaseModel):
+    from_index: int
+    to_index: int
+    distance_m: float
+
+
+class RouteResponse(BaseModel):
+    method: RouteMethod  # "straight_line" = mock: great-circle segments, terrain ignored
+    waypoints: list[Site]
+    legs: list[RouteLeg]
+    total_distance_m: float
+    path: list[RoutePoint]
+
+
+class Recommendation(BaseModel):
+    rank: int
+    site: Site
+    landing_utc: str
+    metrics: Metrics
+    fit: Fit
+
+
+class RecommendedSitesResponse(BaseModel):
+    method: Literal["mock_heuristic"]  # mock: estimates from latitude/longitude, no ephemeris or terrain
+    recommendations: list[Recommendation]
