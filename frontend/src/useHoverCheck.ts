@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { probeKey } from './map/routePreview';
 import type { Coordinates } from './map/projection';
-import type { RouteParams, StopCheck } from './types';
+import type { StopCheck } from './types';
 
 const DEBOUNCE_MS = 120;
 const CACHE_LIMIT = 600;
@@ -15,15 +15,11 @@ interface Probe {
 // Terrain verdict for the point under the cursor, so a hover can preview where a click would land.
 // Results are cached per 30 m bucket and superseded requests are aborted. A failed probe is
 // advisory only: the click still adds the stop and the normal preflight handles it.
-export function useHoverCheck(coordinates: Coordinates | null, rover: RouteParams['rover']) {
+export function useHoverCheck(coordinates: Coordinates | null) {
   const cache = useRef(new Map<string, StopCheck>());
   const [probe, setProbe] = useState<Probe | null>(null);
   const [pending, setPending] = useState(false);
-  const limits = `${rover?.max_slope_deg ?? 20}/${rover?.cell_size_m ?? 60}`;
-  const key = coordinates ? `${probeKey(coordinates)}@${limits}` : null;
-  // Different rover limits describe different terrain, so the cache must not carry over.
-  const lastLimits = useRef(limits);
-  if (lastLimits.current !== limits) { lastLimits.current = limits; cache.current.clear(); }
+  const key = coordinates ? probeKey(coordinates) : null;
 
   useEffect(() => {
     if (!coordinates || !key) {
@@ -42,7 +38,6 @@ export function useHoverCheck(coordinates: Coordinates | null, rover: RouteParam
       api.getRouteStops({
         waypoints: [{ name: 'Cursor',
           latitude_deg: coordinates.latitude_deg, longitude_deg: coordinates.longitude_deg }],
-        ...(rover ? { rover } : {}),
       }, controller.signal).then(response => {
         if (controller.signal.aborted) return;
         const check = response.stops[0] ?? null;
@@ -60,7 +55,7 @@ export function useHoverCheck(coordinates: Coordinates | null, rover: RouteParam
       });
     }, DEBOUNCE_MS);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [key, coordinates?.latitude_deg, coordinates?.longitude_deg, rover]);
+  }, [key, coordinates?.latitude_deg, coordinates?.longitude_deg]);
 
   return { check: probe && probe.key === key ? probe.check : null, pending: !!key && pending };
 }
