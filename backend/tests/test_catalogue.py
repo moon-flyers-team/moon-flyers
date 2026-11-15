@@ -27,7 +27,6 @@ ADDED_SOURCES = {
 }
 LEGACY_IDS = [
     "shackleton_rim", "connecting_ridge", "de_gerlache_rim", "malapert_massif", "im1_malapert_a",
-    "chandrayaan3_shiv_shakti", "change6_apollo_basin",
 ]
 client = TestClient(app)
 
@@ -51,15 +50,22 @@ def test_added_defaults_use_published_in_cap_coordinates(site_id, poi_id):
 
 
 def test_catalogue_preserves_old_sites_and_public_shape():
-    assert [s.id for s in SITES[:7]] == LEGACY_IDS
-    assert len(SITES) == len(SITES_BY_ID) == 21
+    assert [s.id for s in SITES[:5]] == LEGACY_IDS
+    assert len(SITES) == len(SITES_BY_ID) == 19
     assert SITES_BY_ID["shackleton_rim"].latitude_deg == -89.667
-    assert SITES_BY_ID["chandrayaan3_shiv_shakti"].latitude_deg == -69.373
+    assert all(-90 <= site.latitude_deg <= -80 for site in SITES)
+    assert {"chandrayaan3_shiv_shakti", "change6_apollo_basin"}.isdisjoint(SITES_BY_ID)
     response = client.get("/sites")
     assert response.status_code == 200
     assert {s["id"] for s in response.json()} == set(SITES_BY_ID)
     assert all(set(s) == {"id", "name", "group", "latitude_deg", "longitude_deg", "notes"}
                for s in response.json())
+
+
+@pytest.mark.parametrize("site_id", ["chandrayaan3_shiv_shakti", "change6_apollo_basin"])
+def test_removed_out_of_cap_defaults_are_no_longer_resolved(site_id):
+    response = client.post("/recommended-sites", json={"site": {"id": site_id}})
+    assert response.status_code == 404
 
 
 def test_defaults_cover_at_least_eighty_percent_of_published_pois():

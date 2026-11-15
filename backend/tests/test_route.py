@@ -79,7 +79,7 @@ def test_straight_line_points_lie_on_the_great_circle():
 def test_route_errors_are_unchanged_for_straight_lines():
     assert client.post("/route", json={"waypoints": [{"id": "shackleton_rim"}]}).status_code == 422
     assert client.post("/route", json={"waypoints": [{"id": "nope"}, {"id": "shackleton_rim"}]}).status_code == 404
-    far = body([{"id": "shackleton_rim"}, {"id": "change6_apollo_basin"}], step_m=1)
+    far = body([{"id": "shackleton_rim"}, custom("Far-side reference", (-41.64, -153.99))], step_m=1)
     assert client.post("/route", json=far).status_code == 422
 
 

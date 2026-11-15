@@ -76,7 +76,10 @@ def test_compare():
 
 
 def test_far_side_site_never_sees_earth():
-    r = client.post("/compare", json={"sites": [{"id": "change6_apollo_basin"}], **WINDOW})
+    r = client.post("/compare", json={"sites": [
+        {"name": "Far-side reference", "latitude_deg": -41.64, "longitude_deg": -153.99}
+    ], **WINDOW})
+    assert r.status_code == 200
     first = r.json()[0]["window_metrics"][0]
     assert first["metrics"]["earth_visible_pct"] == 0
     assert "earth_visible_pct" in first["fit"]["violations"]
@@ -100,7 +103,9 @@ def test_limits_and_validation():
 
 def test_eclipse_needs_overlap_and_visible_earth():
     from src.services.visibility import eclipse_flags
-    assert eclipse_flags([10, 10, 10], [5, 5, 5], [10.5, 10.5, 20], [5, 5, 5], [True, False, True]) == [True, False, False]
+    assert eclipse_flags(
+        [10, 10, 10], [5, 5, 5], [10.5, 10.5, 20], [5, 5, 5], [True, False, True]
+    ) == [True, False, False]
 
 
 def test_slope_over_the_limit_is_flagged_but_keeps_the_status():

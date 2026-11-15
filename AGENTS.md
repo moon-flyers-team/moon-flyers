@@ -24,8 +24,10 @@ when agreed behavior changes.
   Radius changes hide prior results without reloading mission analysis. Node mock has no implementation. Root `API.md` owns the revised contract;
   `docs/poi-sources.md` records sources, cave/pit coverage limits and regeneration. POI IDs are
   not landing-site IDs. Do not invent cave, rover or suitability data for missing records.
-- Python `GET /sites` has 21 entries (seven preserved plus 14 sourced location additions),
-  covering 49/61 POIs within 40 km. Most additions are explicitly unvetted exploration
+- Python `GET /sites` has 19 in-cap entries (five preserved plus 14 sourced location additions).
+  Out-of-cap Chandrayaan-3 and Chang'e-6 were removed; their IDs now return 404. Custom
+  coordinates outside the cap remain supported for analysis. The catalogue still covers
+  49/61 POIs within 40 km. Most additions are explicitly unvetted exploration
   references at published feature centres, not selected landing points. Sources/coverage are
   in `docs/poi-sources.md`; Node mock/offline catalogues are unchanged. App currently enables
   every returned site by default, so the larger catalogue increases initial analysis work.

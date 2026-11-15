@@ -137,8 +137,11 @@ The time slider **never** triggers an API call. It slices pre-loaded data client
    "latitude_deg": -86.0, "longitude_deg": 0.0, "notes": "..." }]
 ```
 
-The Python catalogue includes the original seven sites plus 14 published-location additions
-(21 total), covering 49/61 bundled POIs within the default 40 km proximity radius. Most additions
+The Python catalogue includes five original in-cap sites plus 14 published-location additions
+(19 total), all within the route map's 80°S–90°S coverage, covering 49/61 bundled POIs
+within the default 40 km proximity radius. Chandrayaan-3 and Chang'e-6 have been removed
+because they are outside that cap; their former IDs now return 404. Custom coordinates
+outside the cap remain valid for analysis, but are not displayed on the polar route map. Most additions
 are explicitly labelled **exploration references, not vetted landing sites**; feature centres
 are not selected candidate rim points. Existing site IDs/coordinates and the response shape
 are unchanged. Coordinate sources and coverage limits: [`docs/poi-sources.md`](docs/poi-sources.md#default-landing-site--exploration-reference-coverage).
