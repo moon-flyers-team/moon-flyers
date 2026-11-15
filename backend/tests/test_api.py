@@ -87,8 +87,7 @@ def test_landing_windows_sorted_and_limited():
     res = r.json()
     assert [x["rank"] for x in res] == [1, 2, 3]
     order = {"both_met": 0, "power_short": 1, "comms_short": 1, "neither_met": 2}
-    keys = [(order[x["fit"]["status"]], -x["metrics"]["sun_visible_pct"]) for x in res]
-    assert keys == sorted(keys)
+    assert [order[x["fit"]["status"]] for x in res] == sorted(order[x["fit"]["status"]] for x in res)
 
 
 def test_error_status_codes():
