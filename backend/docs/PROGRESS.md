@@ -4,13 +4,19 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Rover route visualization (2026-11-15).** `tools/plot_rover_path.py` saves terrain,
+  slope exclusions, full route and elevation profile as PNG plus a JSON report;
+  real `DEM` mode or explicitly labelled synthetic hill demo. Optional Matplotlib
+  dependency lives in `requirements-visualization.txt`; no API/frontend changes.
+  Two offline plotting checks cover demo detour and blocked-route output. Usage
+  and real-data Windows commands are in `docs/ROVER_PATH_REVIEW.md`.
 - **Rover route calculation ready for review (2026-11-15).**
   `app/Functions/rover_path.py` adds bounded A* over a metre grid or `DEM.sample()`;
   configurable terrain slope, uphill/downhill grade and exclusions; optional ascent
   cost plus a direction-independent slope penalty (default weight 1, 15° scale);
   exact geographic endpoints, pole/dateline handling, no diagonal corner
   cutting, and explicit blocked/no-route/budget statuses. No route endpoint or
-  frontend wiring. Twenty-four focused offline tests cover graph optimality against
+  frontend wiring. Twenty-nine focused offline tests cover graph optimality against
   Dijkstra and compatibility with the LOLA loader fixture. Reviewer handoff:
   `docs/ROVER_PATH_REVIEW.md`. An opt-in real-raster test is now available:
   `MOON_FLYERS_REAL_ROVER=1` plus `LOLA_DEM_DIR`, run `tests/test_rover_dem.py`
