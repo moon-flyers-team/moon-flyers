@@ -113,6 +113,65 @@ with sourced dimensions and evidence notes. No such record is currently shipped.
   Stops, scientific work, detours, slopes, obstacles, shadow, energy, communications,
   reserve, heritage protection, and trafficability are not evaluated.
 
+## Default landing-site / exploration-reference coverage
+
+The backend `GET /sites` catalogue now preserves its seven original sites and adds **14
+published-location references**, for **21 sites total**. This is a deliberately modest
+coverage extension, not a list of safe touchdown locations.
+
+We first checked NASA's [updated Artemis III candidate-region announcement](https://www.nasa.gov/news-release/nasa-provides-update-on-artemis-iii-moon-landing-regions/),
+[original candidate-region announcement](https://www.nasa.gov/news-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon/),
+and [VIPER Nobile-region announcement](https://www.nasa.gov/news-release/nasas-artemis-rover-to-land-near-nobile-region-of-moons-south-pole/).
+Those sources identify **regions**, not interchangeable exact touchdown coordinates.
+Nobile, Mons Mouton and historical Faustini candidate context informed the first additions;
+we do not substitute crater centres for named rim/plateau candidates and call them selected
+landing points. The historical VIPER announcement's schedule is not treated as current.
+
+Athena is an actual published landing location (not an endorsement: the lander tipped).
+Nobile and Faustini are explicitly labelled **candidate-region exploration references**
+using the published geological feature centres, not candidate rim points. With those three
+additions, coverage is only **21/61 POIs**. To reach the user's approximate 80% goal, the
+remaining 11 references use sourced in-cap natural-feature centres, selected once by their
+additional 40 km coverage rather than inventing suitable-looking landing coordinates.
+
+| Added landing-site ID | Coordinate source POI ID | Role |
+| --- | --- | --- |
+| `im2_mons_mouton` | `im2-athena` | Actual observed landing location |
+| `nobile_reference` | `iau-4321` | Candidate-region context; geological centre only |
+| `faustini_reference` | `iau-1919` | Historical candidate-region context; geological centre only |
+| `wiechert_reference` | `iau-6541` | Exploration reference |
+| `demonax_b_reference` | `iau-8719` | Exploration reference |
+| `schomberger_l_reference` | `iau-12948` | Exploration reference |
+| `drygalski_p_reference` | `iau-8838` | Exploration reference |
+| `cabeus_reference` | `iau-953` | Exploration reference, near LCROSS impact POIs |
+| `newton_b_reference` | `iau-11611` | Exploration reference |
+| `idelson_reference` | `iau-2650` | Exploration reference |
+| `cabeus_a_reference` | `iau-8057` | Exploration reference, not Peak near Cabeus B |
+| `demonax_c_reference` | `iau-8720` | Exploration reference |
+| `idelson_l_reference` | `iau-10114` | Exploration reference |
+| `scott_e_reference` | `iau-13015` | Exploration reference |
+
+Exact coordinates follow the committed POI snapshot described above, with its existing
+accuracy and spelling limitations. Site notes link the coordinate source. Reference names
+and groups explicitly say `reference` / `not vetted`; no terrain, slope, illumination,
+communications, heritage stand-off or landing-safety suitability is inferred. These site
+IDs are separate from POI IDs and work with the existing analysis endpoints.
+
+Measured against the 61-record snapshot, the seven original sites cover **14/61** POIs;
+the expanded catalogue covers **49/61 (80.3%)** within 40 km. Coverage uses the endpoint's
+**point/approximate-area distance**, not necessarily distance to feature centres or rover
+routes. Original out-of-cap sites remain unchanged; all added references are in-cap.
+Tests verify the measurement through both geometry and the public API.
+
+The 12 remaining uncovered POIs are Newton E, Wiechert J, Ibn Bajja, Kocher, Kuhn,
+Laveran, Nefed ev, Wapowski, Braude, Amundsen C, De Forest P and Lunar Prospector.
+We do not add another site per isolated POI just to claim 100% coverage.
+
+**Frontend integration note:** the current frontend enables every returned catalogue site
+by default and requests analysis for each enabled site. Therefore the larger catalogue
+increases initial analysis work (21 sites rather than seven). This change does not alter
+that lifecycle or the wire format; frontend selection/performance policy remains separate.
+
 ## Refresh and review procedure
 
 From the repository root, with Python 3.12 (stdlib only):
