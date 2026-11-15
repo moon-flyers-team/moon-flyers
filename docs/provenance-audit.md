@@ -22,7 +22,10 @@ A browser inspection of the current application showed “Sun visible” at a ne
 
 ## Verification
 
-A focused SSR test covers both flat and nonflat profiles and requires source/slope caveats. Existing current-sample visibility assertions are corrected rather than weakened. Full combined test/build results are recorded on the PR after rebasing onto the verification repair. No live Horizons/real-DEM accuracy validation, terrain fallback API redesign or operational certification is claimed.
+A focused SSR test covers both flat and nonflat profiles and requires source/slope caveats. Existing current-sample visibility assertions are corrected rather than weakened. After rebasing onto the verification repair: `npm --prefix frontend test` passed all
+42 tests, `npm --prefix frontend run build` passed both TypeScript checks and bundling,
+and `npm --prefix frontend run test:mock:isolated` passed real HTTP/rendering checks.
+`pnpm` was not on PATH; no dependencies were installed. No live Horizons/real-DEM accuracy validation, terrain fallback API redesign or operational certification is claimed.
 
 ## Remaining discrepancies / follow-ups
 
