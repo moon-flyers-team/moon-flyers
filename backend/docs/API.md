@@ -238,25 +238,36 @@ Response:
   slope and shadow are ignored. A real planner will keep this shape and change `method`.
 - 404 for an unknown site id; 422 for fewer than 2 waypoints or more than 100,000 path points.
 
-## 6. `POST /recommended-sites`: catalogue sites ranked for the current inputs (MOCK)
-Same body as `/compare` without `sites`, plus `limit` (default 5, max 100):
-```json
-{ "window_start_utc": "2027-08-01T00:00:00Z", "window_end_utc": "2027-08-08T00:00:00Z",
-  "constraints": { "...": "..." }, "limit": 5 }
-```
-Response:
-```json
-{ "method": "mock_heuristic",
-  "recommendations": [{ "rank": 1, "site": { "id": "malapert_massif", "...": "..." },
-                        "landing_utc": "2027-08-01T00:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }] }
-```
-- Sorted by fit first, then sunlight %, then Earth contact %.
-- **Mock:** metrics are estimated from latitude/longitude (polar = more sun, near side = more Earth,
-  far side = none), for a landing at `window_start_utc`. No ephemeris, no terrain. `fit` uses the
-  real constraint check. A real version will keep this shape and change `method`.
-- 422 for an invalid window or constraints.
+## 6. `POST /recommended-sites`: published nearby points of interest
 
-- Terrain-aware horizon (LOLA data).
+**The root [API.md](../../API.md#5-post-recommended-sites-published-pois-near-a-landing-site-python-backend)
+now owns this revised contract.** The previous mocked window/constraint ranking body and
+response are deliberately removed; frontend UI/client changes are out of this backend task.
+
+```json
+{ "site": { "id": "shackleton_rim" }, "radius_km": 40 }
+```
+
+Alternatively, `site` accepts `latitude_deg` and `longitude_deg` with optional `name`.
+Radius defaults to 40 km (10 km/h, eight hours total out-and-back driving, no stops/reserve).
+All matches from the bundled 80°S–90°S POI footprint catalogue are returned as
+`recommendations: [{poi, distance_km}]`, nearest first, no ranks or suitability scores.
+Response metadata: `method: catalogue_proximity`, `data_source: published_catalogue`,
+`catalogue_version`, resolved landing `site`, and effective `radius_km`.
+
+Published natural-feature diameters define explicitly approximate circles; hardware/impacts
+are published points. Distances are great-circle distances to the area/point (zero inside),
+not rover routes. Boundary-crossing features are included even with centres outside the cap.
+No synthetic data, ephemeris calls, scoring, dates, slope or visibility constraints are used.
+Header: `X-Moon-Flyers-Data-Source: catalogue`, independent of the ephemeris mode.
+
+Sources and cave/pit research: [docs/poi-sources.md](../../docs/poi-sources.md).
+The initial 61-record snapshot has no in-cap cave/pit entries in the checked LROC atlas;
+ordinary craters are not caves. Unknown IDs give 404; invalid/ambiguous/extra inputs give 422;
+malformed JSON gives 400. Empty searches give HTTP 200 with an empty list.
+
+## Not implemented
+
 - `slope_deg`.
 - Error-response format. We'll use FastAPI's default `{"detail": ...}` for now.
 

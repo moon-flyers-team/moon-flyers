@@ -1,51 +1,61 @@
-"""Recommended landing sites. MOCK: metrics estimated from site geometry, no ephemeris or terrain.
+"""Published south-polar POIs near a landing site; no ephemeris or synthetic metrics.
 
-The estimates are rough but point the right way: polar sites get more sunlight, near-side sites
-more Earth contact, far-side sites none. The real version would rank `SiteSeries.window_metrics()`
-for every catalogue site; the response shape stays.
+The catalogue is bundled and versioned. Failure to load/validate it is an error, never
+an invitation to invent locations. See docs/poi-sources.md at the repository root.
 """
 
+import json
 import math
-from datetime import datetime
+from pathlib import Path
 
-from ..schemas import Constraints, Metrics, Recommendation, RecommendedSitesResponse, Site
-from .catalogue import SITES
-from .visibility import FIT_ORDER, fit, iso
+from ..schemas import PointOfInterest, Recommendation, RecommendedSitesResponse, Site
 
-SYNODIC_HOURS = 29.53 * 24
-DRACONIC_YEAR_DAYS = 346.62  # period of the Sun's ±1.5° swing in the lunar sky (polar "seasons")
-LIBRATION_DEG = 7.0
+MOON_RADIUS_KM = 1737.4
+CAP_RADIUS_KM = math.radians(10) * MOON_RADIUS_KM
+CATALOGUE_PATH = Path(__file__).resolve().parents[1] / "data/points_of_interest.json"
 
 
-def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
-    return max(lo, min(hi, x))
+def intersects_cap(poi: PointOfInterest) -> bool:
+    """Include full footprints touching the 80 S cap, not just in-cap centres."""
+    return math.radians(poi.latitude_deg + 90) * MOON_RADIUS_KM - poi.boundary.radius_km <= CAP_RADIUS_KM
 
 
-def estimate_metrics(site: Site, landing: datetime, c: Constraints) -> Metrics:
-    stay_h = c.days_on_surface * 24
-    lat, lon = math.radians(site.latitude_deg), math.radians(site.longitude_deg)
-
-    # Sun: half a lunation dark at low latitudes; near the pole much more light, varying with season.
-    polar = _clamp((abs(site.latitude_deg) - 60) / 30)
-    season = math.sin(2 * math.pi * landing.timetuple().tm_yday / DRACONIC_YEAR_DAYS)
-    sun_pct = 100 * _clamp(0.5 + polar * (0.38 + 0.08 * season))
-    darkness_h = min(stay_h, (1 - sun_pct / 100) * SYNODIC_HOURS * (1 - 0.6 * polar))
-
-    # Earth: its mean elevation is asin(cos(lat)cos(lon)); libration swings it about ±7°.
-    earth_el = math.degrees(math.asin(math.cos(lat) * math.cos(lon)))
-    earth_pct = 100 * _clamp((earth_el + LIBRATION_DEG) / (2 * LIBRATION_DEG))
-    blackout_h = min(stay_h, (1 - earth_pct / 100) * 27.32 * 24)
-
-    return Metrics(sun_visible_pct=round(sun_pct, 1), longest_darkness_hours=round(darkness_h, 1),
-                   earth_visible_pct=round(earth_pct, 1), longest_earth_blackout_hours=round(blackout_h, 1))
+def load_catalogue(path: Path) -> tuple[str, tuple[PointOfInterest, ...]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    version = data["version"]
+    if not isinstance(version, str) or not version:
+        raise ValueError("POI catalogue requires a version")
+    pois = tuple(PointOfInterest.model_validate(p) for p in data["points_of_interest"])
+    if not pois or len({p.id for p in pois}) != len(pois):
+        raise ValueError("POI catalogue must be nonempty with unique IDs")
+    if not all(intersects_cap(p) for p in pois):
+        raise ValueError("POI catalogue contains a footprint outside the south-polar cap")
+    return version, pois
 
 
-def recommend(window_start: datetime, c: Constraints, limit: int) -> RecommendedSitesResponse:
-    scored = []
-    for site in SITES:
-        m = estimate_metrics(site, window_start, c)
-        scored.append((site, m, fit(m, c)))
-    scored.sort(key=lambda x: (FIT_ORDER[x[2].status], -x[1].sun_visible_pct, -x[1].earth_visible_pct))
-    return RecommendedSitesResponse(method="mock_heuristic", recommendations=[
-        Recommendation(rank=i + 1, site=site, landing_utc=iso(window_start), metrics=m, fit=f)
-        for i, (site, m, f) in enumerate(scored[:limit])])
+CATALOGUE_VERSION, POINTS_OF_INTEREST = load_catalogue(CATALOGUE_PATH)
+
+
+def distance_km(site: Site, poi: PointOfInterest) -> float:
+    """Great-circle distance to published point or approximate circular *area*.
+
+    Inside an approximate footprint the distance is zero, not distance to its rim.
+    Haversine handles the pole and longitude seam without projected-map distortions.
+    """
+    lat1, lat2 = math.radians(site.latitude_deg), math.radians(poi.latitude_deg)
+    dlon = math.radians(poi.longitude_deg - site.longitude_deg)
+    a = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    centre_distance = 2 * MOON_RADIUS_KM * math.asin(math.sqrt(max(0, min(1, a))))
+    return max(0.0, centre_distance - poi.boundary.radius_km)
+
+
+def recommend(site: Site, radius_km: float) -> RecommendedSitesResponse:
+    matches = []
+    for poi in POINTS_OF_INTEREST:
+        distance = distance_km(site, poi)
+        if distance <= radius_km:
+            matches.append(Recommendation(poi=poi, distance_km=distance))
+    # Distance ordering is a convenience, not a mission-suitability rank. IDs break ties.
+    matches.sort(key=lambda row: (row.distance_km, row.poi.id))
+    return RecommendedSitesResponse(catalogue_version=CATALOGUE_VERSION, site=site,
+                                    radius_km=radius_km, recommendations=matches)
