@@ -99,14 +99,31 @@ export interface RouteResponse {
   total_distance_m: number;
   path: RoutePoint[];
 }
+// POST /recommended-sites: published points of interest near a landing site (nearest first).
 export interface RecommendedSitesParams {
-  window_start_utc: string;
-  window_end_utc: string;
-  constraints: Constraints;
-  limit?: number;
+  site: { id: string } | { name?: string; latitude_deg: number; longitude_deg: number };
+  radius_km?: number;
 }
-export interface Recommendation { rank: number; site: SiteDefinition; landing_utc: string; metrics: Metrics; fit: Fit }
-export interface RecommendedSitesResponse { method: 'mock_heuristic'; recommendations: Recommendation[] }
+export type PoiCategory = 'lander' | 'rover' | 'impact' | 'natural_feature';
+export interface PointOfInterest {
+  id: string;
+  name: string;
+  category: PoiCategory;
+  feature_type: string;
+  latitude_deg: number;
+  longitude_deg: number;
+  location_uncertainty_km: number | null;
+  notes: string;
+}
+export interface Recommendation { poi: PointOfInterest; distance_km: number }
+export interface RecommendedSitesResponse {
+  method: 'catalogue_proximity';
+  data_source: 'published_catalogue';
+  catalogue_version: string;
+  site: SiteDefinition & { id: string | null };
+  radius_km: number;
+  recommendations: Recommendation[];
+}
 
 export interface MapHeatmapsResponse {
   projection: MapHeatmapsParams['projection'];

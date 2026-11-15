@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { project, unproject, MAP_CENTER, MAP_RADIUS, METRES_TO_SVG } from './map/projection';
 import type { Coordinates, MapPoint } from './map/projection';
 import { zoomAt, panBy, wheelAction } from './map/navigation';
@@ -9,7 +10,7 @@ import { useRequest } from './useRequest';
 import { elevationChange, loadElevations } from './map/elevations';
 import type { ElevationGrid } from './map/elevations';
 import { formatUtc } from './time';
-import type { LandingSite, RouteResponse } from './types';
+import type { LandingSite, PoiCategory, PointOfInterest, RecommendedSitesResponse, RouteResponse } from './types';
 
 const MAX_ZOOM = 600;
 // FastAPI accepts 100 entries, including the repeated landing at start and end.
@@ -30,8 +31,16 @@ const BASE_TILES = Array.from({ length: 36 }, (_, i) => {
 
 const WAYPOINT_COLOR = '#ddddf8';
 const LANDING_COLOR = '#00e676';
-const LEGEND: [string, string][] = [[LANDING_COLOR, 'Landing site'], [WAYPOINT_COLOR, 'Waypoints']];
+const POI_COLOR = '#ffb74d';
+const LEGEND: [string, string][] = [[LANDING_COLOR, 'Landing site'], [WAYPOINT_COLOR, 'Waypoints'], [POI_COLOR, 'Recommended sites']];
 const DRAG_TYPE = 'application/x-moon-waypoint';
+// 40 km is the backend default: 10 km/h, eight hours out and back.
+const RADIUS_OPTIONS_KM = [10, 20, 40, 80, 150];
+const DEFAULT_RADIUS_KM = 40;
+const CATEGORY_LABEL: Record<PoiCategory, string> = {
+  lander: 'Lander', rover: 'Rover', impact: 'Impact site', natural_feature: 'Natural feature',
+};
+const poiWaypointId = (poi: PointOfInterest) => `poi:${poi.id}`;
 
 function fitCamera(pts: MapPoint[]): MapCamera {
   if (!pts.length) return { x: MAP_CENTER, y: MAP_CENTER, zoom: 1 };
@@ -114,15 +123,37 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
   const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
     waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite], path: [], legs: [], total_distance_m: 0,
   }), [landingSite, waypoints]);
-  function addWaypoint(coordinates: Coordinates) {
+  const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
+  const recommendationRequest = useMemo(() => (signal: AbortSignal) => api.getRecommendedSites({
+    site: siteReference(landingSite), radius_km: radiusKm,
+  }, signal), [landingSite, radiusKm]);
+  const recommendations = useRequest(recommendationRequest, 0);
+  const addedPoiIds = useMemo(() => new Set(waypoints.map(w => w.id)), [waypoints]);
+  function pushWaypoint(next: LandingSite): boolean {
     if (waypoints.length >= MAX_WAYPOINTS) {
       setAnnouncement(`Maximum of ${MAX_WAYPOINTS} waypoints reached. Remove a stop to add another.`);
+      return false;
+    }
+    setWaypoints(previous => previous.length < MAX_WAYPOINTS ? [...previous, next] : previous);
+    return true;
+  }
+  function addWaypoint(coordinates: Coordinates) {
+    if (pushWaypoint({ ...coordinates, id: crypto.randomUUID(), custom: true, enabled: true,
+      name: `Waypoint ${waypoints.length + 1}` })) setAnnouncement('');
+  }
+  // Recommended sites become ordinary custom waypoints, so routing and reordering are unchanged.
+  function togglePoi(poi: PointOfInterest) {
+    const id = poiWaypointId(poi);
+    if (addedPoiIds.has(id)) {
+      setWaypoints(previous => previous.filter(w => w.id !== id));
+      setAnnouncement(`Removed ${poi.name}. Recalculate to update the route.`);
       return;
     }
-    const next = { ...coordinates, id: crypto.randomUUID(), custom: true, enabled: true,
-      name: `Waypoint ${waypoints.length + 1}` };
-    setWaypoints(previous => previous.length < MAX_WAYPOINTS ? [...previous, next] : previous);
-    setAnnouncement('');
+    if (pushWaypoint({ id, custom: true, enabled: true, name: poi.name,
+      latitude_deg: poi.latitude_deg, longitude_deg: poi.longitude_deg,
+      group: `${CATEGORY_LABEL[poi.category]} · ${poi.feature_type}` })) {
+      setAnnouncement(`Added ${poi.name} as stop ${waypoints.length + 1}.`);
+    }
   }
   function moveWaypoint(from: number, to: number) {
     if (!Number.isInteger(from) || !Number.isInteger(to) || from === to
@@ -142,8 +173,8 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
           <span className="route-kicker">Tourist route</span>
           <strong>{siteName}</strong>
           <span className="ct-info map-info-tip" tabIndex={0} role="img"
-            aria-label={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent. Click the map to add up to ${MAX_WAYPOINTS} waypoints. Drag stops to reorder, or use up/down arrows. Right-drag to pan; wheel to zoom.`}
-            data-tip={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent.\nClick the map to add up to ${MAX_WAYPOINTS} waypoints. Drag stops to reorder, or use ↑/↓. Right-drag to pan; wheel to zoom.`}>i</span>
+            aria-label={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent. Click the map to add up to ${MAX_WAYPOINTS} waypoints, or add recommended sites from the list or the amber map markers. Drag stops to reorder, or use up/down arrows. Right-drag to pan; wheel to zoom.`}
+            data-tip={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent.\nClick the map to add up to ${MAX_WAYPOINTS} waypoints, or add recommended sites (amber markers).\nDrag stops to reorder, or use ↑/↓. Right-drag to pan; wheel to zoom.`}>i</span>
           <span className="route-sub">Landing {formatUtc(landingUtc)}</span>
         </div>
         <div className="route-stats">
@@ -177,15 +208,69 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
       <RouteView onWaypointRemove={index => {
         setWaypoints(previous => previous.filter((_, i) => i !== index));
         setAnnouncement(`Removed waypoint ${index + 1}. Recalculate to update the route.`);
-      }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={route ?? preview} onMapPick={addWaypoint} calculated={!!route} />
+      }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={route ?? preview} onMapPick={addWaypoint} calculated={!!route}
+        pois={(recommendations.data?.recommendations ?? []).map(r => r.poi).filter(p => !addedPoiIds.has(poiWaypointId(p)))}
+        onPoiPick={togglePoi}
+        sidePanel={<RecommendedStops data={recommendations.data} loading={recommendations.loading}
+          error={recommendations.error} onRetry={recommendations.retry} radiusKm={radiusKm} onRadius={setRadiusKm}
+          isAdded={poi => addedPoiIds.has(poiWaypointId(poi))} onToggle={togglePoi} />} />
     </section>
   );
 }
 
-function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapPick, calculated }: {
+function RecommendedStops({ data, loading, error, onRetry, radiusKm, onRadius, isAdded, onToggle }: {
+  data?: RecommendedSitesResponse; loading: boolean; error?: string; onRetry: () => void;
+  radiusKm: number; onRadius: (km: number) => void;
+  isAdded: (poi: PointOfInterest) => boolean; onToggle: (poi: PointOfInterest) => void;
+}) {
+  const selectId = useId();
+  return (
+    <section className="route-recs" aria-label="Recommended sites">
+      <div className="route-recs-hdr">
+        <span className="route-recs-title">Recommended sites</span>
+        <label htmlFor={selectId} className="route-recs-radius">within
+          <select id={selectId} value={radiusKm} onChange={event => onRadius(Number(event.target.value))}>
+            {RADIUS_OPTIONS_KM.map(km => <option key={km} value={km}>{km} km</option>)}
+          </select>
+        </label>
+      </div>
+      {loading && <p className="request-status" role="status">Loading nearby sites…</p>}
+      {error && <div className="request-error" role="alert">Recommended sites unavailable: {error}
+        {' '}<button className="ct-btn" onClick={onRetry}>Retry</button></div>}
+      {data && !data.recommendations.length && (
+        <p className="route-recs-empty">No published sites within {data.radius_km} km. Try a larger radius.</p>
+      )}
+      {data && data.recommendations.length > 0 && (
+        <ul className="route-recs-list">
+          {data.recommendations.map(({ poi, distance_km }) => {
+            const added = isAdded(poi);
+            return (
+              <li key={poi.id} className={`route-rec${added ? ' route-rec--added' : ''}`}>
+                <span className="route-dot" style={{ background: POI_COLOR }} />
+                <span className="route-rec-text" title={poi.notes || undefined}>
+                  {poi.name}
+                  <span className="route-note">
+                    {CATEGORY_LABEL[poi.category]} · {poi.feature_type} · {distance_km === 0 ? 'landing is inside' : `${distance_km.toFixed(1)} km`}
+                  </span>
+                </span>
+                <button className="ct-btn route-rec-btn" aria-pressed={added}
+                  aria-label={`${added ? 'Remove' : 'Add'} ${poi.name} ${added ? 'from' : 'to'} the route`}
+                  onClick={() => onToggle(poi)}>{added ? 'Remove' : 'Add'}</button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {data && <p className="route-recs-foot">Published catalogue {data.catalogue_version}. Distances are great-circle, not drivable routes.</p>}
+    </section>
+  );
+}
+
+function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapPick, calculated, pois, onPoiPick, sidePanel }: {
   onWaypointRemove: (index: number) => void;
   route: RouteResponse; elevations?: ElevationGrid; onWaypointMove: (from: number, to: number) => void;
   onMapPick: (coordinates: Coordinates) => void; calculated: boolean;
+  pois: PointOfInterest[]; onPoiPick: (poi: PointOfInterest) => void; sidePanel: ReactNode;
 }) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -343,6 +428,21 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
             {!reducedMotion && <animate attributeName="stroke-dashoffset" from="0" to={-16 * k} dur="0.9s" repeatCount="indefinite" />}
           </path>
 
+          {pois.map(poi => {
+            const pt = project(poi);
+            const s = 7 * k;
+            return (
+              <g key={poi.id} className="route-poi" role="button" tabIndex={-1}
+                onClick={event => { event.stopPropagation(); onPoiPick(poi); }}>
+                <title>{`${poi.name} — click to add as a stop`}</title>
+                <path d={`M${pt.x},${pt.y - s}L${pt.x + s},${pt.y}L${pt.x},${pt.y + s}L${pt.x - s},${pt.y}Z`}
+                  fill="#11111d" stroke={POI_COLOR} strokeWidth={2 * k} />
+                <text x={pt.x + s + 5 * k} y={pt.y} dominantBaseline="central" fontSize={11 * k} fill={POI_COLOR}
+                  stroke="#05050c" strokeWidth={3 * k} paintOrder="stroke">{poi.name}</text>
+              </g>
+            );
+          })}
+
           {stops.map((pt, i) => {
             if (isLoop && i === stops.length - 1) return null;
             const base = i === 0;
@@ -448,6 +548,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
             })}
           </tbody>
         </table>
+        {sidePanel}
       </div>
     </div>
   );
