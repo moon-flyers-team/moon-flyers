@@ -3,10 +3,12 @@ import { ComparisonTable } from './ComparisonTable';
 import { HorizonChart } from './HorizonChart';
 import { api, siteReference } from './api';
 import { MapPanel } from './MapPanel';
+import { TouristRoutePanel } from './TouristRoutePanel';
+import { distanceMetres } from './map/projection';
 import type { Coordinates } from './map/projection';
 import { useRequest } from './useRequest';
-import { dateUtc, landingWindowError } from './time';
-import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints, SiteAnalysisResponse } from './types';
+import { DAY_MS, dateUtc, formatUtc, landingWindowError } from './time';
+import type { LandingSite, MissionParams, PowerParams, CommsParams, TerrainParams, Constraints, SiteAnalysisResponse, Recommendation } from './types';
 
 interface Props {
   sites: LandingSite[];
@@ -17,9 +19,11 @@ interface Props {
   onSiteAdd: (coordinates: Coordinates, name: string) => void;
   onSiteRename: (id: string, name: string) => void;
   onSiteDelete: (id: string) => void;
+  routeOpen: boolean;
+  onRouteOpenChange: (open: boolean) => void;
 }
 
-export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
+export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, onSiteRename, onSiteDelete, routeOpen, onRouteOpenChange: setRouteOpen }: Props) {
   const [tab, setTab] = useState<'profiles' | 'map'>('profiles');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [landingUtc, setLandingUtc] = useState(`${mission.windowStart}T06:00:00Z`);
@@ -69,6 +73,22 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
     [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
   const horizons = useRequest(horizonsRequest);
 
+  const routeRequest = useMemo(() => !routeOpen || !selectedSite || validation ? null
+    : async (signal: AbortSignal) => {
+      const start = new Date(landingUtc);
+      const { recommendations } = await api.getRecommendedSites({
+        window_start_utc: start.toISOString(),
+        window_end_utc: new Date(start.getTime() + mission.daysOnSurface * DAY_MS).toISOString(),
+        constraints, limit: 100,
+      }, signal);
+      const stops = nearbyStops(selectedSite, recommendations);
+      const route = stops.length ? await api.getRoute({
+        waypoints: [siteReference(selectedSite), ...stops.map(r => ({ id: r.site.id })), siteReference(selectedSite)],
+      }, signal) : null;
+      return { route, metrics: new Map(recommendations.map(r => [r.site.id, r])) };
+    }, [routeOpen, selectedSite, validation, landingUtc, mission.daysOnSurface, constraints]);
+  const tour = useRequest(routeRequest);
+
   return (
     <main className="main">
       <div className="main-hdr">
@@ -88,19 +108,29 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
             document.getElementById(`tab-${next}`)?.focus();
           }}>{name === 'profiles' ? 'Profiles' : 'Map'}</button>)}
       </div>
-      <div className="main-body" id="panel-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden={tab !== 'profiles'}>
+      <div className="main-body profiles-body" id="panel-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden={tab !== 'profiles'}>
         {validation && !dateError && <div className="request-error" role="alert">{validation}</div>}
         <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} landingTime={landingUtc}
           onTimeSeek={setLandingUtc}
           missionStart={dateUtc(mission.windowStart)}
           sliderEnd={dateUtc(mission.windowEnd)} disabled={!!validation}
-          loading={comparison.loading} error={comparison.error} onRetry={comparison.retry} />
-        <div className="bottom-row">
-          <HorizonChart siteName={selectedSite?.name ?? '—'}
-            analysis={siteId ? horizons.data?.get(siteId)?.analysis : undefined} landingUtc={landingUtc}
-            loading={horizons.loading} error={horizons.error} onRetry={horizons.retry} />
-        </div>
+          loading={comparison.loading} error={comparison.error} onRetry={comparison.retry}>
+          <div className="hz-grid">
+            {enabled.map(site => <HorizonChart key={site.id} siteName={site.name}
+              analysis={horizons.data?.get(site.id)?.analysis} landingUtc={landingUtc}
+              selected={site.id === siteId} onSelect={() => setSelectedId(site.id)}
+              loading={horizons.loading} error={horizons.error} onRetry={horizons.retry} />)}
+          </div>
+          {routeOpen && selectedSite ? <TouristRoutePanel siteName={selectedSite.name}
+              landingUtc={landingUtc} route={tour.data?.route} metrics={tour.data?.metrics}
+              loading={tour.loading} error={tour.error} onRetry={tour.retry} onClose={() => setRouteOpen(false)} />
+            : <button className="route-cta" disabled={!selectedSite || !!validation} onClick={() => setRouteOpen(true)}>
+              <span className="route-cta-main">Plan tourist route from this landing</span>
+              <span className="route-cta-sub">{selectedSite ? `${selectedSite.name} · ${formatUtc(landingUtc)}` : 'Select a site first'}</span>
+              <span className="route-cta-arrow" aria-hidden="true">→</span>
+            </button>}
+        </ComparisonTable>
       </div>
       <div className="main-body map-body" id="panel-map" role="tabpanel" aria-labelledby="tab-map" hidden={tab !== 'map'}>
         <MapPanel sites={sites} constraints={constraints} mission={mission} active={tab === 'map'}
@@ -108,4 +138,24 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       </div>
     </main>
   );
+}
+
+const STOP_RADIUS_M = 150_000;
+const MAX_STOPS = 4;
+
+// Best-fit recommended sites near the landing point, ordered as a nearest-neighbour loop.
+function nearbyStops(origin: LandingSite, recommendations: Recommendation[]): Recommendation[] {
+  const candidates = recommendations
+    .filter(r => r.site.id !== origin.id && distanceMetres(origin, r.site) <= STOP_RADIUS_M)
+    .slice(0, MAX_STOPS);
+  const ordered: Recommendation[] = [];
+  let from: Coordinates = origin;
+  while (candidates.length) {
+    let best = 0;
+    candidates.forEach((r, i) => { if (distanceMetres(from, r.site) < distanceMetres(from, candidates[best].site)) best = i; });
+    const [next] = candidates.splice(best, 1);
+    ordered.push(next);
+    from = next.site;
+  }
+  return ordered;
 }
