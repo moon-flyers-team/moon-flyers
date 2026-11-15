@@ -61,6 +61,13 @@ export function visibilityWindows(points, body) {
   if (active !== null && active !== end) windows.push({ start_utc: active, end_utc: end });
   return windows;
 }
+// Synthetic: ±2 h around approximate 2027 lunar eclipse peaks, only while Earth is visible.
+const ECLIPSE_PEAKS = ['2027-02-20T23:13:00Z', '2027-07-18T16:03:00Z', '2027-08-17T07:13:00Z'].map(Date.parse);
+export function eclipseWindows(points) {
+  return visibilityWindows(points.map(point => ({ time_utc: point.time_utc,
+    eclipse_visible: point.earth_visible
+      && ECLIPSE_PEAKS.some(peak => Math.abs(Date.parse(point.time_utc) - peak) <= 2 * 3_600_000) })), 'eclipse');
+}
 function windowMetrics(windows, start, end) {
   let visible = 0, longestGap = 0, cursor = start;
   for (const window of windows) {
@@ -88,6 +95,7 @@ export function analyze(site, start, constraints, timestep = 3600, sun = true, e
   end = end ?? (start + constraints.days_on_surface * DAY_MS);
   const points = timeseries(site, start, end, constraints, timestep, sun, earth);
   const windows = Object.fromEntries(['sun', 'earth'].map(body => [body, visibilityWindows(points, body)]));
+  windows.eclipse = eclipseWindows(points);
   const [sunlight, darkness] = windowMetrics(windows.sun, start, end);
   const [contact, blackout] = windowMetrics(windows.earth, start, end);
   const metrics = { sun_visible_pct: sunlight, longest_darkness_hours: darkness,

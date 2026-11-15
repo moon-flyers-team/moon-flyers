@@ -15,7 +15,24 @@ const CW = VW - ML - MR, CH = VH - MT - MB;
 const COMPASS = ['N (0°)', 'E (90°)', 'S (180°)', 'W (270°)', 'N (360°)'];
 const azToX = (az: number) => ML + az / 360 * CW;
 
-// Break paths at north instead of drawing a spurious line across the chart.
+// Split path into visible (solid) and hidden (dashed) segments.
+export function splitSkyPath(data: TimeseriesPoint[], body: 'sun' | 'earth', y: (el: number) => number) {
+  let visD = '', hidD = '';
+  let open: boolean | null = null;
+  const pt = (p: TimeseriesPoint) => `${azToX(p[`${body}_azimuth_deg`]).toFixed(2)},${y(p[`${body}_elevation_deg`]).toFixed(2)}`;
+  for (let i = 1; i < data.length; i++) {
+    const a = data[i - 1], b = data[i];
+    if (Math.abs(b[`${body}_azimuth_deg`] - a[`${body}_azimuth_deg`]) > 180) { open = null; continue; }
+    // segment takes the state of its start point
+    const vis = a[`${body}_visible`];
+    const seg = (open === vis ? '' : ` M ${pt(a)}`) + ` L ${pt(b)}`;
+    if (vis) visD += seg; else hidD += seg;
+    open = vis;
+  }
+  return [visD.trim(), hidD.trim()] as const;
+}
+
+// Legacy export kept for any external references.
 export function skyPath(data: TimeseriesPoint[], body: 'sun' | 'earth', y: (el: number) => number) {
   return data.map((point, i) => {
     const az = point[`${body}_azimuth_deg`];
@@ -69,8 +86,9 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
     <div className="hz-hdr"><span className="hz-title">Horizon</span><span className="hz-site">{siteName}</span>
       {current && <div className="hz-legend">
         <span>{formatUtc(current.time_utc)}</span>
-        <span><span className="hz-dot hz-dot--sun" />Sun {current.sun_visible ? 'visible' : 'not visible'} · {current.sun_elevation_deg.toFixed(1)}°</span>
-        <span><span className="hz-dot hz-dot--earth" />Earth {current.earth_visible ? 'visible' : 'not visible'} · {current.earth_elevation_deg.toFixed(1)}°</span>
+        <span><span className="hz-dot hz-dot--sun" />Sun visible · {current.sun_elevation_deg.toFixed(1)}°</span>
+        <span><span className="hz-dot hz-dot--earth-visible" />Earth visible · {current.earth_elevation_deg.toFixed(1)}°</span>
+        <span><span className="hz-dot hz-dot--eclipse" />Earth eclipse</span>
       </div>}
     </div>
     {error ? <div className="request-error" role="alert">Horizon request failed: {error} <button className="ct-btn" onClick={onRetry}>Retry horizon</button></div>
@@ -99,8 +117,16 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
       {COMPASS.map((label, i) => <text key={i} x={ML + i / 4 * CW} y={VH - 8}
         textAnchor={i === 0 ? 'start' : i === 4 ? 'end' : 'middle'} fill="#8989af" fontSize={11}>{label}</text>)}
       {terrainPoints.length > 0 && <path d={`M ${ML},${MT + CH} L ${terrainPoints.join(' L ')} L ${ML + CW},${MT + CH} Z`} fill="#303040" />}
-      <path d={skyPath(samples, 'sun', y)} fill="none" stroke="url(#fade-sun)" strokeWidth={2} opacity={0.75} />
-      <path d={skyPath(samples, 'earth', y)} fill="none" stroke="url(#fade-earth)" strokeWidth={2} opacity={0.75} />
+      {(() => {
+        const [sunVis, sunHid] = splitSkyPath(samples, 'sun', y);
+        const [earthVis, earthHid] = splitSkyPath(samples, 'earth', y);
+        return <>
+          {sunVis   && <path d={sunVis}   fill="none" stroke="url(#fade-sun)"   strokeWidth={2} opacity={0.75} />}
+          {sunHid   && <path d={sunHid}   fill="none" stroke="url(#fade-sun)"   strokeWidth={1.5} opacity={0.45} strokeDasharray="5 4" />}
+          {earthVis && <path d={earthVis} fill="none" stroke="url(#fade-earth)" strokeWidth={2} opacity={0.75} />}
+          {earthHid && <path d={earthHid} fill="none" stroke="url(#fade-earth)" strokeWidth={1.5} opacity={0.45} strokeDasharray="5 4" />}
+        </>;
+      })()}
       {trail.map((point, i) => (['sun', 'earth'] as const).map(body => (
         <circle key={`${body}-trail-${i}`}
           cx={azToX(point[`${body}_azimuth_deg`])} cy={y(point[`${body}_elevation_deg`])}
@@ -111,11 +137,12 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
       {current && (['sun', 'earth'] as const).map(body => <circle key={body}
         cx={azToX(current[`${body}_azimuth_deg`])} cy={y(current[`${body}_elevation_deg`])} r={6}
         fill={current[`${body}_visible`] ? body === 'sun' ? '#f5a623' : '#4fc3f7' : '#12121e'}
-        stroke={body === 'sun' ? '#f5a623' : '#4fc3f7'} strokeWidth={2} />)}
+        stroke={body === 'sun' ? '#f5a623' : '#4fc3f7'} strokeWidth={2}
+        strokeDasharray={current[`${body}_visible`] ? undefined : '3.4 2.9'} />)}
     </svg>
     <div className="hz-footer">
       <span><span className="hz-line hz-line--sun" />Sun path</span><span><span className="hz-line hz-line--earth" />Earth path</span>
-      <span>● visible · ○ fails horizon clearance</span><span>API v0: flat 0° horizon</span>
+      <span>● visible · ◌ below horizon clearance</span><span>API v0: flat 0° horizon</span>
       <span>1 lunar day ≈ 29.53 Earth days from landing</span>
     </div>
   </section>;

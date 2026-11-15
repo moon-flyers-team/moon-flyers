@@ -1,5 +1,5 @@
 // Validated mock implementation of API.md. No Python or backend/ files required.
-import { DAY_MS, sites, resolveSite, analyze, timeseries, visibilityWindows, utc } from './data.mjs';
+import { DAY_MS, sites, resolveSite, analyze, timeseries, visibilityWindows, eclipseWindows, utc } from './data.mjs';
 
 class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -111,7 +111,8 @@ function route(method, url, body) {
       });
       const points = timeseries(site, start, timelineEnd, c, step);
       return { site, window_metrics,
-        timeline: Object.fromEntries(['sun', 'earth'].map(name => [name, visibilityWindows(points, name)])) };
+        timeline: { ...Object.fromEntries(['sun', 'earth'].map(name => [name, visibilityWindows(points, name)])),
+          eclipse: eclipseWindows(points) } };
     });
   }
   if (method === 'POST' && url.pathname === '/landing-windows') {

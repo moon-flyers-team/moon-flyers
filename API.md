@@ -137,7 +137,8 @@ Response:
         "earth_azimuth_deg": 358.1, "earth_elevation_deg": 3.7, "earth_visible": true }],
     "horizon": { "horizon_azimuth_deg": [0, 1, 2, "..."], "horizon_elevation_deg": [0, 0, 0, "..."] },
     "windows": { "sun":   [{ "start_utc": "...", "end_utc": "..." }],
-                 "earth": [{ "start_utc": "...", "end_utc": "..." }] },
+                 "earth": [{ "start_utc": "...", "end_utc": "..." }],
+                 "eclipse": [{ "start_utc": "...", "end_utc": "..." }] },
     "metrics": { "...": "..." }, "fit": { "...": "..." } } }
 ```
 - `timeseries` spans from `window_start_utc` to `window_end_utc + days_on_surface`, at one point
@@ -168,13 +169,17 @@ Response, one entry per site in the order you sent them:
      { "landing_utc": "2027-08-01T06:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }
    ],
    "timeline": { "sun":   [{ "start_utc": "...", "end_utc": "..." }],
-                 "earth": [{ "start_utc": "...", "end_utc": "..." }] } }]
+                 "earth": [{ "start_utc": "...", "end_utc": "..." }],
+                 "eclipse": [{ "start_utc": "...", "end_utc": "..." }] } }]
 ```
 - `window_metrics` pre-computes metrics and fit for every `candidate_step_hours` step in the
   window. The frontend looks up the entry matching the slider's current `landing_utc` to update
   the table instantly without a new request. The ±6 h buttons shift the slider position only.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
+- `eclipse` lists Earth eclipses (Earth's disc overlapping the Sun's, i.e. a lunar eclipse seen
+  from the Moon) while Earth is visible from the site. Drawn in purple on top of the Earth
+  (cyan) bar. Same interval rules as `sun`/`earth`; also present in `GET /sites` `windows`.
 
 ## 3. `POST /landing-windows`: the best landing times table
 ```json

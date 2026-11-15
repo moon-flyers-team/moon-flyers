@@ -20,10 +20,7 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string) => void;
   landingTime: string;
-  onTimeShift: (hours: number) => void;
   onTimeSeek: (iso: string) => void;
-  canShiftBack: boolean;
-  canShiftForward: boolean;
   missionStart: string;
   sliderEnd: string;
   disabled?: boolean;
@@ -33,7 +30,7 @@ interface Props {
 }
 
 export function ComparisonTable({ sites, results, constraints: c, selectedId, onSelect,
-  landingTime, onTimeShift, onTimeSeek, canShiftBack, canShiftForward,
+  landingTime, onTimeSeek,
   missionStart, sliderEnd, disabled,
   loading, error, onRetry }: Props) {
 
@@ -116,9 +113,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
       <span className="ct-tab">Comparison</span>
       <div className="ct-time">
         <span className="ct-time-label">Landing (UTC)</span>
-        <button className="ct-btn" disabled={!canShiftBack} onClick={() => onTimeShift(-6)}>−6 h</button>
         <span className="ct-time-val">{landingTime.slice(0, 10)} {landingTime.slice(11, 16)}</span>
-        <button className="ct-btn" disabled={!canShiftForward} onClick={() => onTimeShift(6)}>+6 h</button>
       </div>
     </div>
     {loading && <p className="request-status" role="status">Comparing sites. This can take 10–30 seconds…</p>}
@@ -126,12 +121,14 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
     <div className="ct-scroll"><table className="ct">
       <thead>
       <tr>
-        <th rowSpan={2} className="ct-left">Site</th>
-        <th rowSpan={2}>Fit</th>
-        <th colSpan={2} className="ct-grp ct-grp--power"><span className="grp-dot grp-dot--power" /> Power (Sun)</th>
-        <th colSpan={2} className="ct-grp ct-grp--comms"><span className="grp-dot grp-dot--comms" /> Comms (Earth)</th>
-        <th rowSpan={2}>Terrain<span className="th-sub">Slope max {c.max_slope_deg}°</span></th>
-        <th rowSpan={2} className="ct-slider-cell">
+        <th className="ct-left">Site</th>
+        <th>Result</th>
+        <th>Sunlight<span className="th-sub">min {c.min_sun_visible_pct}%</span></th>
+        <th>Longest night<span className="th-sub">max {c.max_darkness_hours} h</span></th>
+        <th>Earth contact<span className="th-sub">min {c.min_earth_visible_pct}%</span></th>
+        <th>Longest gap<span className="th-sub">max {c.max_earth_blackout_hours} h</span></th>
+        <th>Terrain<span className="th-sub">Slope max {c.max_slope_deg}°</span></th>
+        <th className="ct-slider-cell">
           <div className="ts-wrapper">
             <div className="ts-controls-row">
               <button className="ct-btn ts-nav-btn" disabled={!canGoPrev} onClick={goPrev}>◀</button>
@@ -155,12 +152,6 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
           </div>
         </th>
       </tr>
-      <tr>
-        <th>Sunlight<span className="th-sub">min {c.min_sun_visible_pct}%</span></th>
-        <th>Longest night<span className="th-sub">max {c.max_darkness_hours} h</span></th>
-        <th>Earth contact<span className="th-sub">min {c.min_earth_visible_pct}%</span></th>
-        <th>Longest gap<span className="th-sub">max {c.max_earth_blackout_hours} h</span></th>
-      </tr>
       </thead>
       <tbody>
         {!sites.length && <tr><td colSpan={8} className="ct-empty">No sites selected</td></tr>}
@@ -180,6 +171,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             <NumCell value={metrics?.longest_earth_blackout_hours} warn={warn('longest_earth_blackout_hours')} unit=" h" />
             <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
             <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
+              eclipseWindows={result?.timeline.eclipse}
               missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={onTimeSeek} />
           </tr>;
         })}
