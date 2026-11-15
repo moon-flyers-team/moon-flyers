@@ -86,9 +86,9 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
     <div className="hz-hdr"><span className="hz-title">Horizon</span><span className="hz-site">{siteName}</span>
       {current && <div className="hz-legend">
         <span>{formatUtc(current.time_utc)}</span>
-        <span><span className="hz-dot hz-dot--sun" />Sun visible · {current.sun_elevation_deg.toFixed(1)}°</span>
-        <span><span className="hz-dot hz-dot--earth-visible" />Earth visible · {current.earth_elevation_deg.toFixed(1)}°</span>
-        <span><span className="hz-dot hz-dot--eclipse" />Earth eclipse</span>
+        <span><span className={`hz-dot ${current.sun_visible ? 'hz-dot--sun' : 'hz-dot--off'}`} />Sun {current.sun_visible ? 'visible' : 'not visible'} · {current.sun_elevation_deg.toFixed(1)}°</span>
+        <span><span className={`hz-dot ${current.earth_visible ? 'hz-dot--earth-visible' : 'hz-dot--off'}`} />Earth {current.earth_visible ? 'visible' : 'not visible'} · {current.earth_elevation_deg.toFixed(1)}°</span>
+        <span><span className="hz-dot hz-dot--eclipse" />Eclipse intervals</span>
       </div>}
     </div>
     {error ? <div className="request-error" role="alert">Horizon request failed: {error} <button className="ct-btn" onClick={onRetry}>Retry horizon</button></div>
@@ -142,7 +142,7 @@ export function HorizonChart({ siteName, analysis, landingUtc, loading, error, o
     </svg>
     <div className="hz-footer">
       <span><span className="hz-line hz-line--sun" />Sun path</span><span><span className="hz-line hz-line--earth" />Earth path</span>
-      <span>● visible · ◌ below horizon clearance</span><span>API v0: flat 0° horizon</span>
+      <span>● visible · ◌ below horizon clearance</span><span>Backend horizon · terrain source not reported · slope not assessed</span>
       <span>1 lunar day ≈ 29.53 Earth days from landing</span>
     </div>
   </section>;

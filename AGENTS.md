@@ -16,16 +16,20 @@ when agreed behavior changes.
 
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including
-  comparison results, visibility timelines, and an on-demand best-landing-times table.
+  comparison results, visibility timelines and sampled Earth-eclipse intervals. Ranked
+  landing times remain available through the client/API, but no best-times UI is mounted.
 - MainPanel has Profiles and Map tabs. Profiles retains the existing dashboard and the
   contributor-added time slider; Map shows the 80°S–90°S lunar south-polar cap. Analysis
   preloads every enabled site over the mission window plus its stay. Scrubbing filters
   locally; the horizon axis stays fixed across the full loaded site batch.
 - API loading/error messages and retry controls are implemented. The offline banner occupies
   its own layout row above the dashboard and must never cover content.
-- The FastAPI backend now implements the v0 endpoints using synthetic ephemerides and a flat
-  horizon. No backend changes are part of the map feature. The local Podman container
-  `moon-flyers-backend-local` publishes port 8000 for the Vite proxy.
+- FastAPI defaults to live JPL Horizons ephemerides; `MOON_FLYERS_EPHEMERIS=mock`
+  selects synthetic positions. Terrain independently uses synthetic hills without a mounted
+  DEM, a LOLA skyline with one, or flat fallback for uncovered sites/runtime DEM errors.
+  The data-source header identifies ephemerides only, not terrain provenance or fallback.
+- App's settings dialog owns draft mission/constraint edits. SET MISSION applies them to
+  MainPanel; editing a draft does not request analysis. Sidebar owns site inputs and settings access.
 - The separate mock API lives entirely in `frontend/src/mock/` and implements every v0
   endpoint with deterministic synthetic data. Run `pnpm mock:api`; it uses Node and requires
   no Python environment. `data.mjs` generates consistent samples, metrics, windows, and fit.
@@ -40,8 +44,8 @@ when agreed behavior changes.
 | `API.md` | Endpoint contract, constraints, units, and response examples |
 | `frontend/package.json`, `frontend/pnpm-lock.yaml` | Frontend scripts and dependencies |
 | `frontend/src/main.tsx` | React entry point with StrictMode |
-| `frontend/src/App.tsx` | Mission/constraint state, site catalogue, enabled sites, connection banner |
-| `frontend/src/Sidebar.tsx` | Mission, power, communications, terrain, and site inputs |
+| `frontend/src/App.tsx` | Draft/applied mission settings, settings dialog, catalogue, enabled sites, banner |
+| `frontend/src/Sidebar.tsx` | Settings launcher, site toggles and manual custom-site entry |
 | `frontend/src/MainPanel.tsx` | Profiles/Map tabs, landing time, validation, comparison and batch analysis requests |
 | `frontend/src/MapPanel.tsx` | Polar map, overlay controls, floating cursor readout, reference layers, and click-to-add site dialog |
 | `frontend/src/map/` | Stereographic math, heatmap validation/color ramps, bundled feature catalogue |
@@ -54,7 +58,6 @@ when agreed behavior changes.
 | `frontend/src/ComparisonTable.tsx`, `FitBadge.tsx` | Backend metrics, fit statuses, and violation indicators |
 | `frontend/src/TimelineBars.tsx` | Visibility intervals clipped to the displayed time range |
 | `frontend/src/HorizonChart.tsx` | Horizon profile, Sun/Earth paths, first-sample markers, and stable altitude bounds |
-| `frontend/src/LandingWindows.tsx` | Explicit best-time search and applying a returned landing time |
 | `frontend/src/Field.tsx`, `Section.tsx` | Shared sidebar primitives; section actions stay outside collapse buttons |
 | `frontend/src/DateField.tsx` | UTC date inputs with browser-native calendar controls and error associations |
 | `frontend/src/index.css` | Shared visual tokens and component styles |
@@ -130,15 +133,17 @@ the underscore fit statuses: `both_met`, `power_short`, `comms_short`, `neither_
   `constraints`, `candidate_step_hours`, and `timestep_seconds` in a JSON body. Responses follow request-site order;
   the table currently associates them by index.
 - Best-time search uses one `site`, the window bounds, nested `constraints`, and defaults of
-  `candidate_step_hours: 6` and `limit: 5`. It runs only when the user requests it.
+  `candidate_step_hours: 6` and `limit: 5`. The client/API exist; no current UI invokes this search.
 - Map clicks open a named custom-site form. App owns all sites; custom entries are enabled
   immediately and survive catalogue retries, but are not persisted across browser reloads.
   `siteReference()` in api.ts sends custom name/coordinates for GET analysis, comparison, and
   landing windows; their UUIDs are React identities only and must never be sent as server IDs.
-- Send ISO 8601 UTC timestamps with a timezone suffix. Date-only sidebar bounds become
+- Send ISO 8601 UTC timestamps with a timezone suffix. Date-only settings bounds become
   midnight UTC. Angles are degrees; azimuth runs clockwise from north; longitude is east-positive.
 - Use backend `fit.status` and `fit.violations` for badges and warnings, including communication
-  violations. Render `slope_deg: null` as `—`. API v0 has a flat 0° horizon and no terrain slope.
+  violations. Render `slope_deg: null` as `—`, even with a DEM mounted. Slope is not
+  evaluated by fit; terrain horizons may be DEM, synthetic hills or flat fallback.
+  Visibility does not establish link availability, energy sufficiency or safety.
 - Display timeline bars from `window_start_utc` through `window_end_utc + days_on_surface`.
   Clip intervals to that range and handle invalid or zero-length ranges without NaN values.
 - The old `/analyze` and `/sites/:id/horizon` routes are obsolete; do not restore them.
@@ -154,9 +159,11 @@ Keep **mission scoring duration** separate from **visualization coverage**:
    window end plus the mission stay. Switching sites uses the preloaded data.
 3. `HorizonChart.tsx` selects returned samples from the current time through one mean lunar
    day. Markers use the first available sample in that slice. The full site batch determines
-   altitude-axis bounds. The slider and ±6 h buttons update the time locally.
-4. Mission dates, enabled sites, or relevant constraints load new batches. Comparison returns
-   `window_metrics`; the table selects the nearest candidate for the current time.
+   altitude-axis bounds. The custom timeline slider updates time locally; ±6 h buttons
+   are no longer mounted.
+4. Applied mission dates/constraints or enabled sites load new batches. Comparison returns
+   `window_metrics`; the table currently matches timestamp strings exactly, falling back to
+   the first entry on a miss. Do not describe this fallback as analysis of an arbitrary instant.
 
 Use each body's own azimuth/elevation and the current sample's `sun_visible`/`earth_visible`
 flags. Do not label peak elevations as current positions or infer visibility from elevation
@@ -182,21 +189,24 @@ ranking, CORS, and the default frontend request window. The mock needs no Python
 
 With both servers running, `pnpm --dir frontend test:mock` checks real HTTP requests through
 Vite and renders mock responses in the frontend components. After moving the mock to the
-frontend, all 24 tests, the production build, and the live HTTP pipeline check passed. Browser
-interaction still needs manual review.
+frontend, the earlier 24-test suite/build/pipeline passed. This is historical, not current
+acceptance. The verification repair adds current contract/component fixtures and an
+isolated HTTP runner (`pnpm --dir frontend test:mock:isolated`); see
+`docs/verification-repairs.md` for executed checks and limits. Re-run the suite/build/pipeline
+for each change; browser interaction needs separate review.
 
 For frontend integration changes, rerun these commands and update focused contract tests when
 behavior changes. `pnpm --dir frontend lint` exists, but there is currently no ESLint config;
 do not report lint as passing without configuring and running it. Documentation-only edits
 do not require rebuilding the application.
 
-Next integration work is to replace synthetic calculations with the real backend while keeping
-v0 response shapes stable. Check the UI against the running mock, including slow responses, retries,
-rapid site/constraint changes, best-time selection, and banner layout in a browser. The contributor-added time slider is implemented. Terrain-aware horizons and slope calculations
-remain outside API v0: a verified LOLA DEM dataset can be mounted on the server
-and is checked at startup (`deploy/README.md` section 5). With it mounted the API reports real
-terrain horizons; without it, the mock hills. `slope_deg` is still `null`. Coordinate
-contract changes across `API.md`, TypeScript types, the client, backend models, and tests.
+Live Horizons and terrain-aware horizons already exist. Remaining integration work includes
+reporting per-analysis terrain provenance/fallback and implementing slope only after its
+contract is agreed. A verified LOLA DEM is checked at startup (`deploy/README.md` section 5);
+without it the backend uses synthetic hills. Mounted but uncovered sites can fall back to
+flat. `slope_deg` remains null and its threshold is not enforced. Check slow responses,
+retries, applied-settings changes and banner layout in a browser. Coordinate contract changes
+across `API.md`, TypeScript types, client, backend models and tests.
 
 Preserve the existing dark dashboard, amber sunlight and cyan Earth colors, keyboard-accessible
 controls, and the banner's normal document flow. Keep changes scoped to the requested work and
@@ -248,7 +258,8 @@ decisions change.
 - Tests: `pnpm --dir frontend exec node --test tests/map.test.mjs`. Browser QA covered
   local imagery, coordinate readout width, custom sites in Profiles, missing endpoint state,
   intercepted fixture overlay rendering, multi-layer requests, mission updates, and mobile.
-  Full frontend suite still has the previously identified 12 old-contract fixture failures.
+  The old-contract fixtures are repaired in the verification baseline; rerun the full suite
+  rather than relying on historical counts.
 
 ## Sidebar site entry and calendars
 
@@ -265,10 +276,11 @@ decisions change.
   calendar inside each input. Do not add a second external calendar button or custom calendar.
   The shared `landingWindowError()` helper in time.ts requires real calendar dates and an
   end date strictly later than the start date. Equal dates are invalid for the backend.
-- Date errors appear once, prominently at the top of Mission Planner above its date fields;
-  both inputs have aria-invalid and describe that alert. Profiles and Map suppress duplicate
-  date notices but use the same validation to block comparisons, site analysis, best-time
-  searches, and heatmaps. Obsolete requests are aborted and stale data hidden by useRequest.
+- Mission dates now live in App's settings dialog, not Sidebar. Invalid date drafts show
+  an associated alert and disable SET MISSION; the previous applied analysis remains valid.
+  MainPanel and Map independently validate applied dates before requests. Profiles suppresses
+  duplicate date notices; invalid applied props disable time seeking. Settings-draft changes
+  do not invalidate the previous applied analysis until SET MISSION succeeds.
 - `frontend/tests/dates.test.mjs` covers equality, reversed/missing/invalid dates, leap days,
   alert placement, native-only date controls, and disabled time controls. Browser checks
   verify no invalid API calls, both tabs, and recovery when a valid range is restored.
