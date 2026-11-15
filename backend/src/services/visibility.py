@@ -61,14 +61,14 @@ def _longest_false_run(flags: list[bool]) -> int:
     return best
 
 
-def metrics(sun: list[bool], earth: list[bool], step_s: int) -> Metrics:
+def metrics(sun: list[bool], earth: list[bool], step_s: int, slope_deg: float | None = None) -> Metrics:
     step_h = step_s / 3600
     return Metrics(
         sun_visible_pct=round(100 * sum(sun) / len(sun), 1),
         longest_darkness_hours=round(_longest_false_run(sun) * step_h, 1),
         earth_visible_pct=round(100 * sum(earth) / len(earth), 1),
         longest_earth_blackout_hours=round(_longest_false_run(earth) * step_h, 1),
-        slope_deg=None,
+        slope_deg=slope_deg,
     )
 
 
@@ -80,4 +80,7 @@ def fit(m: Metrics, c: Constraints) -> Fit:
                                m.longest_earth_blackout_hours > c.max_earth_blackout_hours)) if bad]
     status = ("neither_met" if power and comms else "power_short" if power
               else "comms_short" if comms else "both_met")
-    return Fit(status=status, violations=power + comms)
+    # Slope is a site property, not power or comms: it is flagged but does not change `status`.
+    # Unknown slope (no DEM) is never a violation.
+    terrain = ["slope_deg"] if m.slope_deg is not None and m.slope_deg > c.max_slope_deg else []
+    return Fit(status=status, violations=power + comms + terrain)

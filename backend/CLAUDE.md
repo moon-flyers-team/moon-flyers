@@ -82,8 +82,9 @@ Key domain facts:
   `python3 backend/tools/lola_data.py verify --root DIR` (see `deploy/README.md` section 5).
   Never add rasters to Git, images, or CI artifacts; tests use the stdlib fixture
   `tools/lola_fixture.py`. With `LOLA_DEM_DIR` set, `src/services/horizon.py` serves a
-  `DemHorizon` (cached per site); otherwise it serves `MockTerrainHorizon`. `slope_deg` is still
-  always `null` until the frontend contract is settled.
+  `DemHorizon` (cached per site, with the real site slope); otherwise it serves `MockTerrainHorizon`
+  and `slope_deg` is `null`. A slope over `max_slope_deg` adds `"slope_deg"` to `violations`
+  without changing `fit.status`.
 - Frontend (pnpm): `pnpm --dir frontend dev` (port 5173, proxies `/api` to `:8000`).
 - CORS allows `http://localhost:5173`.
 
