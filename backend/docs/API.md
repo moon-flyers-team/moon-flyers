@@ -247,8 +247,8 @@ Response (abridged):
              "start_check": { "passable": true, "blocked_reasons": [], "nearby_terrain_candidates": [] },
              "goal_check": { "passable": true, "blocked_reasons": [], "nearby_terrain_candidates": [] } }],
   "total_distance_m": 1234.5,
-  "path": [{ "latitude_deg": -89.667, "longitude_deg": 129.783, "distance_m": 0.0,
-             "elevation_m": -1812.4, "waypoint_index": 0 }] }
+  "path": [{ "latitude_deg": -89.9297, "longitude_deg": -139.407, "distance_m": 0.0,
+             "elevation_m": 1438.2, "waypoint_index": 0 }] }
 ```
 - Waypoints (2–100, same shape as `site` elsewhere) are visited in the given order.
 - `planner` is `straight_line` (default) or `terrain`.

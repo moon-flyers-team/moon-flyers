@@ -11,8 +11,8 @@ import math
 import os
 
 from ..rover_path import plan_rover_route
-from ..schemas import (EndpointCheck, RoverSettings, RouteLeg, RoutePoint, RouteRequest, RouteResponse,
-                       Site, TerrainCandidate)
+from ..schemas import (EndpointCheck, RouteLeg, RoutePoint, RouteRequest, RouteResponse, RouteStopsRequest,
+                       RouteStopsResponse, RouteSummary, RoverSettings, Site, StopCheck, TerrainCandidate)
 from .errors import InvalidInputError, LimitExceededError, TerrainUnavailableError
 from .horizon import open_dem
 
@@ -23,8 +23,12 @@ MAX_PATH_POINTS = 100_000
 # Total terrain cells sampled across all legs of one request. A leg is planned whole, so the
 # actual count can overshoot by at most one leg; this bounds a multi-stop route's runtime.
 MAX_TERRAIN_CELLS = 1_000_000
-# Detour space for the one automatic retry of a leg that found no route in the requested corridor.
-WIDE_PADDING_M = 5_000.0
+# Corridors tried when the requested one has no route, widest last, subject to the region radius
+# and the request's cell budget.
+CORRIDOR_STEPS_M = (5_000.0, 10_000.0, 20_000.0)
+WIDE_PADDING_M = CORRIDOR_STEPS_M[0]
+# Stop checks use a fixed small corridor so a stop's verdict never depends on the leg looking at it.
+STOP_CHECK_PADDING_M = 1_000.0
 
 
 def _unit_vector(lat_deg: float, lon_deg: float) -> tuple[float, float, float]:
@@ -132,9 +136,84 @@ def _placeholder_points(a: Site, b: Site, step_m: float) -> list[RoutePoint]:
     return points
 
 
+def _stop_key(site: Site) -> tuple[float, float]:
+    return round(site.latitude_deg, 6), round(site.longitude_deg, 6)
+
+
+def _stop_check(dem, site: Site, rover: RoverSettings) -> dict | None:
+    """Terrain usability of one stop, in a frame that does not depend on the adjacent leg.
+
+    A zero-length plan keeps the local grid orientation fixed, so the same coordinates get the
+    same slope and verdict everywhere. Planning each leg separately used to evaluate the same
+    waypoint as a goal in one grid and a start in another, which flipped its passability.
+
+    Returns None when the requested region radius is smaller than the evaluation grid; the leg is
+    then planned normally and the stop is left out of `stops`.
+    """
+    padding = max(rover.cell_size_m, min(max(STOP_CHECK_PADDING_M, 3 * rover.cell_size_m),
+                                         rover.max_region_radius_m / 4))
+    try:
+        return plan_rover_route(
+            dem, (site.latitude_deg, site.longitude_deg), (site.latitude_deg, site.longitude_deg),
+            max_slope_deg=rover.max_slope_deg, cell_size_m=rover.cell_size_m, padding_m=padding,
+            max_uphill_grade_deg=rover.max_uphill_grade_deg,
+            max_downhill_grade_deg=rover.max_downhill_grade_deg, climb_weight=rover.climb_weight,
+            slope_weight=rover.slope_weight, max_region_radius_m=rover.max_region_radius_m,
+        )["endpoint_checks"]["start"]
+    except ValueError:
+        return None
+
+
+def _check_reason(check: dict) -> str:
+    """Explain a failed endpoint check with the numbers behind it."""
+    messages = {
+        "missing_elevation": "no finite elevation at the stop",
+        "unknown_slope": "terrain slope cannot be estimated from the sampled elevations",
+        "terrain_slope_exceeds_limit": (
+            f"terrain slope {check['terrain_slope_deg']:.1f}° exceeds {check['max_slope_deg']:g}°"
+            if check["terrain_slope_deg"] is not None else "terrain slope exceeds the limit"),
+        "excluded_by_mask": "stop is inside the supplied exclusion mask",
+    }
+    return "; ".join(messages.get(reason, reason) for reason in check["blocked_reasons"])
+
+
+def _unplanned_result(start_check: dict, goal_check: dict, status: str, reason: str,
+                      padding_m: float) -> dict:
+    """Planner-shaped result for a leg that is reported instead of planned."""
+    return {"status": status, "reason": reason, "path": [],
+            "endpoint_checks": {"start": start_check, "goal": goal_check},
+            "terrain_distance_m": None, "elevation_gain_m": None, "elevation_loss_m": None,
+            "max_terrain_slope_deg": None, "max_uphill_grade_deg": None,
+            "max_downhill_grade_deg": None, "expanded_nodes": 0, "cost": None,
+            "search": {"grid_shape": [1, 1], "padding_m": padding_m}}
+
+
+def _leg_limit(exc: ValueError) -> tuple[str, str] | None:
+    """Map a planner limit to a leg status instead of failing the whole request.
+
+    A stop the user can see and move must not turn one unplannable leg into a 422 for everything.
+    Malformed geometry and invalid settings still raise, because they are request errors.
+    """
+    message = str(exc)
+    if "max_region_radius_m" in message:
+        return "region_too_large", f"leg exceeds the local planning radius: {message}"
+    if "max_cells" in message or "max_expansions" in message:
+        return "search_limit_reached", f"leg exceeds the planner's search budget: {message}"
+    return None
+
+
+def _grid_cells(result: dict) -> int:
+    shape = result["search"]["grid_shape"]
+    return int(shape[0]) * int(shape[1])
+
+
 def _terrain(sites: list[Site], rover: RoverSettings) -> RouteResponse:
     """Plan every leg; a leg without a terrain route keeps its status and is drawn as a
-    flagged straight placeholder so later legs are still planned and shown."""
+    flagged straight placeholder so later legs are still planned and shown.
+
+    Per-leg limits (region radius, cell budget, blocked stop) are reported per leg and never fail
+    the request, so the UI can point at the stop that is impractical.
+    """
     directory = os.environ.get("LOLA_DEM_DIR")
     if not directory:
         raise TerrainUnavailableError(
@@ -145,35 +224,65 @@ def _terrain(sites: list[Site], rover: RoverSettings) -> RouteResponse:
     legs: list[RouteLeg] = []
     path: list[RoutePoint] = []
     planned_distance = 0.0
+    elevation_gain = 0.0
+    elevation_loss = 0.0
+    max_slope_seen: float | None = None
+    widest_padding = rover.padding_m
     sampled_cells = 0
     failed: list[int] = []
     reasons: list[str] = []
 
-    for i, (a, b) in enumerate(zip(sites, sites[1:])):
-        if sampled_cells > MAX_TERRAIN_CELLS:
-            raise LimitExceededError(
-                f"route already samples {sampled_cells} terrain cells (max {MAX_TERRAIN_CELLS}); "
-                "split the route into fewer stops per request or increase cell_size_m")
-        padding = rover.padding_m
-        try:
-            result = _plan_leg(dem, a, b, rover, padding)
-        except ValueError as exc:
-            raise InvalidInputError(f"leg {i} ({a.name} -> {b.name}): {exc}") from exc
-        sampled_cells += result["search"]["grid_shape"][0] * result["search"]["grid_shape"][1]
+    # One verdict per unique stop, reused by every leg that touches it. None means the planner
+    # could not evaluate that stop (a region radius smaller than the evaluation grid).
+    checks = _stop_checks(dem, sites, rover)
+    budget_exhausted = False
 
-        # A narrow corridor often has no way around a crater or down a slope. Retry once with
-        # more detour space when it fits the region radius and the request's cell budget.
+    for i, (a, b) in enumerate(zip(sites, sites[1:])):
+        start_check, goal_check = checks[_stop_key(a)], checks[_stop_key(b)]
+        padding = rover.padding_m
         distance = central_angle(a, b) * MOON_RADIUS_M
-        if result["status"] == "no_route" and WIDE_PADDING_M > padding:
-            wide_cells = _region_cells(distance, rover.cell_size_m, WIDE_PADDING_M)
-            if sampled_cells + wide_cells <= MAX_TERRAIN_CELLS:
-                try:
-                    wide = _plan_leg(dem, a, b, rover, WIDE_PADDING_M)
-                except ValueError:
-                    wide = None  # region radius or per-leg cell limit: keep the narrow result
-                if wide is not None:
-                    sampled_cells += wide_cells
-                    result, padding = wide, WIDE_PADDING_M
+        estimate = _region_cells(distance, rover.cell_size_m, padding)
+        blocked = None
+        for name, check in (("start", start_check), ("goal", goal_check)):
+            if check is not None and not check["passable"]:
+                blocked = (name, check)
+                break
+
+        if budget_exhausted or sampled_cells + estimate > MAX_TERRAIN_CELLS:
+            budget_exhausted = True
+            result = _unplanned_result(
+                start_check, goal_check, "search_limit_reached",
+                f"request cell budget reached ({sampled_cells} of {MAX_TERRAIN_CELLS} cells sampled); "
+                "split the route into fewer stops or increase cell_size_m", padding)
+        elif blocked is not None:
+            name, check = blocked
+            result = _unplanned_result(start_check, goal_check, f"{name}_blocked",
+                                       f"{name.capitalize()} blocked: {_check_reason(check)}", padding)
+        else:
+            try:
+                result = _plan_leg(dem, a, b, rover, padding)
+            except ValueError as exc:
+                limit = _leg_limit(exc)
+                if limit is None:
+                    raise InvalidInputError(f"leg {i} ({a.name} -> {b.name}): {exc}") from exc
+                status, reason = limit
+                result = _unplanned_result(start_check, goal_check, status, reason, padding)
+            else:
+                sampled_cells += _grid_cells(result)
+                # A narrow corridor often has no way around a crater or a ridge. Widen it step by
+                # step while the region radius and the request's cell budget allow it.
+                for corridor in CORRIDOR_STEPS_M:
+                    if result["status"] != "no_route" or corridor <= padding:
+                        continue
+                    wider_cells = _region_cells(distance, rover.cell_size_m, corridor)
+                    if sampled_cells + wider_cells > MAX_TERRAIN_CELLS:
+                        break
+                    try:
+                        widened = _plan_leg(dem, a, b, rover, corridor)
+                    except ValueError:
+                        break  # outside the region radius or the per-leg cell limit
+                    sampled_cells += _grid_cells(widened)
+                    padding, result = corridor, widened
 
         found = result["status"] == "route_found"
         leg = RouteLeg(from_index=i, to_index=i + 1, status=result["status"], reason=result["reason"],
@@ -188,9 +297,15 @@ def _terrain(sites: list[Site], rover: RoverSettings) -> RouteResponse:
                        start_check=_endpoint_check(result["endpoint_checks"]["start"]),
                        goal_check=_endpoint_check(result["endpoint_checks"]["goal"]))
         legs.append(leg)
+        widest_padding = max(widest_padding, result["search"]["padding_m"])
         if found:
             points = [RoutePoint(latitude_deg=p["latitude_deg"], longitude_deg=p["longitude_deg"],
                                  distance_m=0.0, elevation_m=p["elevation_m"]) for p in result["path"]]
+            elevation_gain += result["elevation_gain_m"] or 0.0
+            elevation_loss += result["elevation_loss_m"] or 0.0
+            if result["max_terrain_slope_deg"] is not None:
+                max_slope_seen = (result["max_terrain_slope_deg"] if max_slope_seen is None
+                                  else max(max_slope_seen, result["max_terrain_slope_deg"]))
         else:
             failed.append(i)
             reasons.append(f"leg {i} ({a.name} -> {b.name}): {result['reason']}")
@@ -216,10 +331,16 @@ def _terrain(sites: list[Site], rover: RoverSettings) -> RouteResponse:
             planned_distance += leg_distance
 
     status = legs[failed[0]].status if failed else "route_found"
+    stops = _stop_entries(sites, checks)
+    summary = RouteSummary(planned_legs=len(legs) - len(failed), failed_legs=len(failed),
+                           distance_m=planned_distance, elevation_gain_m=elevation_gain,
+                           elevation_loss_m=elevation_loss, max_terrain_slope_deg=max_slope_seen,
+                           cell_size_m=rover.cell_size_m, padding_m=widest_padding,
+                           max_slope_deg=rover.max_slope_deg)
     return RouteResponse(method="astar_terrain", status=status, reason="; ".join(reasons) or None,
                          failing_leg=failed[0] if failed else None, failed_legs=failed,
-                         terrain_source="lola_dem", rover=rover, waypoints=sites, legs=legs,
-                         total_distance_m=planned_distance, path=path)
+                         terrain_source="lola_dem", rover=rover, waypoints=sites, stops=stops,
+                         summary=summary, legs=legs, total_distance_m=planned_distance, path=path)
 
 
 def plan_route(sites: list[Site], req: RouteRequest) -> RouteResponse:
@@ -229,3 +350,44 @@ def plan_route(sites: list[Site], req: RouteRequest) -> RouteResponse:
         raise LimitExceededError(
             f"route needs {len(response.path)} points (max {MAX_PATH_POINTS}); increase cell_size_m")
     return response
+
+
+def _require_dem():
+    directory = os.environ.get("LOLA_DEM_DIR")
+    if not directory:
+        raise TerrainUnavailableError(
+            "terrain routing needs a verified LOLA DEM dataset; set LOLA_DEM_DIR "
+            "(see deploy/README.md) or request planner=straight_line")
+    return open_dem(directory)
+
+
+def _stop_entries(sites: list[Site], checks: dict[tuple[float, float], dict | None]) -> list[StopCheck]:
+    """One entry per stop whose terrain could be evaluated, keyed by waypoint index."""
+    entries = []
+    for index, site in enumerate(sites):
+        check = checks.get(_stop_key(site))
+        if check is None:
+            continue
+        entries.append(StopCheck(
+            index=index, latitude_deg=site.latitude_deg, longitude_deg=site.longitude_deg,
+            elevation_m=check["elevation_m"], terrain_slope_deg=check["terrain_slope_deg"],
+            max_slope_deg=check["max_slope_deg"], passable=check["passable"],
+            blocked_reasons=check["blocked_reasons"],
+            nearby_terrain_candidates=[TerrainCandidate(**c) for c in check["nearby_terrain_candidates"]]))
+    return entries
+
+
+def _stop_checks(dem, sites: list[Site], rover: RoverSettings) -> dict[tuple[float, float], dict | None]:
+    """Evaluate every unique stop once."""
+    checks: dict[tuple[float, float], dict | None] = {}
+    for site in sites:
+        key = _stop_key(site)
+        if key not in checks:
+            checks[key] = _stop_check(dem, site, rover)
+    return checks
+
+
+def plan_stops(sites: list[Site], req: RouteStopsRequest) -> RouteStopsResponse:
+    """Preflight stop usability: sample each stop without planning any leg."""
+    dem = _require_dem()
+    return RouteStopsResponse(stops=_stop_entries(sites, _stop_checks(dem, sites, req.rover)))

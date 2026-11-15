@@ -158,7 +158,9 @@ class RoverSettings(BaseModel):
     """
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False, strict=True)
 
-    max_slope_deg: float = Field(15, gt=0, lt=90)
+    max_slope_deg: float = Field(20, gt=0, lt=90, description=(
+        "Hard traversal limit for planned route cells, not Constraints.max_slope_deg "
+        "(the separate landing-site slope check, default 8). Nothing links the two values."))
     max_uphill_grade_deg: Optional[float] = Field(None, gt=0, lt=90)
     max_downhill_grade_deg: Optional[float] = Field(None, gt=0, lt=90)
     cell_size_m: float = Field(20, gt=0)
@@ -177,6 +179,12 @@ class RouteRequest(BaseModel):
     waypoints: list[SiteRef] = Field(min_length=2, max_length=100)
     step_m: float = Field(100, gt=0)
     planner: Planner = "straight_line"
+    rover: RoverSettings = RoverSettings()
+
+
+class RouteStopsRequest(BaseModel):
+    """Preflight: terrain usability of the given stops, without planning any leg."""
+    waypoints: list[SiteRef] = Field(min_length=1, max_length=100)
     rover: RoverSettings = RoverSettings()
 
 
@@ -258,7 +266,7 @@ RouteMethod = Literal["straight_line", "astar_terrain"]
 
 # "not_evaluated" means terrain was never checked (straight_line); the rest are planner outcomes.
 RouteStatus = Literal["not_evaluated", "route_found", "start_blocked", "goal_blocked",
-                      "no_route", "search_limit_reached"]
+                      "no_route", "search_limit_reached", "region_too_large"]
 
 
 class TerrainCandidate(BaseModel):
@@ -315,6 +323,37 @@ class RouteLeg(BaseModel):
     goal_check: Optional[EndpointCheck] = None
 
 
+class StopCheck(BaseModel):
+    """Terrain usability of one requested stop, evaluated once in a leg-independent frame.
+
+    `passable` describes the stop itself, so the UI can say a location is impractical before any
+    leg is planned. `nearby_terrain_candidates` are cells that pass the same node checks; they are
+    suggestions, not a route and not proof of access.
+    """
+    index: int
+    latitude_deg: float
+    longitude_deg: float
+    elevation_m: Optional[float] = None
+    terrain_slope_deg: Optional[float] = None
+    max_slope_deg: float
+    passable: bool
+    blocked_reasons: list[str] = []
+    nearby_terrain_candidates: list[TerrainCandidate] = []
+
+
+class RouteSummary(BaseModel):
+    """Totals over the legs that were actually planned; placeholders are excluded."""
+    planned_legs: int
+    failed_legs: int
+    distance_m: float
+    elevation_gain_m: float
+    elevation_loss_m: float
+    max_terrain_slope_deg: Optional[float] = None
+    cell_size_m: float
+    padding_m: float  # widest corridor used by any leg
+    max_slope_deg: float  # the hard traversal limit these legs were planned with
+
+
 class RouteResponse(BaseModel):
     method: RouteMethod
     status: RouteStatus
@@ -324,6 +363,8 @@ class RouteResponse(BaseModel):
     terrain_source: Optional[Literal["lola_dem"]] = None  # null when terrain was not used
     rover: Optional[RoverSettings] = None
     waypoints: list[Site]
+    stops: list[StopCheck] = []  # terrain usability of every requested stop, leg-independent
+    summary: Optional[RouteSummary] = None
     legs: list[RouteLeg]
     total_distance_m: float  # sum of planned legs; placeholder legs are not counted
     path: list[RoutePoint]
@@ -376,3 +417,8 @@ class RecommendedSitesResponse(BaseModel):
     site: Site
     radius_km: float
     recommendations: list[Recommendation]
+
+
+class RouteStopsResponse(BaseModel):
+    """One entry per stop whose terrain could be evaluated; stops are identified by `index`."""
+    stops: list[StopCheck]
