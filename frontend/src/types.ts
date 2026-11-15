@@ -30,7 +30,8 @@ export interface Metrics {
 }
 export interface Fit { status: FitStatus; violations: (keyof Metrics)[] }
 export interface TimeWindow { start_utc: string; end_utc: string }
-export interface VisibilityWindows { sun: TimeWindow[]; earth: TimeWindow[] }
+// eclipse: Earth covering the Sun while Earth is visible from the site
+export interface VisibilityWindows { sun: TimeWindow[]; earth: TimeWindow[]; eclipse?: TimeWindow[] }
 export interface TimeseriesPoint {
   time_utc: string;
   sun_azimuth_deg: number;
@@ -83,6 +84,34 @@ export interface HeatmapLayer {
   max: number;
   values: (number | null)[];
 }
+export type RouteWaypointType = 'base' | 'waypoint' | 'camp' | 'poi';
+
+export interface RouteWaypoint {
+  index: number;
+  lat: number;
+  lon: number;
+  label: string;
+  arrival_utc: string;
+  departure_utc: string;
+  type: RouteWaypointType;
+  sun_visible: boolean;
+  earth_visible: boolean;
+  eclipse: boolean;
+  slope_deg: number | null;
+  leg_distance_km: number | null;
+  notes: string;
+}
+
+export interface TouristRoute {
+  site: SiteDefinition;
+  landing_utc: string;
+  departure_utc: string;
+  days_on_surface: number;
+  total_distance_km: number;
+  waypoints: RouteWaypoint[];
+  eclipse_windows: TimeWindow[];
+}
+
 export interface MapHeatmapsResponse {
   projection: MapHeatmapsParams['projection'];
   bounds_m: MapHeatmapsParams['bounds_m'];

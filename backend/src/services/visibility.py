@@ -3,6 +3,7 @@
 Works on any az/el series (mock or real Horizons data) and any horizon model.
 """
 
+import math
 from datetime import datetime, timedelta
 
 from ..schemas import Constraints, Fit, Interval, Metrics
@@ -22,6 +23,20 @@ def visible_flags(az: list[float], el: list[float], radius: float, clearance: fl
                   horizon: HorizonModel) -> list[bool]:
     """Whole disc at least `clearance` above the horizon."""
     return [e - radius >= horizon.elevation_deg(a) + clearance for a, e in zip(az, el)]
+
+
+def separation_deg(az1: float, el1: float, az2: float, el2: float) -> float:
+    a1, e1, a2, e2 = map(math.radians, (az1, el1, az2, el2))
+    c = math.sin(e1) * math.sin(e2) + math.cos(e1) * math.cos(e2) * math.cos(a1 - a2)
+    return math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+
+def eclipse_flags(sun_az: list[float], sun_el: list[float], earth_az: list[float], earth_el: list[float],
+                  earth_visible: list[bool]) -> list[bool]:
+    """Earth's disc overlaps the Sun's (partial or total), and Earth is visible from the site."""
+    limit = SUN_RADIUS_DEG + EARTH_RADIUS_DEG
+    return [v and separation_deg(sa, se, ea, ee) < limit
+            for sa, se, ea, ee, v in zip(sun_az, sun_el, earth_az, earth_el, earth_visible)]
 
 
 def intervals(times: list[datetime], flags: list[bool], step_s: int) -> list[Interval]:

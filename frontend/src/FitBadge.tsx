@@ -1,10 +1,10 @@
 import type { FitStatus } from './types';
 
 const MAP: Record<FitStatus, { cls: string; label: string }> = {
-  'both_met':    { cls: 'badge--green',  label: '✓ Both met' },
-  'power_short': { cls: 'badge--red',    label: '✗ Power short' },
-  'comms_short': { cls: 'badge--orange', label: '⚠ Comms short' },
-  'neither_met':     { cls: 'badge--red',    label: '✗ Neither' },
+  'both_met':    { cls: 'badge--green',  label: '✓ All met' },
+  'power_short': { cls: 'badge--yellow', label: '~ Power' },
+  'comms_short': { cls: 'badge--yellow', label: '~ Comms' },
+  'neither_met': { cls: 'badge--red',    label: '✗ None met' },
 };
 
 export function FitBadge({ fit }: { fit: FitStatus }) {

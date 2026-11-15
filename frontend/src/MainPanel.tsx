@@ -41,8 +41,6 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
     max_slope_deg: terrain.maxSlope,
   }), [mission.daysOnSurface, mission.horizonClearance, power, comms, terrain]);
 
-  const start = Date.parse(dateUtc(mission.windowStart));
-  const end = Date.parse(dateUtc(mission.windowEnd));
   const dateError = landingWindowError(mission.windowStart, mission.windowEnd);
   const validConstraints = Object.values(constraints).every(value => Number.isFinite(value) && value >= 0)
     && Number.isInteger(mission.daysOnSurface) && mission.daysOnSurface >= 1
@@ -70,13 +68,6 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       )),
     [validation, enabled, mission.windowStart, mission.windowEnd, constraints]);
   const horizons = useRequest(horizonsRequest);
-  function canShift(hours: number) {
-    const next = Date.parse(landingUtc) + hours * 3_600_000;
-    return !validation && next >= start && next <= end;
-  }
-  function shiftTime(hours: number) {
-    if (canShift(hours)) setLandingUtc(new Date(Date.parse(landingUtc) + hours * 3_600_000).toISOString());
-  }
 
   return (
     <main className="main">
@@ -101,7 +92,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
         {validation && <div className="request-error" role="alert">{validation}</div>}
         <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} landingTime={landingUtc}
-          onTimeShift={shiftTime} onTimeSeek={setLandingUtc} canShiftBack={canShift(-6)} canShiftForward={canShift(6)}
+          onTimeSeek={setLandingUtc}
           missionStart={dateUtc(mission.windowStart)}
           sliderEnd={dateUtc(mission.windowEnd)} disabled={!!validation}
           loading={comparison.loading} error={comparison.error} onRetry={comparison.retry} />

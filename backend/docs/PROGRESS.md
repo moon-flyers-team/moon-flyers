@@ -4,6 +4,9 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Earth eclipse windows (2026-11-15).** `timeline.eclipse` / `windows.eclipse`: Sun–Earth
+  separation < 0.267° + 0.95° and Earth visible. Live Horizons shows the 2027-08-17 penumbral
+  lunar eclipse (06:00–10:00Z) at near-side sites. Hourly sampling can miss very short events.
 - **Real Sun/Earth positions from JPL Horizons are live (2026-11-14, branch `plug-positions-py`).**
   `services/ephemeris.py` calls `positions.positions()`; header `X-Moon-Flyers-Data-Source: horizons`.
   Terrain is still the mock hills. `MOON_FLYERS_EPHEMERIS=mock` switches back to synthetic data

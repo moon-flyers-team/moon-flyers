@@ -25,6 +25,7 @@ class SiteSeries:
                                             c.horizon_clearance_deg, self.horizon)
         self.earth = visibility.visible_flags(d["earth_az"], d["earth_el"], visibility.EARTH_RADIUS_DEG,
                                               c.horizon_clearance_deg, self.horizon)
+        self.eclipse = visibility.eclipse_flags(d["sun_az"], d["sun_el"], d["earth_az"], d["earth_el"], self.earth)
 
     def stay(self, landing: datetime) -> tuple[Metrics, Fit]:
         """Metrics and fit for a mission landing at `landing` and staying `days_on_surface`."""
@@ -36,7 +37,8 @@ class SiteSeries:
     def timeline(self) -> Windows:
         t = self.data["times"]
         return Windows(sun=visibility.intervals(t, self.sun, self.step_s),
-                       earth=visibility.intervals(t, self.earth, self.step_s))
+                       earth=visibility.intervals(t, self.earth, self.step_s),
+                       eclipse=visibility.intervals(t, self.eclipse, self.step_s))
 
     def timeseries(self, sun_on: bool = True, earth_on: bool = True) -> list[TimeseriesPoint]:
         """Every sample; Sun or Earth fields are null when that body is switched off."""

@@ -38,7 +38,7 @@ def test_site_analysis_spans_window_plus_stay():
     assert len(a["horizon"]["horizon_azimuth_deg"]) == len(a["horizon"]["horizon_elevation_deg"]) == 360
     assert set(a["metrics"]) == METRIC_KEYS and a["metrics"]["slope_deg"] is None
     assert a["fit"]["status"] in FIT_STATUSES
-    assert set(a["windows"]) == {"sun", "earth"}
+    assert set(a["windows"]) == {"sun", "earth", "eclipse"}
 
 
 def test_site_analysis_is_deterministic():
@@ -72,7 +72,7 @@ def test_compare():
     assert len(wm) == 7 * 4 + 1  # every 6 h across 7 days, inclusive
     assert wm[1]["landing_utc"] == "2027-08-01T06:00:00Z"
     assert set(wm[0]["metrics"]) == METRIC_KEYS and wm[0]["fit"]["status"] in FIT_STATUSES
-    assert set(res[0]["timeline"]) == {"sun", "earth"}
+    assert set(res[0]["timeline"]) == {"sun", "earth", "eclipse"}
 
 
 def test_far_side_site_never_sees_earth():
@@ -105,3 +105,8 @@ def test_limits_and_validation():
     bad = {"sites": [{"id": "malapert_massif"}], "window_start_utc": "2027-08-08T00:00:00Z",
            "window_end_utc": "2027-08-01T00:00:00Z"}
     assert client.post("/compare", json=bad).status_code == 422
+
+
+def test_eclipse_needs_overlap_and_visible_earth():
+    from src.services.visibility import eclipse_flags
+    assert eclipse_flags([10, 10, 10], [5, 5, 5], [10.5, 10.5, 20], [5, 5, 5], [True, False, True]) == [True, False, False]
