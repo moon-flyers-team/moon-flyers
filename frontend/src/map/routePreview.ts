@@ -1,5 +1,7 @@
-import { METRES_TO_SVG, project } from './projection';
+import { METRES_TO_SVG, project, unproject } from './projection';
 import type { Coordinates } from './projection';
+import { sampleElevation } from './elevations';
+import type { ElevationGrid } from './elevations';
 import type { StopCheck } from '../types';
 
 // Hover previews round the point to a 30 m bucket, so moving inside one cell reuses the answer
@@ -12,7 +14,7 @@ export function probeKey(coordinates: Coordinates): string {
     + `${Math.round(point.y / METRES_TO_SVG / CACHE_CELL_M)}`;
 }
 
-export type HoverState = 'idle' | 'checking' | 'ok' | 'snapped' | 'blocked';
+export type HoverState = 'idle' | 'checking' | 'hint' | 'ok' | 'snapped' | 'blocked';
 export interface HoverFeedback { state: HoverState; label: string }
 
 const candidate = (check: StopCheck | null | undefined) => {
@@ -29,8 +31,13 @@ export function previewCoordinates(coordinates: Coordinates, check: StopCheck | 
 }
 
 // Cursor label, in the spirit of a tool that refuses a bad connection and says why.
-export function hoverFeedback(check: StopCheck | null, pending: boolean): HoverFeedback {
-  if (pending) return { state: 'checking', label: 'Checking slope…' };
+export function hoverFeedback(check: StopCheck | null, pending: boolean,
+  hintDeg: number | null = null): HoverFeedback {
+  if (pending) {
+    // The coarse grid hedges the label while the authoritative probe is in flight.
+    if (hintDeg == null) return { state: 'checking', label: 'Checking slope…' };
+    return { state: 'hint', label: `~${Math.round(hintDeg)}° · checking…` };
+  }
   if (!check) return { state: 'idle', label: '' };
   const slope = check.terrain_slope_deg == null ? null : Math.round(check.terrain_slope_deg);
   const limit = Math.round(check.max_slope_deg);
@@ -46,4 +53,24 @@ export function hoverFeedback(check: StopCheck | null, pending: boolean): HoverF
       ? `Steep ${slope}° (limit ${limit}°) · moves ${Math.round(target.offset_m)} m`
       : `Steep ${slope}° (limit ${limit}°) · no workable cell nearby`,
   };
+}
+
+// Continuous hover hint from the bundled ~792 m LOLA grid: one central-difference gradient.
+// Coarse compared with the planner's 60 m cells, so it only hedges the label until the probe
+// answers; it never decides a snap or a passability verdict.
+export function localSlopeDeg(grid: ElevationGrid | undefined, coordinates: Coordinates): number | null {
+  if (!grid) return null;
+  const centre = sampleElevation(grid, coordinates);
+  if (centre == null) return null;
+  const point = project(coordinates);
+  const step = grid.resolution_m * METRES_TO_SVG;
+  const east = unproject({ x: point.x + step, y: point.y });
+  const north = unproject({ x: point.x, y: point.y - step });
+  if (!east || !north) return null;
+  const eastElevation = sampleElevation(grid, east);
+  const northElevation = sampleElevation(grid, north);
+  if (eastElevation == null || northElevation == null) return null;
+  const gradient = Math.hypot((eastElevation - centre) / grid.resolution_m,
+    (northElevation - centre) / grid.resolution_m);
+  return Math.atan(gradient) * 180 / Math.PI;
 }
