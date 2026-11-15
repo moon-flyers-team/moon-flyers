@@ -81,12 +81,12 @@ export default function App() {
         />
       )}
       <div className="layout">
-        {!routeOpen && <Sidebar
+        <Sidebar
           sites={sites}
           onSiteToggle={toggleSite}
           onSiteAdd={addSite}
           onOpenSettings={() => setSettingsOpen(true)}
-        />}
+        />
         <MainPanel
           routeOpen={routeOpen}
           onRouteOpenChange={setRouteOpen}
