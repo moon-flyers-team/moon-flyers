@@ -352,7 +352,10 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   );
   const scaleKm = niceKm((px / 5) * k / METRES_TO_SVG / 1000);
   const scalePx = scaleKm * 1000 * METRES_TO_SVG / k;
-  const cumulative = route.legs.reduce<number[]>((acc, l) => [...acc, acc[acc.length - 1] + (l.distance_m ?? NaN)], [0]);
+  const cumulative = route.legs.reduce<(number | null)[]>((acc, l) => {
+    const previous = acc[acc.length - 1];
+    return [...acc, previous == null || l.distance_m == null ? null : previous + l.distance_m];
+  }, [0]);
   const isLoop = route.waypoints.length > 2
     && route.waypoints[0].latitude_deg === route.waypoints[route.waypoints.length - 1].latitude_deg
     && route.waypoints[0].longitude_deg === route.waypoints[route.waypoints.length - 1].longitude_deg;
@@ -431,7 +434,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
           <path d={fullD} fill="none" stroke="#05050c" strokeOpacity={0.75}
             strokeWidth={9 * k} strokeLinejoin="round" strokeLinecap="round" />
           {legPaths.map((d, i) => (
-            <path key={i} d={d} fill="none" stroke={colorOf(route.legs[i].to_index)}
+            <path key={i} d={d} fill="none" stroke={colorOf(route.legs[i]?.to_index ?? i + 1)}
               strokeWidth={4.5 * k} strokeLinejoin="round" strokeLinecap="round" />
           ))}
           <path d={fullD} fill="none" stroke="#fff" strokeOpacity={0.85}
@@ -546,8 +549,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
                       {wp.group && <span className="route-note">{wp.group}</span>}
                     </span>
                   </td>
-                  <td className="route-num">{i && calculated ? km(route.legs[i - 1].distance_m) : '—'}</td>
-                  <td className="route-num">{calculated ? km(cumulative[i]) : '—'}</td>
+                  <td className="route-num">{i && calculated && route.legs[i - 1]?.distance_m != null ? km(route.legs[i - 1].distance_m) : '—'}</td>
+                  <td className="route-num">{calculated && cumulative[i] != null ? km(cumulative[i]!) : '—'}</td>
                   <td className="route-num">{change === null ? '—' : `${change > 0 ? '+' : ''}${Math.round(change)} m`}</td>
                   <td>{editable ? <div className="route-order-controls" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
                     <span className="route-drag-handle" aria-hidden="true">⠿</span>
