@@ -70,6 +70,21 @@ test('mock comparison preserves site order and matches selected-site analysis me
   }
 });
 
+test('mock comparison with off-grid candidate steps still matches per-candidate analysis', () => {
+  const response = post('/compare', { ...BOUNDS, sites: [{ id: 'malapert_massif' }], candidate_step_hours: 2.5,
+    constraints: { days_on_surface: 3 } });
+  assert.equal(response.status, 200);
+  const row = response.body[0];
+  const span = Date.parse(BOUNDS.window_end_utc) - Date.parse(BOUNDS.window_start_utc);
+  assert.equal(row.window_metrics.length, Math.floor(span / (2.5 * 3_600_000)) + 1);
+  for (const candidate of row.window_metrics) {
+    const expected = analysis({ window_start_utc: candidate.landing_utc,
+      window_end_utc: candidate.landing_utc, days_on_surface: 3 }, 'malapert_massif').body.analysis;
+    assert.deepEqual(candidate.metrics, expected.metrics);
+    assert.deepEqual(candidate.fit, expected.fit);
+  }
+});
+
 test('default frontend window returns four varied mock comparisons and visibility bars', () => {
   const refs = get('/sites').body.map(site => ({ id: site.id }));
   const response = post('/compare', { sites: refs,

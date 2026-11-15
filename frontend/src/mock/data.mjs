@@ -2,6 +2,7 @@
 import { createHash } from 'node:crypto';
 
 export const DAY_MS = 86_400_000;
+export const HOUR_MS = 3_600_000;
 const PERIOD_MS = 29.5306 * DAY_MS;
 const EPOCH = Date.parse('2027-08-01T00:00:00Z');
 const NOTE = 'Synthetic demo data; not NASA ephemerides or terrain calculations.';
@@ -78,6 +79,40 @@ function windowMetrics(windows, start, end) {
   }
   longestGap = Math.max(longestGap, end - cursor);
   return [round(100 * visible / (end - start)), round(longestGap / 3_600_000)];
+}
+// Flag-based twin of windowMetrics over a slice of one precomputed hourly series. Numerically
+// identical to windowMetrics(visibilityWindows(slicePoints, body), ...) so /compare can slice
+// one series per site instead of rebuilding every candidate's stay from scratch.
+function windowMetricsFromFlags(flags, start, end, step) {
+  let visible = 0, longestGap = 0, cursor = start;
+  let i = 0;
+  while (i < flags.length) {
+    if (!flags[i]) { i += 1; continue; }
+    let j = i + 1;
+    while (j < flags.length && flags[j]) j += 1;
+    const left = start + i * step;
+    const right = j < flags.length ? start + j * step : end;
+    visible += right - left;
+    longestGap = Math.max(longestGap, left - cursor);
+    cursor = right;
+    i = j;
+  }
+  longestGap = Math.max(longestGap, end - cursor);
+  return [round(100 * visible / (end - start)), round(longestGap / 3_600_000)];
+}
+// Metrics and fit for a stay starting at `landing` from one hourly site series, identical to
+// analyze(site, landing, c) when the landing sits on the series' hourly grid; null otherwise.
+export function candidateMetrics(sunFlags, earthFlags, seriesStart, landing, constraints) {
+  const offset = landing - seriesStart;
+  if (!Number.isInteger(offset / HOUR_MS)) return null;
+  const i0 = offset / HOUR_MS;
+  const staySamples = constraints.days_on_surface * (DAY_MS / HOUR_MS);
+  const end = landing + constraints.days_on_surface * DAY_MS;
+  const sun = windowMetricsFromFlags(sunFlags.slice(i0, i0 + staySamples + 1), landing, end, HOUR_MS);
+  const earth = windowMetricsFromFlags(earthFlags.slice(i0, i0 + staySamples + 1), landing, end, HOUR_MS);
+  const metrics = { sun_visible_pct: sun[0], longest_darkness_hours: sun[1],
+    earth_visible_pct: earth[0], longest_earth_blackout_hours: earth[1], slope_deg: null };
+  return { metrics, fit: fitFor(metrics, constraints) };
 }
 function fitFor(metrics, constraints) {
   const checks = [
