@@ -4,19 +4,34 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Rover route visualization (2026-11-15).** `tools/plot_rover_path.py` saves terrain,
+  slope exclusions, full route and elevation profile as PNG plus a JSON report;
+  real `DEM` mode or explicitly labelled synthetic hill demo. Optional Matplotlib
+  dependency lives in `requirements-visualization.txt`; no API/frontend changes.
+  Two offline plotting checks cover demo detour and blocked-route output. Usage
+  and real-data Windows commands are in `docs/ROVER_PATH_REVIEW.md`.
 - **Rover route calculation ready for review (2026-11-15).**
   `app/Functions/rover_path.py` adds bounded A* over a metre grid or `DEM.sample()`;
   configurable terrain slope, uphill/downhill grade and exclusions; optional ascent
   cost plus a direction-independent slope penalty (default weight 1, 15° scale);
   exact geographic endpoints, pole/dateline handling, no diagonal corner
   cutting, and explicit blocked/no-route/budget statuses. No route endpoint or
-  frontend wiring. Twenty-four focused offline tests cover graph optimality against
+  frontend wiring. Twenty-nine focused offline tests cover graph optimality against
   Dijkstra and compatibility with the LOLA loader fixture. Reviewer handoff:
   `docs/ROVER_PATH_REVIEW.md`. An opt-in real-raster test is now available:
   `MOON_FLYERS_REAL_ROVER=1` plus `LOLA_DEM_DIR`, run `tests/test_rover_dem.py`
   with `-k on_real_lola_dataset -v -s`. It requires a found route and independently
   checks DEM heights, distances, grades and costs; writes a temporary JSON report.
-  Real-raster execution remains with the data owner; API wiring is separate.
+  The teammate's first real-data run returned `start_blocked` at (-89.9, 0),
+  without enough detail to distinguish missing data from excessive slope. Added
+  endpoint elevation/slope/reason diagnostics and up to three nearby terrain-only
+  candidate cells (no automatic endpoint changes or implied route). Test prints
+  these before failure and records them in JSON. Diagnostics confirmed slopes
+  of 21.74°/20.67° at the original endpoints. The user then reported the teammate's
+  real-LOLA test passed with (-89.90461690407035, 0.0) to
+  (-89.90461462373575, -0.3961843417649203). These are now the test defaults;
+  limits/algorithm unchanged. Reported remote result, not a local raster rerun.
+  API wiring and broader operational validation remain pending.
 - **Earth eclipse windows (2026-11-15).** `timeline.eclipse` / `windows.eclipse`: Sun–Earth
   separation < 0.267° + 0.95° and Earth visible. Live Horizons shows the 2027-08-17 penumbral
   lunar eclipse (06:00–10:00Z) at near-side sites. Hourly sampling can miss very short events.

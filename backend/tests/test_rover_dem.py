@@ -72,15 +72,15 @@ def _check_route_against_dem(result, dem, start, goal, limit):
 def test_rover_route_on_real_lola_dataset(tmp_path):
     """Real rasters only: no JPL, internet, synthetic terrain, or API involved.
 
-    Default coordinates are a short example near the south pole, not a verified
-    access route. The data owner can override them with known traversable points.
+    Default coordinates are the short real-data case the teammate reported passing.
+    This is not an operational access route. Environment overrides remain available.
     Enabled runs fail on missing data, blocked endpoints, or no route; these are
     never silently turned into a passing synthetic test.
     """
     directory = os.environ.get('LOLA_DEM_DIR')
     assert directory, 'Set LOLA_DEM_DIR to the directory containing the calibrated IMG/LBL dataset'
-    start = tuple(json.loads(os.getenv('MOON_FLYERS_ROVER_START', '[-89.9, 0]')))
-    goal = tuple(json.loads(os.getenv('MOON_FLYERS_ROVER_GOAL', '[-89.899, 0]')))
+    start = tuple(json.loads(os.getenv('MOON_FLYERS_ROVER_START', '[-89.90461690407035, 0.0]')))
+    goal = tuple(json.loads(os.getenv('MOON_FLYERS_ROVER_GOAL', '[-89.90461462373575, -0.3961843417649203]')))
     dem = DEM(directory)
     result = plan_rover_route(dem, start, goal, cell_size_m=20, padding_m=200,
                               max_slope_deg=15, max_uphill_grade_deg=15,

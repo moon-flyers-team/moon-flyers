@@ -182,7 +182,18 @@ vehicle risk. Hard limits still exclude excessive slopes even at zero weight.
 
 ### 5. Return the full path and diagnostics
 
-Both functions return `status`, `reason`, `path_rc`, `expanded_nodes` and metrics.
+Both functions return `status`, `reason`, `path_rc`, `expanded_nodes`, metrics, and
+`endpoint_checks`. Each endpoint check includes its sampled elevation, estimated
+terrain slope, slope limit, passable flag, and precise `blocked_reasons`:
+`missing_elevation`, `unknown_slope`, `terrain_slope_exceeds_limit`, or
+`excluded_by_mask`. Missing values are JSON null, not NaN. More than one cause
+can apply. Both endpoints are checked even if the start is blocked.
+
+For blocked endpoints, up to three `nearby_terrain_candidates` are reported from
+this same bounded grid, sorted by offset distance. They pass node terrain checks
+only: access, edge grades, connectivity, and a route have NOT been established.
+They do not replace the requested endpoint. Geographic results attach coordinates
+to the checks and candidate cells; grid-only results use row/column indices.
 The geographic function also returns `path` (latitude, longitude and elevation per
 node) and `search` (grid shape, projection, resolution request, bounds configuration,
 rover limits, and requested coordinates).
@@ -262,14 +273,17 @@ Run from the repository root with the project's Python environment:
 python -m pytest backend/app/Functions/Tests/test_rover_path.py backend/tests/test_rover_dem.py -v
 ```
 
-There are 24 focused tests. They check known distances, terrain gradients versus
+There are 29 focused offline tests, plus one opt-in real-raster test. They check known distances, terrain gradients versus
 travel grades, independent uphill/downhill limits, blocked corners, missing data,
 ascent and direction-independent slope costs, gentler detours, explicit failure
 statuses, resource caps, exact endpoints,
 small displacements, the pole, and the longitude seam. An independent Dijkstra
 implementation checks A* costs on reproducible obstacle and weighted-terrain maps.
 The existing LOLA loader is exercised through its small synthetic IMG/LBL fixture.
-These are offline tests, not real rover or real-raster route validation.
+The offline checks do not establish real rover or real-raster route validation.
+Diagnostic tests also distinguish excessive slope, missing elevation, incomplete
+slope stencils and exclusions; check nearby candidates and unchanged endpoints;
+and check JSON serialization with missing data.
 
 The teammate reviewing this should check:
 
@@ -305,7 +319,9 @@ python -m pytest backend/tests/test_rover_dem.py -k on_real_lola_dataset -v -s
 ```
 
 Replace the data path. Expected: **1 passed, 1 deselected**. The test is skipped in
-normal offline runs and has **not been run on real rasters in this checkout**.
+normal offline runs. The teammate reported a pass on real LOLA data using the
+new default coordinates below; it has **not been rerun on real rasters in this
+checkout**, which does not contain the dataset.
 
 It uses 20 m spacing, 15° terrain/uphill/downhill limits, climbing weight 2 and
 slope weight 1. Padding is 200 m for this short integration test. It prints a
@@ -316,20 +332,96 @@ the returned model's maximum; this does not independently certify sub-grid terra
 Missing files, blocked endpoints, and no-route results fail the enabled test;
 there is no synthetic fallback.
 
-The default endpoints `(-89.9, 0)` to `(-89.899, 0)` are a short example, not a known
-traversable route. If those points are blocked, inspect the report and choose two
-known traversable nearby points rather than loosening the rover limits just to pass:
+### Diagnosing a blocked endpoint
+
+The enabled test now prints `endpoint_checks` before asserting that a route was
+found. The original example (-89.9, 0) to (-89.899, 0) returned `start_blocked`.
+The subsequent diagnostics showed endpoint slopes of about 21.74° and 20.67°,
+both exceeding the unchanged 15° limit. Those examples have been replaced by the
+teammate's reported passing case. For any future blocked result, inspect the
+actual elevation, slope, limit and reasons.
+The full details are also in the printed JSON report file.
+
+- `terrain_slope_exceeds_limit`: compare the reported slope with 15°; do not loosen
+  the limit just to pass the test.
+- `missing_elevation`: check coordinates and DEM coverage.
+- `unknown_slope`: the endpoint may have a height, but its surrounding samples do
+  not provide a finite slope estimate. Check coverage around the point too.
+- `excluded_by_mask`: the supplied exclusion mask explicitly blocks the point.
+
+If nearby candidate coordinates are present, the data owner can inspect them and
+choose suitable test endpoints explicitly. If none are present, no nodes within
+this region pass the terrain checks. Neither case proves global inaccessibility.
+
+The defaults now reproduce the short case the teammate reported passing:
+`(-89.90461690407035, 0.0)` to
+`(-89.90461462373575, -0.3961843417649203)`. Limits and algorithm are unchanged.
+This verifies a single sampled connection, not a full excursion or general rover
+safety. Environment overrides are still supported for additional locations:
 
 ```bat
-set "MOON_FLYERS_ROVER_START=[-89.9, 0]"
-set "MOON_FLYERS_ROVER_GOAL=[-89.899, 0]"
+set "MOON_FLYERS_ROVER_START=[-89.90461690407035, 0.0]"
+set "MOON_FLYERS_ROVER_GOAL=[-89.90461462373575, -0.3961843417649203]"
 ```
 
 Replace these example values with the chosen coordinates (latitude, longitude).
 The JSON arrays work as quoted environment values on macOS/Linux as well.
 A blocked result can be correct; the successful-route integration test specifically
 requires a nontrivial route so it cannot pass without checking any actual path.
-After a real-data pass, the backend team can wire the endpoint and deployment.
+The reported real-data pass supports handing off endpoint and deployment integration
+to the backend team. Broader route and rover validation remain separate.
+
+## Quick visual inspection
+
+The optional plotting tool saves a PNG containing terrain elevation, estimated slope
+with over-limit cells hatched, the complete cyan A* route, start/destination markers,
+and a route elevation profile. Dashed grey is a direct reference, **not** a computed
+route. Unknown elevation/slope cells are grey. Failed searches show the terrain and
+reason but never draw a substitute route.
+
+From the project root, in your Python environment:
+
+```sh
+python -m pip install -r backend/requirements-visualization.txt
+python backend/tools/plot_rover_path.py --demo --output rover_demo.png
+```
+
+Demo mode uses a labelled artificial hill to demonstrate a detour; it is not real
+lunar data. It works without LOLA files or a frontend server. For the real dataset,
+Windows Command Prompt example:
+
+```bat
+python backend/tools/plot_rover_path.py --dem-dir "C:\path\to\lola_dem" --padding-m 60 --output rover_real.png
+```
+
+Replace the directory. With no coordinate arguments this uses the teammate's
+reported passing test pair. It is a short smoke-test connection, not an excursion.
+The 60 m padding provides a closer view; it still searches that entire smaller
+region, so changing padding can change a route or feasibility. To inspect other
+locations, supply both coordinate pairs:
+
+```bat
+python backend/tools/plot_rover_path.py --dem-dir "C:\path\to\lola_dem" --start -89.9 0 --goal -89.899 0 --output rover_other.png
+```
+
+These latter coordinates previously exceeded the 15° slope limit; expect a
+blocked-start plot, not a successful route. Use your own coordinates for further
+inspection. Options include `--cell-size-m`, `--padding-m`, `--max-slope-deg`,
+`--climb-weight`, and `--slope-weight`. Defaults are 20 m, 300 m padding, 15°, 2 and
+1 respectively. All three hard slope/grade checks use that same 15° setting unless
+changed through the plotting option. This tool does not modify planner defaults.
+
+Open the saved PNG normally or send it to a teammate; no DEM is needed to view it.
+A same-name JSON report records source and planner output. Exit code 0 means a
+route was drawn; 2 means a legitimate unsuccessful route result was plotted (or
+an argparse usage error, which prints no success message). DEM errors propagate
+without synthetic fallback. Keep generated PNG/JSON outputs out of Git unless
+specifically choosing them as documented review artifacts.
+
+Look for a sensible detour around steep areas, correct endpoints, and elevations
+consistent with the map. The hatched map shows node terrain-slope exclusions,
+not a complete directional-edge traversability map. Visual inspection supplements
+tests; it does not establish continuous traversability or real driving safety.
 
 ## References
 
