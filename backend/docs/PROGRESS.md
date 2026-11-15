@@ -4,6 +4,12 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **`POST /recommended-sites` mock (2026-11-15, branch `make-mock-path`).** Window + constraints + `limit`
+  → catalogue sites ranked like `/landing-windows`. Metrics are a geometry heuristic
+  (`services/recommendation.py`), `fit` is real. Next: rank real `SiteSeries.window_metrics()`.
+- **`POST /route` mock (2026-11-15, branch `make-mock-path`).** Ordered waypoints (SiteRef) →
+  densified path every `step_m` m, legs, total distance. `method: "straight_line"` = great-circle
+  segments, terrain ignored. Logic in `services/route.py`; contract in API.md section 5.
 - **Earth eclipse windows (2026-11-15).** `timeline.eclipse` / `windows.eclipse`: Sun–Earth
   separation < 0.267° + 0.95° and Earth visible. Live Horizons shows the 2027-08-17 penumbral
   lunar eclipse (06:00–10:00Z) at near-side sites. Hourly sampling can miss very short events.
@@ -48,7 +54,7 @@ work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 **The source of truth is [API.md](API.md)** (v0, agreed with the frontend team on 2026-11-14).
 Endpoints: `GET /sites` (catalogue, plus single-site `analysis` over the whole window),
 `POST /compare` (per-site `window_metrics` for every `candidate_step_hours` landing, plus
-`timeline`), `POST /landing-windows`, `GET /health`.
+`timeline`), `POST /landing-windows`, `GET /health`, `POST /route` (mock, straight lines), `POST /recommended-sites` (mock heuristic).
 
 `docs/API.md` was replaced with the team's new contract on 2026-11-14 (it had been my outdated v0
 draft). Error policy (user decision): **only the HTTP status codes matter**. 400 = malformed JSON,
