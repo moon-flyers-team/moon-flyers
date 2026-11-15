@@ -4,6 +4,11 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Headroom ranking for `/landing-windows` (2026-11-15).** Per-constraint
+  margin in [-1, 1] scaled by the room on each side of the threshold; sort by fit → min margin →
+  mean margin → power before comms → earliest. No new response field: `rank` carries the order
+  (user decision). Logic in `services/ranking.py` (`margins`, `sort_key`); API.md section 3.
+  Tell the frontend: the order changed. `/recommended-sites` keeps its own logic (separate work).
 - **`POST /recommended-sites` mock (2026-11-15, branch `make-mock-path`).** Window + constraints + `limit`
   → catalogue sites ranked like `/landing-windows`. Metrics are a geometry heuristic
   (`services/recommendation.py`), `fit` is real. Next: rank real `SiteSeries.window_metrics()`.
@@ -69,6 +74,12 @@ To raise with the frontend team:
 - With LOLA terrain mounted, horizon elevations reach about -3 to +24 deg; the mock hills
   stayed within 0-1.5 deg. Check the chart's y-axis range, clearance labels and any
   hard-coded 0 deg assumptions against real profiles.
+
+Decisions:
+- 2026-11-15: rank by the tightest margin, not raw sunlight %. Reason: the old order ignored
+  darkness/blackout, let Earth % only break exact ties, and preferred fragile landings (lots of
+  sun, barely enough Earth). Ties go to power: losing power can end a mission, losing comms only
+  delays data. No user-facing weights until someone asks (`priority` field is the planned shape).
 
 Implementation choices where API.md is silent:
 - `GET /sites` analysis: `timeseries`/`windows` span window_start → window_end + days.

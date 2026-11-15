@@ -217,7 +217,13 @@ Response:
 ```json
 [{ "rank": 1, "landing_utc": "2027-08-05T12:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }]
 ```
-- Results are sorted by fit first, then sunlight %, then Earth contact %.
+- Ranked by **headroom**: how far the tightest constraint is from failing. Each of the four
+  constraints (sun %, longest darkness, Earth %, longest blackout) gets a margin in [-1, 1]:
+  0 = exactly on the limit, +1 = best possible value, -1 = worst possible value, scaled by the
+  room on that side of the threshold (e.g. sun 70 % vs min 60 %: (70-60)/(100-60) = 0.25;
+  sun 30 %: (30-60)/60 = -0.5; darkness uses `max_darkness_hours` and the stay length).
+- Sort order: fit (`both_met` first, then `power_short`/`comms_short`, then `neither_met`) →
+  highest minimum margin → highest mean margin → power margin before comms margin → earliest.
 
 ## 4. `GET /health`
 Returns `{"status": "ok"}`.
@@ -256,7 +262,7 @@ Response:
   "recommendations": [{ "rank": 1, "site": { "id": "malapert_massif", "...": "..." },
                         "landing_utc": "2027-08-01T00:00:00Z", "metrics": { "...": "..." }, "fit": { "...": "..." } }] }
 ```
-- Sorted by fit first, then sunlight %, then Earth contact % (same as `/landing-windows`).
+- Sorted by fit first, then sunlight %, then Earth contact %.
 - **Mock:** metrics are estimated from latitude/longitude (polar = more sun, near side = more Earth,
   far side = none), for a landing at `window_start_utc`. No ephemeris, no terrain. `fit` uses the
   real constraint check. A real version will keep this shape and change `method`.
