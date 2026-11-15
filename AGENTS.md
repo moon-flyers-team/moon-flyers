@@ -24,6 +24,9 @@ when agreed behavior changes.
   locally; the horizon axis stays fixed across the full loaded site batch.
 - API loading/error messages and retry controls are implemented. The offline banner occupies
   its own layout row above the dashboard and must never cover content.
+- Profiles shows an accessible loading popup while comparison or site-analysis batches are
+  pending, including retries. It clears after both requests settle so errors/retry controls
+  remain accessible. The overlay is confined to Profiles; tabs and settings remain available.
 - FastAPI defaults to live JPL Horizons ephemerides; `MOON_FLYERS_EPHEMERIS=mock`
   selects synthetic positions. Terrain independently uses synthetic hills without a mounted
   DEM, a LOLA skyline with one, or flat fallback for uncovered sites/runtime DEM errors.
@@ -166,6 +169,10 @@ Keep **mission scoring duration** separate from **visualization coverage**:
    timestamp spellings. Missing samples show “Not sampled”, never first-candidate evidence.
    The native Landing time (UTC) field supports keyboard editing on the 6-hour grid and
    changes selection locally without fetching; retain the custom timeline as another input.
+   `SurfaceStayWindow` in TimelineBars shades landing through `days_on_surface` on the
+   slider and every site's timeline. It follows selection locally and clips to the visible
+   range; a dashed right edge indicates the stay continues beyond view. Keep its duration
+   tied to applied scoring constraints, not the lunar-day chart coverage.
 
 Use each body's own azimuth/elevation and the current sample's `sun_visible`/`earth_visible`
 flags. Do not label peak elevations as current positions or infer visibility from elevation

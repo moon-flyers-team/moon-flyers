@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { TimeWindow } from './types';
-import { formatUtc } from './time';
+import { DAY_MS, formatUtc } from './time';
 
 const STEP_MS = 6 * 3_600_000;
 
@@ -11,6 +11,7 @@ interface Props {
   missionStart: string;
   missionEnd: string;
   landingUtc?: string;
+  daysOnSurface?: number;
   onChange?: (iso: string) => void;
 }
 export function normalise(windows: TimeWindow[], missionStart: string, missionEnd: string) {
@@ -24,7 +25,24 @@ export function normalise(windows: TimeWindow[], missionStart: string, missionEn
     return [{ left: (left - start) / (end - start), width: (right - left) / (end - start), window }];
   });
 }
-export function TimelineBars({ powerWindows, commsWindows, eclipseWindows, missionStart, missionEnd, landingUtc, onChange }: Props) {
+// Shared by the slider and site rows so both show the same scoring interval.
+export function SurfaceStayWindow({ landingUtc, daysOnSurface, missionStart, missionEnd }: {
+  landingUtc?: string; daysOnSurface?: number; missionStart: string; missionEnd: string;
+}) {
+  const start = Date.parse(landingUtc ?? '');
+  const end = start + (daysOnSurface ?? 0) * DAY_MS;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || Math.abs(end) > 8.64e15) return null;
+  const startUtc = new Date(start).toISOString(), endUtc = new Date(end).toISOString();
+  const segment = normalise([{ start_utc: startUtc, end_utc: endUtc }], missionStart, missionEnd)[0];
+  if (!segment) return null;
+  const continues = end > Date.parse(missionEnd);
+  const label = `Time on surface: ${daysOnSurface} ${daysOnSurface === 1 ? 'day' : 'days'} · ${formatUtc(startUtc)} – ${formatUtc(endUtc)}${continues ? ' (continues beyond view)' : ''}`;
+  return <div className={`surface-stay-window${continues ? ' surface-stay-window--continues' : ''}`}
+    role="img" aria-label={label} title={label}
+    style={{ left: `${segment.left * 100}%`, width: `${segment.width * 100}%` }} />;
+}
+
+export function TimelineBars({ powerWindows, commsWindows, eclipseWindows, missionStart, missionEnd, landingUtc, daysOnSurface, onChange }: Props) {
   const startMs = Date.parse(missionStart);
   const endMs   = Date.parse(missionEnd);
   const tracksRef = useRef<HTMLDivElement>(null);
@@ -88,6 +106,7 @@ export function TimelineBars({ powerWindows, commsWindows, eclipseWindows, missi
                 style={{ left: `${seg.left * 100}%`, width: `${seg.width * 100}%` }} />
             ))}
           </div>
+          <SurfaceStayWindow landingUtc={landingUtc} daysOnSurface={daysOnSurface} missionStart={missionStart} missionEnd={missionEnd} />
           {markerPct !== null && <div className={`tl-marker${bothVisible ? ' tl-marker--both' : ''}`} style={{ left: `${markerPct}%` }} />}
         </div>
       </div>

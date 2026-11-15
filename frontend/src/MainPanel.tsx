@@ -88,6 +88,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
       return { route, metrics: new Map(recommendations.map(r => [r.site.id, r])) };
     }, [routeOpen, selectedSite, validation, landingUtc, mission.daysOnSurface, constraints]);
   const tour = useRequest(routeRequest);
+  const profilesLoading = comparison.loading || horizons.loading;
 
   return (
     <main className="main">
@@ -109,6 +110,13 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
           }}>{name === 'profiles' ? 'Profiles' : 'Map'}</button>)}
       </div>
       <div className="main-body profiles-body" id="panel-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden={tab !== 'profiles'}>
+        {tab === 'profiles' && profilesLoading && <div className="profiles-loading-overlay">
+          <div className="profiles-loading-popup" role="status" aria-live="polite" aria-atomic="true">
+            <span className="profiles-loading-spinner" aria-hidden="true" />
+            <strong>Loading site profiles…</strong>
+            <p>Fetching comparison and visibility data. This can take 10–30 seconds.</p>
+          </div>
+        </div>}
         {validation && !dateError && <div className="request-error" role="alert">{validation}</div>}
         <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} landingTime={landingUtc}

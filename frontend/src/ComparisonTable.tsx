@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { FitBadge } from './FitBadge';
-import { TimelineBars } from './TimelineBars';
+import { SurfaceStayWindow, TimelineBars } from './TimelineBars';
 import type { LandingSite, ComparisonResult, Constraints, Metrics, WindowMetricsEntry } from './types';
 
 const THREE_MONTHS_MS = 91 * 86_400_000;
@@ -167,6 +167,8 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             aria-disabled={!!disabled}
             onMouseDown={e => { if (!disabled) { sliderDragging.current = true; seekSlider(e.clientX); } }}
           >
+            {!disabled && <SurfaceStayWindow landingUtc={landingTime} daysOnSurface={c.days_on_surface}
+              missionStart={viewStart} missionEnd={viewEnd} />}
             {thumbPct !== null && <div className="ts-thumb" style={{ left: `${thumbPct}%` }} />}
           </div>
           <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoNext} onClick={goNext}>▶</button>
@@ -197,6 +199,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
           <th>Terrain<span className="th-sub">Slope max {c.max_slope_deg}°</span></th>
           <th className="ct-slider-cell" ref={columnRef}>Timeline
             <span className="th-sub">Sun · Earth · eclipse windows</span>
+            <span className="th-sub"><span className="surface-stay-key" />Shaded: {c.days_on_surface} {c.days_on_surface === 1 ? 'day' : 'days'} on surface</span>
           </th>
         </tr>
         </thead>
@@ -219,7 +222,8 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
               <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
               <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
                 eclipseWindows={result?.timeline.eclipse}
-                missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={disabled ? undefined : onTimeSeek} />
+                missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime}
+                daysOnSurface={disabled ? undefined : c.days_on_surface} onChange={disabled ? undefined : onTimeSeek} />
             </tr>;
           })}
         </tbody>

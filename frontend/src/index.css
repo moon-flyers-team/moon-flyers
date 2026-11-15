@@ -315,8 +315,40 @@ body {
   gap: 10px;
 }
 .main-body > * { flex-shrink: 0; }
-.profiles-body { overflow: hidden; padding-bottom: 0; }
+.profiles-body { position: relative; overflow: hidden; padding-bottom: 0; }
 .profiles-body > .ct-wrap { flex: 1 1 auto; min-height: 0; }
+.profiles-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 12, 22, 0.65);
+}
+.profiles-loading-popup {
+  width: min(360px, 100%);
+  padding: 24px;
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  font-size: 14px;
+}
+.profiles-loading-popup p { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.profiles-loading-spinner {
+  display: block;
+  width: 26px;
+  height: 26px;
+  margin: 0 auto 14px;
+  border: 3px solid var(--border-hi);
+  border-top-color: var(--comms);
+  border-radius: 50%;
+  animation: profiles-loading-spin 0.8s linear infinite;
+}
+@keyframes profiles-loading-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .profiles-loading-spinner { animation: none; } }
 
 /* ── App states ─────────────────────────────────────── */
 .mock-banner, .api-banner {
@@ -457,6 +489,27 @@ body {
   box-shadow: 0 0 6px 1px rgba(210, 210, 255, 0.85);
   transform: translate(-50%, -50%);
   pointer-events: none;
+  border-radius: 1px;
+}
+
+.surface-stay-window {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  background: rgba(170, 170, 255, 0.18);
+  border: 1px solid rgba(190, 190, 255, 0.8);
+  border-radius: 2px;
+  pointer-events: none;
+}
+.surface-stay-window--continues { border-right-style: dashed; }
+.ts-custom-track > .surface-stay-window { top: 3px; bottom: 3px; }
+.surface-stay-key {
+  display: inline-block;
+  width: 10px;
+  height: 7px;
+  margin-right: 4px;
+  background: rgba(170, 170, 255, 0.18);
+  border: 1px solid rgba(190, 190, 255, 0.8);
   border-radius: 1px;
 }
 

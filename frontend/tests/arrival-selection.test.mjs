@@ -53,3 +53,22 @@ test('arrival has a labeled native UTC control, 6-hour steps, range bounds and d
   assert.match(html, /max="2027-08-10T00:00"/);
   assert.match(render({ disabled: true }), /type="datetime-local"[^>]*disabled=""/);
 });
+
+test('surface stay follows arrival and applied duration on both slider and site timeline', () => {
+  const windows = overrides => [...render(overrides).matchAll(/class="surface-stay-window[^"]*"[^>]*style="([^"]+)"/g)].map(m => m[1]);
+  // Nine-day view: a one-day stay starts one day in, then moves two days in.
+  const constraints = { ...props.constraints, days_on_surface: 1 };
+  const first = windows({ constraints, landingTime: '2027-08-02T00:00:00Z' });
+  const moved = windows({ constraints, landingTime: '2027-08-03T00:00:00Z' });
+  assert.equal(first.length, 2);
+  assert.deepEqual(first, ['left:11.11111111111111%;width:11.11111111111111%', 'left:11.11111111111111%;width:11.11111111111111%']);
+  assert.ok(moved.every(style => style.startsWith('left:22.22222222222222%')));
+  assert.match(render({ constraints }), /Time on surface: 1 day/);
+  const extended = render({ landingTime: '2027-08-09T00:00:00Z' });
+  assert.match(extended, /surface-stay-window--continues/);
+  assert.match(extended, /continues beyond view/);
+  assert.ok(windows({ landingTime: '2027-08-09T00:00:00Z' }).every(style => style.endsWith('width:11.11111111111111%')));
+  assert.equal(windows({ disabled: true }).length, 0);
+  assert.equal(windows({ sliderEnd: props.missionStart }).length, 0);
+  assert.equal(windows({ landingTime: 'invalid' }).length, 0);
+});
