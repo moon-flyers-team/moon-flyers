@@ -1,10 +1,34 @@
 # Route Planner overhaul: findings and plan
 
-Status: workstreams A, B and C are implemented; only the optional raster/hazard layer and keyboard hover preview remain open. Measurements below were taken on the production LOLA
+Status: workstreams A (backend) and the first part of B (visibility, snapping) are in. Measurements below were taken on the production LOLA
 dataset (`LOLA_DEM_DIR=/data/lola`, 8 polar products) with the current `main` planner, using a
 read-only throwaway container so production was not touched. Re-run a probe before claiming a
 number has not moved.
 
+## Reverted 2026-11-15 (read this before re-adding B2-B8/C1)
+
+Commits `9ec8f95` (route settings, path elevation column, elevation profile, stale-route state,
+export marking, nginx timeout) and `39e0168` (draft-authoritative stale rendering) were reverted
+after user testing: the panel got worse, not better.
+
+- The stale-route work rendered the previous response wholesale. A `RouteResponse` carries its own
+  `waypoints`, so after the first calculation a map click updated the draft while the map and table
+  kept the old stop list: clicks looked ignored until Recalculate. The follow-up fix split geometry
+  from stops, but the feature had already cost more than it returned.
+- Auto-recalculation defaulting to on re-planned every leg after each edit (~1 s per leg at 60 m),
+  which made the panel feel saturated rather than responsive.
+- Path-sampled stop deltas and the profile were correct but changed numbers the user had learned to
+  read, without a clear win in the reported problems.
+
+Kept from the same work: hover preview and snapping (`4518c2f`), per-stop chips with the blocked
+banner, per-leg limits, `stops[]`/`summary`, `POST /route/stops` and the 20° traversal default.
+
+If any of it comes back: markers and table rows must always come from the draft, geometry may be
+stale but must be visibly marked, auto-recalculation stays opt-in, and the elevation column only
+switches to `path[].elevation_m` together with the profile so the two agree.
+
+`frontend/nginx.conf` is back to the 60 s default read timeout, so a very long route (roughly 50+
+legs) can still end in a 504. That timeout is worth re-adding on its own, without the rest.
 ## What the feature does today
 
 `POST /route` with `planner: "terrain"` plans one A* search per leg over the mounted LOLA DEM at
@@ -90,36 +114,27 @@ Ordered by user impact. Each item is a reviewable increment with its own tests.
   snapped position, a dotted connector from the cursor, and a cursor label stating the reason
   ("Steep 21° (limit 20°) · moves 120 m"). Enter/click uses the previewed position. Pointer moves
   are coalesced to one React update per animation frame so a long path does not jank.
-- Fixed regression: rendering the stale response wholesale froze the stop list and made clicks look
-  ignored, and the elevation profile rescanned the whole path on every hover frame. Both are
-  addressed (draft-authoritative display, memoised profile series).
 - Open: the hover probe is one small `/route/stops` request per 30 m bucket rather than a local
   slope raster; a bundled slope grid would remove the latency and the server round trip if hover
   traffic ever matters. Keyboard picking (Enter at the map centre) has no preview yet.
-- B2. Done: a failed leg shows `no route` plus its reason as text under the distance, and a leg
-  planned with a wider corridor says which one (`corridor 5 km`).
-- B3. Done: elevation profile under the map, planned terrain in cyan and straight connectors
-  dashed amber, with the elevation range in the caption.
-- B4. Done: the elevation column reads `path[].elevation_m` for terrain routes (connectors show a
-  dash) and only falls back to the bundled grid for `straight_line`, labelled `coarse grid`.
-- B5. Done: the last route stays on screen with a "stops or limits changed" banner, debounced
-  auto-recalculation (on by default, off above 12 stops), and the Calculate button becomes
-  Recalculate. The stale result contributes geometry only (`routeDisplay.displayRoute`):
-  markers, table rows and order controls always come from the draft, so a click is visible
-  immediately; per-row numbers are dashed out while stale because the old legs no longer match
-  the new stop order. Auto-recalculation never retries a failing request.
-- B6. Done: slope limit (15/20/25°), cell size (40/60/100 m), corridor (1/5/10 km) and a smoother
-  preset, sent in `rover` and reused by the stop preflight and the hover probe.
-- B7. Done: the failed-leg banner offers "Widen corridor" and "Allow 25°", then recalculate; per-stop
-  snapping and removal already exist.
-- B8. Done: legend gains planned-leg and straight-connector entries, and both exports mark
-  connectors (CSV `kind` column, KML separate style and placemark names) so an import cannot
-  mistake a connector for driven terrain.
+- B2. Per-leg result in the table: distance, `no route` with the reason in text (not only a
+  `title`), and the corridor width actually used.
+- B3. Elevation profile of the returned path, with placeholder segments marked, replacing the
+  hidden-accuracy grid deltas in the elevation column (B4).
+- B4. Elevation change per stop from `path[].elevation_m`, labelled "terrain-sampled"; fall back
+  to the bundled grid only for `straight_line`.
+- B5. Visible stale state plus opt-in auto-recalculate (debounced), disabled above a leg count
+  where the 60 s budget would be at risk.
+- B6. Route settings in the panel: slope limit (15/20/25°), smoothness (`slope_weight`,
+  `climb_weight`), and an advanced cell-size field, sent in `rover`.
+- B7. Failure recovery actions: widen corridor, raise slope limit, snap stop, remove stop.
+- B8. Legend and rendering distinguish planned terrain legs from straight placeholders; totals
+  exclude placeholders (already true server-side).
 
 ### C. Delivery and docs
 
-- C1. Done: `proxy_read_timeout`/`proxy_send_timeout` 300 s for `/api/` in `frontend/nginx.conf`, and
-  the panel switches to "Still planning — long routes can take a minute." after 5 s.
+- C1. `proxy_read_timeout 300` for `/api/` in `frontend/nginx.conf` plus a client-side "still
+  planning" state after 5 s.
 - C2. Update root `API.md` (statuses, `stops`, `summary`, preflight endpoint, placeholder
   semantics), `AGENTS.md` and `backend/docs/PROGRESS.md`.
 - C3. Keep `backend/tests/test_route.py` and `frontend/tests/*.test.mjs` in step with every

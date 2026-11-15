@@ -8,14 +8,12 @@ import { visibleTiles } from './map/routeTiles';
 import { api, siteReference } from './api';
 import { useRequest } from './useRequest';
 import { useHoverCheck } from './useHoverCheck';
-import { hoverFeedback, localSlopeDeg, previewCoordinates } from './map/routePreview';
-import { RouteProfile, stopElevationChange } from './RouteProfile';
-import { displayRoute } from './routeDisplay';
+import { hoverFeedback, previewCoordinates } from './map/routePreview';
 import { elevationChange, loadElevations } from './map/elevations';
 import type { ElevationGrid } from './map/elevations';
 import { formatUtc } from './time';
-import type { LandingSite, PoiCategory, PointOfInterest, RecommendedSitesResponse, RouteParams,
-  RouteResponse, StopCheck } from './types';
+import type { LandingSite, PoiCategory, PointOfInterest, RecommendedSitesResponse, RouteResponse,
+  StopCheck } from './types';
 
 const MAX_ZOOM = 600;
 // FastAPI accepts 100 entries, including the repeated landing at start and end.
@@ -37,8 +35,7 @@ const BASE_TILES = Array.from({ length: 36 }, (_, i) => {
 const WAYPOINT_COLOR = '#ddddf8';
 const LANDING_COLOR = '#00e676';
 const POI_COLOR = '#ffb74d';
-const LEGEND: [string, string][] = [[LANDING_COLOR, 'Landing site'], [WAYPOINT_COLOR, 'Waypoints'],
-  [POI_COLOR, 'Recommended sites'], ['#ffffff', 'Planned leg'], ['#ffbc78', 'Straight connector (not a driving route)']];
+const LEGEND: [string, string][] = [[LANDING_COLOR, 'Landing site'], [WAYPOINT_COLOR, 'Waypoints'], [POI_COLOR, 'Recommended sites']];
 const DRAG_TYPE = 'application/x-moon-waypoint';
 const CATEGORY_LABEL: Record<PoiCategory, string> = {
   lander: 'Lander', rover: 'Rover', impact: 'Impact site', natural_feature: 'Natural feature',
@@ -129,26 +126,8 @@ function download(content: string, filename: string, mime: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function pathRuns(r: RouteResponse) {
-  const runs: { placeholder: boolean; points: RouteResponse['path'] }[] = [];
-  for (const point of r.path) {
-    const last = runs[runs.length - 1];
-    if (last && last.placeholder === !!point.placeholder) last.points.push(point);
-    else runs.push({ placeholder: !!point.placeholder, points: [point] });
-  }
-  return runs;
-}
-
-// Exports keep the planned legs and the straight connectors apart, so a connector is never
-// imported as if it were terrain the rover drove.
 function toKml(r: RouteResponse, name: string) {
-  const track = (points: RouteResponse['path']) => points
-    .map(p => `${p.longitude_deg},${p.latitude_deg},0`).join(' ');
-  const lines = pathRuns(r).map((run, i) => `
-    <Placemark><name>${run.placeholder ? 'Straight connector (not a driving route)' : 'Planned terrain leg'} ${i + 1}</name>
-      <styleUrl>#${run.placeholder ? 'connector' : 'track'}</styleUrl>
-      <LineString><tessellate>1</tessellate><coordinates>${track(run.points)}</coordinates></LineString>
-    </Placemark>`).join('');
+  const track = r.path.map(p => `${p.longitude_deg},${p.latitude_deg},0`).join(' ');
   const marks = r.waypoints.map((w, i) => `
     <Placemark><name>${i}: ${w.name}</name>
       <Point><coordinates>${w.longitude_deg},${w.latitude_deg},0</coordinates></Point>
@@ -157,19 +136,19 @@ function toKml(r: RouteResponse, name: string) {
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>${name} tourist route</name>
-    <description>Method: ${r.method} | ${km(r.total_distance_m)} planned | ${r.failed_legs?.length ?? 0} legs without a terrain route</description>
+    <description>Method: ${r.method} | ${km(r.total_distance_m)}</description>
     <Style id="track"><LineStyle><color>ff76e600</color><width>3</width></LineStyle></Style>
-    <Style id="connector"><LineStyle><color>ff78bcff</color><width>2</width></LineStyle></Style>${lines}${marks}
+    <Placemark><name>Route track</name><styleUrl>#track</styleUrl>
+      <LineString><tessellate>1</tessellate><coordinates>${track}</coordinates></LineString>
+    </Placemark>${marks}
   </Document>
 </kml>`;
 }
 
 function toCsv(r: RouteResponse) {
   const rows = r.path.map(p => [p.latitude_deg.toFixed(6), p.longitude_deg.toFixed(6),
-    p.distance_m.toFixed(1), p.elevation_m == null ? '' : p.elevation_m.toFixed(1),
-    p.waypoint_index ?? '', p.placeholder ? 'connector' : 'planned'].join(','));
-  const header = 'latitude_deg,longitude_deg,distance_m,elevation_m,waypoint_index,kind';
-  return [header, ...rows].join(String.fromCharCode(13) + String.fromCharCode(10));
+    p.distance_m.toFixed(1), p.waypoint_index ?? ''].join(','));
+  return ['latitude_deg,longitude_deg,distance_m,waypoint_index', ...rows].join('\r\n');
 }
 
 interface Props {
@@ -192,84 +171,37 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
   const siteName = landingSite.name;
   const slug = siteName.replace(/\s+/g, '_');
   const [waypoints, setWaypoints] = useState<LandingSite[]>([]);
-  // Routing limits are the user's choice; the panel passes them to the route, the stop
-  // preflight and the hover probe so all three describe the same terrain.
-  const [settings, setSettings] = useState({ maxSlope: 20, cellSize: 60, corridorKm: 1, smoother: false });
-  const rover = useMemo<NonNullable<RouteParams['rover']>>(() => ({
-    max_slope_deg: settings.maxSlope, cell_size_m: settings.cellSize,
-    padding_m: settings.corridorKm * 1000, max_region_radius_m: 50_000,
-    ...(settings.smoother ? { slope_weight: 3, climb_weight: 2 } : {}),
-  }), [settings]);
-  const routeKey = useMemo(() => JSON.stringify([rover, waypoints.map(w => [w.name, w.latitude_deg, w.longitude_deg])]),
-    [rover, waypoints]);
-  // Draft markers are preview-only: no path or distances are invented before the response.
-  const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
-    waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite],
-    path: [], legs: [], total_distance_m: 0,
-  }), [landingSite, waypoints]);
-  const [submitted, setSubmitted] = useState<{ waypoints: LandingSite[]; rover: typeof rover } | null>(null);
-  const [lastRoute, setLastRoute] = useState<{ route: RouteResponse; key: string } | null>(null);
-  // Recalculation is on by default so added stops refresh the geometry without a manual step.
-  const [autoRecalc, setAutoRecalc] = useState(true);
+  const [submitted, setSubmitted] = useState<LandingSite[] | null>(null);
   const [announcement, setAnnouncement] = useState('');
   // Map picks may be moved onto passable terrain; remember which ones moved and by how much.
   const pickedIds = useRef(new Set<string>());
   const [snapped, setSnapped] = useState<Record<string, { offset_m: number; terrain_slope_deg: number }>>({});
-  const request = useMemo(() => !submitted || submitted.waypoints !== waypoints ? null
+  const request = useMemo(() => submitted !== waypoints ? null
     : (signal: AbortSignal) => api.getRoute({
       waypoints: [siteReference(landingSite), ...waypoints.map(siteReference), siteReference(landingSite)],
-      rover: submitted.rover,
     }, signal), [submitted, waypoints, landingSite]);
   const result = useRequest(request, 0);
   const route = result.data;
   const loading = result.loading;
-  // Keep the last result on screen when the draft changes, but say plainly that it is old.
-  useEffect(() => {
-    if (!route || !submitted) return;
-    setLastRoute({ route, key: JSON.stringify([submitted.rover,
-      submitted.waypoints.map(w => [w.name, w.latitude_deg, w.longitude_deg])]) });
-  }, [route, submitted]);
-  const stale = !!lastRoute && lastRoute.key !== routeKey;
-  const shown = route ?? (stale ? lastRoute.route : undefined);
-  // The draft stop list is always rendered; a stale result only contributes its geometry.
-  const viewRoute = useMemo(() => displayRoute(stale ? lastRoute.route : null, preview), [stale, lastRoute, preview]);
-  const staleRoute = stale && !loading;
-  const autoLimit = 12;
-  // Opt-in auto-recalculation, debounced, and only while the leg count stays cheap.
-  useEffect(() => {
-    // Never spin on a failing request: the banner stays until the user changes something.
-    if (!autoRecalc || !stale || loading || !waypoints.length || result.error) return;
-    if (waypoints.length + 1 > autoLimit) return;
-    const timer = window.setTimeout(() => setSubmitted({ waypoints, rover }), 700);
-    return () => window.clearTimeout(timer);
-  }, [autoRecalc, stale, loading, waypoints, rover, result.error]);
-  // A long route can outlast the gateway; say so instead of looking frozen.
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    if (!loading) { setSlow(false); return; }
-    const timer = window.setTimeout(() => setSlow(true), 5_000);
-    return () => window.clearTimeout(timer);
-  }, [loading]);
-  function calculate() {
-    setAnnouncement('');
-    setSubmitted({ waypoints, rover });
-  }
   // Preflight the stops so an impractical location is visible before a route is calculated.
   const stopRequest = useMemo(() => !waypoints.length ? null
     : (signal: AbortSignal) => api.getRouteStops({
-      waypoints: [siteReference(landingSite), ...waypoints.map(siteReference)], rover,
-    }, signal), [landingSite, waypoints, rover]);
+      waypoints: [siteReference(landingSite), ...waypoints.map(siteReference)],
+    }, signal), [landingSite, waypoints]);
   const stopChecks = useRequest(stopRequest, 350);
   const checksByIndex = useMemo(() => {
     const map = new Map<number, StopCheck>();
     // The response is authoritative once calculated; preflight data covers the draft.
-    for (const check of stopChecks.data?.stops ?? shown?.stops ?? []) map.set(check.index, check);
+    for (const check of route?.stops ?? stopChecks.data?.stops ?? []) map.set(check.index, check);
     return map;
-  }, [shown, stopChecks.data]);
+  }, [route, stopChecks.data]);
   const blockedStops = useMemo(
     () => [...checksByIndex.values()].filter(check => !check.passable),
     [checksByIndex]);
-
+  // Draft markers are preview-only: no path or distances are invented before the response.
+  const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
+    waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite], path: [], legs: [], total_distance_m: 0,
+  }), [landingSite, waypoints]);
   const addedPoiIds = useMemo(() => new Set(waypoints.map(w => w.id)), [waypoints]);
   // A map pick that lands on impractical terrain is moved to the nearest workable cell, so the
   // first calculation is not spent explaining a stop the user did not mean to place. Published
@@ -350,30 +282,23 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
           <span className="route-kicker">Tourist route</span>
           <strong>{siteName}</strong>
           <span className="ct-info map-info-tip" tabIndex={0} role="img"
-            aria-label={`Routing limits are yours to set: a hard slope cut-off, a cell size and a detour corridor. Stops are preflighted on the same terrain, impractical locations are flagged, and a map pick is previewed on hover. Click the map to add up to ${MAX_WAYPOINTS} waypoints, or add recommended sites. Drag stops to reorder, or use up/down arrows. Right-drag to pan; wheel to zoom.`}
+            aria-label={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent. Click the map to add up to ${MAX_WAYPOINTS} waypoints, or add recommended sites from the list or the amber map markers. Drag stops to reorder, or use up/down arrows. Right-drag to pan; wheel to zoom.`}
             data-tip={`Elevation change: approximate endpoint difference from LOLA (~792 m grid), not cumulative ascent.\nClick the map to add up to ${MAX_WAYPOINTS} waypoints, or add recommended sites (amber markers).\nDrag stops to reorder, or use ↑/↓. Right-drag to pan; wheel to zoom.`}>i</span>
           <span className="route-sub">Landing {formatUtc(landingUtc)}</span>
         </div>
         <div className="route-stats">
-          {shown && <>
-            <span className="route-stat">{km(shown.total_distance_m)}</span>
-            <span className="route-stat">{shown.summary && shown.summary.elevation_gain_m > 0
-              ? `+${Math.round(shown.summary.elevation_gain_m)} m up` : ''}</span>
-            <span className="route-stat">{shown.summary && shown.summary.elevation_loss_m > 0
-              ? `-${Math.round(shown.summary.elevation_loss_m)} m down` : ''}</span>
-            <span className="route-stat">{shown.summary
-              ? `${shown.summary.max_slope_deg}° limit · ${shown.summary.cell_size_m} m cells`
-              : ''}</span>
-            <span className="route-stat">{shown.waypoints.length - 2} stop{shown.waypoints.length !== 3 ? 's' : ''}</span>
+          {route && <>
+            <span className="route-stat">{km(route.total_distance_m)}</span>
+            <span className="route-stat">{route.waypoints.length - 2} stop{route.waypoints.length !== 3 ? 's' : ''}</span>
           </>}
         </div>
         <div className="route-actions">
           <button className="ct-btn route-primary-btn route-calc-btn" disabled={!waypoints.length || loading}
-            onClick={calculate}>{shown ? 'Recalculate' : 'Calculate route'}</button>
+            onClick={() => { setAnnouncement(''); if (submitted === waypoints) result.retry(); else setSubmitted(waypoints); }}>Calculate route</button>
           <button className="ct-btn route-primary-btn" disabled={!waypoints.length} onClick={() => setWaypoints([])}>Clear waypoints</button>
-          {shown && <>
-            <button className="ct-btn" onClick={() => download(toKml(shown, siteName), `${slug}_route.kml`, 'application/vnd.google-earth.kml+xml')}>KML</button>
-            <button className="ct-btn" onClick={() => download(toCsv(shown), `${slug}_route.csv`, 'text/csv')}>CSV</button>
+          {route && <>
+            <button className="ct-btn" onClick={() => download(toKml(route, siteName), `${slug}_route.kml`, 'application/vnd.google-earth.kml+xml')}>KML</button>
+            <button className="ct-btn" onClick={() => download(toCsv(route), `${slug}_route.csv`, 'text/csv')}>CSV</button>
           </>}
           <button className="ct-btn route-close" aria-label="Close tourist route" onClick={onClose}>✕</button>
         </div>
@@ -393,40 +318,8 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
         {nearby.loading && <span role="status">Searching catalogue…</span>}
         {nearby.error && <span className="request-error" role="alert">POI search failed: {nearby.error}</span>}
         {nearby.data && <span>{nearby.data.recommendations.length} nearby POIs: add them from the list or the amber map markers.</span>}
-        <div className="route-settings">
-          <label>Slope limit
-            <select value={settings.maxSlope} data-testid="route-max-slope"
-              onChange={event => setSettings(previous => ({ ...previous, maxSlope: Number(event.target.value) }))}>
-              {[15, 20, 25].map(value => <option key={value} value={value}>{value}°</option>)}
-            </select>
-          </label>
-          <label>Cells
-            <select value={settings.cellSize} data-testid="route-cell-size"
-              onChange={event => setSettings(previous => ({ ...previous, cellSize: Number(event.target.value) }))}>
-              {[40, 60, 100].map(value => <option key={value} value={value}>{value} m</option>)}
-            </select>
-          </label>
-          <label>Corridor
-            <select value={settings.corridorKm} data-testid="route-corridor"
-              onChange={event => setSettings(previous => ({ ...previous, corridorKm: Number(event.target.value) }))}>
-              {[1, 5, 10].map(value => <option key={value} value={value}>{value} km</option>)}
-            </select>
-          </label>
-          <label className="route-check"><input type="checkbox" checked={settings.smoother}
-            onChange={event => setSettings(previous => ({ ...previous, smoother: event.target.checked }))} />
-            Smoother (prefer gentle grades)</label>
-          <label className="route-check"><input type="checkbox" checked={autoRecalc}
-            onChange={event => setAutoRecalc(event.target.checked)} />
-            Recalculate automatically</label>
-        </div>
       </div>
-      {loading && <p className="request-status" role="status">
-        {slow ? 'Still planning — long routes can take a minute.' : 'Calculating route…'}</p>}
-      {staleRoute && <div className="request-warn" role="status">
-        Stops or limits changed. The route below is from the previous calculation.
-        {!autoRecalc && <> <button className="ct-btn" onClick={calculate}>Recalculate now</button></>}
-        {autoRecalc && waypoints.length + 1 > autoLimit && ' Automatic recalculation is off for routes this long.'}
-      </div>}
+      {loading && <p className="request-status" role="status">Calculating route…</p>}
       {stopChecks.error && <p className="request-status">Terrain check unavailable: {stopChecks.error}</p>}
       {blockedStops.length > 0 && <div className="request-error" role="alert">
         {blockedStops.length} of {checksByIndex.size} stops are not practical for this rover:{' '}
@@ -434,32 +327,22 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
           ? 'slope unknown' : `${Math.round(check.terrain_slope_deg)}°`})`).join(', ')}.
         {' '}Move a stop to a workable cell or raise the slope limit.
       </div>}
-      {shown?.failed_legs?.length ? <div className="request-error" role="status">
-        No terrain route for {shown.failed_legs.length} of {shown.legs.length} leg{shown.legs.length !== 1 ? 's' : ''}
-        (dashed straight lines only connect the stops). {shown.reason}
-        <div className="route-recovery">
-          <button className="ct-btn" disabled={settings.corridorKm >= 10}
-            onClick={() => setSettings(previous => ({ ...previous, corridorKm: Math.min(10, previous.corridorKm * 5) }))}>
-            Widen corridor</button>
-          <button className="ct-btn" disabled={settings.maxSlope >= 25}
-            onClick={() => setSettings(previous => ({ ...previous, maxSlope: Math.min(25, previous.maxSlope + 5) }))}>
-            Allow {Math.min(25, settings.maxSlope + 5)}°</button>
-          <span className="route-note">then recalculate</span>
-        </div>
-      </div> : null}
+      {route?.failed_legs?.length ? <div className="request-error" role="status">
+        No terrain route for {route.failed_legs.length} of {route.legs.length} leg{route.legs.length !== 1 ? 's' : ''} (dashed
+        straight lines only connect the stops). {route.reason}</div> : null}
       {result.error && <div className="request-error" role="alert">Route request failed: {result.error}
         {' '}<button className="ct-btn" onClick={result.retry}>Retry</button></div>}
       <span className="map-announcement" role="status">{announcement}</span>
       <RouteView onWaypointRemove={index => {
         setWaypoints(previous => previous.filter((_, i) => i !== index));
         setAnnouncement(`Removed waypoint ${index + 1}. Recalculate to update the route.`);
-      }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={viewRoute} onMapPick={addWaypoint} calculated={!!shown} stale={stale}
+      }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={route ?? preview} onMapPick={addWaypoint} calculated={!!route}
         pois={(nearby.data?.recommendations ?? []).map(r => r.poi).filter(p => !addedPoiIds.has(poiWaypointId(p)))}
         onPoiPick={togglePoi}
         sidePanel={<RecommendedStops data={nearby.data} radiusKm={poiRadiusKm}
           isAdded={poi => addedPoiIds.has(poiWaypointId(poi))} onToggle={togglePoi} />}
         checks={checksByIndex} onStopSnap={snapStop}
-        snapped={snapped} rover={rover} />
+        snapped={snapped} />
     </section>
   );
 }
@@ -506,15 +389,13 @@ function RecommendedStops({ data, radiusKm, isAdded, onToggle }: {
 }
 
 function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapPick, calculated, pois,
-  onPoiPick, sidePanel, checks, onStopSnap, snapped, rover, stale }: {
+  onPoiPick, sidePanel, checks, onStopSnap, snapped }: {
   onWaypointRemove: (index: number) => void;
   route: RouteResponse; elevations?: ElevationGrid; onWaypointMove: (from: number, to: number) => void;
   onMapPick: (coordinates: Coordinates) => void; calculated: boolean;
   pois: PointOfInterest[]; onPoiPick: (poi: PointOfInterest) => void; sidePanel: ReactNode;
   checks: Map<number, StopCheck>; onStopSnap: (index: number) => void;
   snapped: Record<string, { offset_m: number; terrain_slope_deg: number }>;
-  rover: NonNullable<RouteParams['rover']>;
-  stale: boolean;
 }) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -536,10 +417,9 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
       setHover(hoverPending.current);
     });
   };
-  const hoverCheck = useHoverCheck(hover?.coordinates ?? null, rover);
+  const hoverCheck = useHoverCheck(hover?.coordinates ?? null);
   const hoverPreview = hover ? previewCoordinates(hover.coordinates, hoverCheck.check, hoverCheck.pending) : null;
-  const hoverHint = hover ? localSlopeDeg(elevations, hover.coordinates) : null;
-  const hoverTip = hoverFeedback(hoverCheck.check, hoverCheck.pending, hoverHint);
+  const hoverTip = hoverFeedback(hoverCheck.check, hoverCheck.pending);
   const px = Math.max(viewport.width, viewport.height);
 
   const colorOf = (i: number) => i === 0 ? LANDING_COLOR : WAYPOINT_COLOR;
@@ -702,9 +582,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
           {legPaths.map((d, i) => (
             <path key={i} d={d} fill="none" stroke={colorOf(route.legs[i]?.to_index ?? i + 1)}
               strokeWidth={4.5 * k} strokeLinejoin="round" strokeLinecap="round"
-              strokeOpacity={stale ? 0.35 : 1}
-              {...(route.failed_legs?.includes(i) || stale
-                ? { strokeDasharray: `${10 * k} ${8 * k}` } : {})} />
+              {...(route.failed_legs?.includes(i) ? { strokeDasharray: `${10 * k} ${8 * k}`, strokeOpacity: 0.6 } : {})} />
           ))}
           <path d={fullD} fill="none" stroke="#fff" strokeOpacity={0.85}
             strokeWidth={1.5 * k} strokeDasharray={`${2 * k} ${14 * k}`} strokeLinecap="round">
@@ -804,7 +682,6 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
       </div>
 
       <div className="route-table-wrap">
-        <RouteProfile route={route} />
         <table className="route-table">
           <thead>
             <tr>
@@ -812,16 +689,14 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
               <th className="route-th-wide">Stop</th>
               <th>Leg</th>
               <th>Total</th>
-              <th title="Terrain-sampled elevation at this stop minus the previous stop: the route's own 60 m cells, not the bundled ~792 m grid. Positive uphill, negative downhill.">Elevation change</th>
+              <th title="Elevation at this stop minus elevation at the previous stop; positive uphill, negative downhill">Elevation change</th>
               <th>Order</th>
             </tr>
           </thead>
           <tbody>
             {route.waypoints.map((wp, i) => {
               const editable = i > 0 && !(isLoop && i === route.waypoints.length - 1);
-              const sampled = route.method === 'astar_terrain';
-              const change = i > 0 ? (sampled ? stopElevationChange(route, i)
-                : elevationChange(elevations, route.waypoints[i - 1], wp)) : null;
+              const change = i > 0 ? elevationChange(elevations, route.waypoints[i - 1], wp) : null;
               const check = checks.get(i);
               const snap = snapTarget(check);
               return (
@@ -857,26 +732,11 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
                       {wp.group && <span className="route-note">{wp.group}</span>}
                     </span>
                   </td>
-                  <td className="route-num">
-                    {(() => {
-                      if (!i || !calculated || stale) return '—';
-                      const leg = route.legs[i - 1];
-                      if (!leg) return '—';
-                      const failed = route.failed_legs?.includes(i - 1);
-                      return <>
-                        {failed ? 'no route' : leg.distance_m != null ? km(leg.distance_m) : '—'}
-                        {failed && <span className="route-note" title={leg.reason ?? undefined}>
-                          {leg.reason || leg.status}</span>}
-                        {!failed && leg.padding_m != null && leg.padding_m > 1000 && (
-                          <span className="route-note">corridor {(leg.padding_m / 1000).toFixed(0)} km</span>)}
-                      </>;
-                    })()}
-                  </td>
-                  <td className="route-num">{calculated && !stale && cumulative[i] != null ? km(cumulative[i]!) : '—'}</td>
-                  <td className="route-num">
-                    {stale || change === null ? '—' : `${change > 0 ? '+' : ''}${Math.round(change)} m`}
-                    {!sampled && change !== null && <span className="route-note">coarse grid</span>}
-                  </td>
+                  <td className="route-num" title={i && route.failed_legs?.includes(i - 1) ? route.legs[i - 1]?.reason ?? undefined : undefined}>
+                    {i && calculated ? (route.failed_legs?.includes(i - 1) ? 'no route'
+                      : route.legs[i - 1]?.distance_m != null ? km(route.legs[i - 1].distance_m) : '—') : '—'}</td>
+                  <td className="route-num">{calculated && cumulative[i] != null ? km(cumulative[i]!) : '—'}</td>
+                  <td className="route-num">{change === null ? '—' : `${change > 0 ? '+' : ''}${Math.round(change)} m`}</td>
                   <td>{editable ? <div className="route-order-controls" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
                     <span className="route-drag-handle" aria-hidden="true">⠿</span>
                     <button className="ct-btn" aria-label={`Move stop ${i} up`} disabled={i === 1} onClick={() => onWaypointMove(i - 1, i - 2)}>↑</button>

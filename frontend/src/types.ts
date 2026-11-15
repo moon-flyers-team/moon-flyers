@@ -135,7 +135,6 @@ export interface RoutePoint {
   latitude_deg: number;
   longitude_deg: number;
   distance_m: number;
-  elevation_m?: number | null; // terrain planner samples; null on straight connectors
   waypoint_index: number | null;
   // True on straight filler for a terrain leg with no route: drawn to connect stops, not drivable.
   placeholder?: boolean;
