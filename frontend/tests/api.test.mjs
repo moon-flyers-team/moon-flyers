@@ -1,10 +1,13 @@
 import { test, before, after, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-let server, api, TimelineBars, normalise, HorizonChart, skyPath, ComparisonTable;
+let server, api, TimelineBars, normalise, HorizonChart, skyPath, ComparisonTable, cacheDir;
 const originalFetch = globalThis.fetch;
 const constraints = {
   days_on_surface: 14, horizon_clearance_deg: 0.3, min_sun_visible_pct: 60,
@@ -12,6 +15,7 @@ const constraints = {
   max_earth_blackout_hours: 240, max_slope_deg: 8,
 };
 const landing = '2027-08-07T06:00:00Z';
+const bounds = { window_start_utc: '2027-08-01T00:00:00Z', window_end_utc: '2027-10-31T00:00:00Z' };
 const site = { id: 'malapert_massif', name: 'Malapert massif', latitude_deg: -86, longitude_deg: 0 };
 const metrics = { sun_visible_pct: 89, longest_darkness_hours: 36, earth_visible_pct: 20, longest_earth_blackout_hours: 250, slope_deg: null };
 const fit = { status: 'comms_short', violations: ['earth_visible_pct', 'longest_earth_blackout_hours'] };
@@ -22,7 +26,8 @@ const point = (time, az = 5, elevation = 1, visible = false) => ({
 });
 
 before(async () => {
-  server = await createServer({ optimizeDeps: { noDiscovery: true, include: [] },
+  cacheDir = await mkdtemp(join(tmpdir(), 'moon-flyers-api-'));
+  server = await createServer({ cacheDir, optimizeDeps: { noDiscovery: true, include: [] },
     server: { middlewareMode: true, watch: null, hmr: false, ws: false }, appType: 'custom' });
   ({ api } = await server.ssrLoadModule('/src/api.ts'));
   ({ TimelineBars, normalise } = await server.ssrLoadModule('/src/TimelineBars.tsx'));
@@ -30,7 +35,7 @@ before(async () => {
   ({ ComparisonTable } = await server.ssrLoadModule('/src/ComparisonTable.tsx'));
 });
 afterEach(() => { globalThis.fetch = originalFetch; });
-after(async () => { await server?.close(); });
+after(async () => { await server?.close(); if (cacheDir) await rm(cacheDir, { recursive: true, force: true }); });
 function capture(response = {}) {
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
@@ -59,15 +64,17 @@ test('catalogue metadata identifies a mock server without changing the site resp
   assert.deepEqual(await api.getCatalogue(), { sites: [site], isMock: false });
 });
 
-test('site analysis serializes every constraint and requests a whole lunar day in one batch', async () => {
+test('site analysis serializes constraints and window bounds for a preloaded batch', async () => {
   const calls = capture({ ...site, analysis: {} });
   const signal = new AbortController().signal;
-  await api.getSiteAnalysis({ site: { id: site.id }, landing_utc: landing,
+  await api.getSiteAnalysis({ site: { id: site.id }, ...bounds,
     constraints: { ...constraints, days_on_surface: 30 } }, signal);
   const { url, init } = calls[0];
   assert.match(url.pathname, /\/sites$/);
   assert.equal(url.searchParams.get('site_id'), site.id);
-  assert.equal(url.searchParams.get('landing_utc'), landing);
+  assert.equal(url.searchParams.has('landing_utc'), false);
+  for (const [key, value] of Object.entries(bounds)) assert.equal(url.searchParams.get(key), value);
+  assert.ok([...url.searchParams.values()].every(value => value !== 'undefined'));
   for (const [key, value] of Object.entries({ ...constraints, days_on_surface: 30 })) {
     assert.equal(url.searchParams.get(key), String(value));
   }
@@ -82,7 +89,7 @@ test('site analysis serializes every constraint and requests a whole lunar day i
 test('custom site analysis sends coordinates and explicit visibility flags', async () => {
   const calls = capture();
   await api.getSiteAnalysis({ site: { name: 'My site & ridge', latitude_deg: -89.2, longitude_deg: 45 },
-    landing_utc: landing, constraints, timestep_seconds: 1800, sun_visibility: false, earth_visibility: false });
+    ...bounds, constraints, timestep_seconds: 1800, sun_visibility: false, earth_visibility: false });
   const q = calls[0].url.searchParams;
   assert.equal(q.has('site_id'), false);
   assert.equal(q.get('name'), 'My site & ridge');
@@ -94,16 +101,18 @@ test('custom site analysis sends coordinates and explicit visibility flags', asy
 });
 
 test('comparison POST preserves mission duration and UTC boundaries', async () => {
-  const calls = capture([{ site, metrics, fit, timeline: windows }]);
+  const calls = capture([{ site, window_metrics: [{ landing_utc: landing, metrics, fit }], timeline: windows }]);
   const params = { sites: [{ id: site.id }, { name: 'Custom', latitude_deg: -89, longitude_deg: 45 }],
-    landing_utc: landing, window_start_utc: '2027-08-01T00:00:00Z',
-    window_end_utc: '2027-10-31T00:00:00Z', constraints };
-  const result = await api.compare(params);
+    ...bounds, constraints, candidate_step_hours: 6 };
+  const signal = new AbortController().signal;
+  const result = await api.compare(params, signal);
   assert.equal(calls[0].init.method, 'POST');
   assert.match(calls[0].url.pathname, /\/compare$/);
   assert.equal(calls[0].init.headers['Content-Type'], 'application/json');
   assert.deepEqual(JSON.parse(calls[0].init.body), { timestep_seconds: 3600, ...params });
-  assert.equal(result[0].metrics.slope_deg, null);
+  assert.equal(calls[0].init.signal, signal);
+  assert.equal('landing_utc' in JSON.parse(calls[0].init.body), false);
+  assert.equal(result[0].window_metrics[0].metrics.slope_deg, null);
 });
 
 test('landing-window POST uses one site, six-hour candidates and a five-result limit', async () => {
@@ -130,7 +139,7 @@ test('requests propagate aborts for obsolete analyses', async () => {
   };
   const controller = new AbortController();
   controller.abort();
-  await assert.rejects(api.getSiteAnalysis({ site: { id: site.id }, landing_utc: landing, constraints }, controller.signal), { name: 'AbortError' });
+  await assert.rejects(api.getSiteAnalysis({ site: { id: site.id }, ...bounds, constraints }, controller.signal), { name: 'AbortError' });
 });
 
 test('timeline intervals clip to the displayed window, ignoring invalid or reversed ranges', () => {
@@ -150,11 +159,14 @@ test('timeline intervals clip to the displayed window, ignoring invalid or rever
 
 test('comparison renders API fit and communication violations, with null slope as a dash', () => {
   const html = renderToStaticMarkup(React.createElement(ComparisonTable, {
-    sites: [{ ...site, enabled: true }], results: [{ site, metrics, fit, timeline: windows }], constraints,
-    selectedId: site.id, onSelect() {}, landingTime: landing, onTimeShift() {},
-    canShiftBack: true, canShiftForward: true, missionStart: landing, missionEnd: '2027-11-14T00:00:00Z', loading: false, onRetry() {},
+    sites: [{ ...site, enabled: true }], results: [{ site, window_metrics: [
+      { landing_utc: bounds.window_start_utc, metrics: { ...metrics, earth_visible_pct: 99 }, fit: { status: 'both_met', violations: [] } },
+      { landing_utc: landing, metrics, fit },
+    ], timeline: windows }], constraints,
+    selectedId: site.id, onSelect() {}, landingTime: landing, onTimeSeek() {},
+    missionStart: bounds.window_start_utc, sliderEnd: bounds.window_end_utc, loading: false, onRetry() {},
   }));
-  assert.match(html, /Comms short/);
+  assert.match(html, /~ Comms/);
   assert.match(html, /class="warn"[^>]*>.*20%/);
   assert.match(html, /class="warn"[^>]*>.*250 h/);
   assert.match(html, /<td class="">—<\/td>/);
@@ -167,7 +179,7 @@ test('horizon shows the first lunar-day sample rather than maxima without slider
     analysis: { timeseries, horizon: { horizon_azimuth_deg: [0, 180, 360], horizon_elevation_deg: [0, 0, 0] }, metrics, fit, windows } };
   const calls = capture();
   const html = renderToStaticMarkup(React.createElement(HorizonChart, props));
-  assert.match(html, /Sun visible · 1.0°/);
+  assert.match(html, /Sun not visible · 1.0°/);
   assert.match(html, /Earth visible · 3.7°/);
   assert.doesNotMatch(html, /type="range"/);
   assert.match(html, /2027-08-07 06:00 UTC/);

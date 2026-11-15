@@ -34,10 +34,17 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
   missionStart, sliderEnd, disabled,
   loading, error, onRetry }: Props) {
 
-  const startMs     = useMemo(() => Date.parse(missionStart), [missionStart]);
-  const sliderEndMs = useMemo(() => Date.parse(sliderEnd),    [sliderEnd]);
+  const startMs = useMemo(() => {
+    const value = Date.parse(missionStart);
+    return Number.isFinite(value) ? value : 0;
+  }, [missionStart]);
+  const sliderEndMs = useMemo(() => {
+    const value = Date.parse(sliderEnd);
+    return Number.isFinite(value) ? Math.max(startMs, value) : startMs;
+  }, [sliderEnd, startMs]);
 
   const [viewStartMs, setViewStartMs] = useState(() => startMs);
+  const selectedMs = Date.parse(landingTime);
 
   useEffect(() => { setViewStartMs(startMs); }, [startMs]);
 
@@ -92,8 +99,9 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
   }, [viewStart, viewEnd]);
 
   function seekSlider(clientX: number) {
-    if (!sliderRef.current) return;
+    if (disabled || !sliderRef.current) return;
     const rect  = sliderRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
     const pct   = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const start = Date.parse(viewStart);
     const end   = Date.parse(viewEnd);
@@ -106,14 +114,25 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [viewStart, viewEnd, onTimeSeek]);
+  }, [viewStart, viewEnd, onTimeSeek, disabled]);
 
   return <section className="ct-wrap" aria-label="Site comparison" aria-busy={loading}>
     <div className="ct-topbar">
       <span className="ct-tab">Comparison</span>
       <div className="ct-time">
         <span className="ct-time-label">Landing (UTC)</span>
-        <span className="ct-time-val">{landingTime.slice(0, 10)} {landingTime.slice(11, 16)}</span>
+        <input type="datetime-local" className="ct-time-val ct-time-input"
+          aria-label="Landing time (UTC)" title="UTC arrival; 6-hour sampled candidates"
+          value={Number.isFinite(selectedMs) ? new Date(selectedMs).toISOString().slice(0, 16) : ''}
+          min={new Date(startMs).toISOString().slice(0, 16)}
+          max={new Date(sliderEndMs).toISOString().slice(0, 16)} step={21600} disabled={!!disabled}
+          onChange={event => {
+            const value = Date.parse(`${event.currentTarget.value}Z`);
+            if (!disabled && event.currentTarget.validity.valid && Number.isFinite(value)
+              && value >= startMs && value <= sliderEndMs && (value - startMs) % STEP_MS === 0) {
+              onTimeSeek(new Date(value).toISOString());
+            }
+          }} />
       </div>
     </div>
     {loading && <p className="request-status" role="status">Comparing sites. This can take 10–30 seconds…</p>}
@@ -131,15 +150,16 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
         <th className="ct-slider-cell">
           <div className="ts-wrapper">
             <div className="ts-controls-row">
-              <button className="ct-btn ts-nav-btn" disabled={!canGoPrev} onClick={goPrev}>◀</button>
+              <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoPrev} onClick={goPrev}>◀</button>
               <div
                 ref={sliderRef}
                 className={`ts-custom-track${disabled ? ' ts-custom-track--disabled' : ''}`}
-                onMouseDown={e => { sliderDragging.current = true; seekSlider(e.clientX); }}
+                aria-disabled={!!disabled}
+                onMouseDown={e => { if (!disabled) { sliderDragging.current = true; seekSlider(e.clientX); } }}
               >
                 {thumbPct !== null && <div className="ts-thumb" style={{ left: `${thumbPct}%` }} />}
               </div>
-              <button className="ct-btn ts-nav-btn" disabled={!canGoNext} onClick={goNext}>▶</button>
+              <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoNext} onClick={goNext}>▶</button>
             </div>
             <div className="ts-ticks-inset">
               {ticks.map(t => (
@@ -158,13 +178,13 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
         {sites.map((site, index) => {
           const result = results?.[index];
           const entry: WindowMetricsEntry | undefined = result?.window_metrics.find(
-            e => e.landing_utc === landingTime
-          ) ?? result?.window_metrics[0];
+            e => Date.parse(e.landing_utc) === selectedMs
+          );
           const metrics = entry?.metrics;
           const warn = (metric: keyof Metrics) => entry?.fit.violations.includes(metric) ?? false;
           return <tr key={site.id} className={selectedId === site.id ? 'row-sel' : ''} onClick={() => onSelect(site.id)}>
             <td className="ct-left ct-name"><button className="site-select" aria-pressed={selectedId === site.id} onClick={() => onSelect(site.id)}>{site.name}</button></td>
-            <td>{entry ? <FitBadge fit={entry.fit.status} /> : '—'}</td>
+            <td>{entry ? <FitBadge fit={entry.fit.status} /> : result ? 'Not sampled' : '—'}</td>
             <NumCell value={metrics?.sun_visible_pct} warn={warn('sun_visible_pct')} unit="%" />
             <NumCell value={metrics?.longest_darkness_hours} warn={warn('longest_darkness_hours')} unit=" h" />
             <NumCell value={metrics?.earth_visible_pct} warn={warn('earth_visible_pct')} unit="%" />
@@ -172,7 +192,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
             <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
               eclipseWindows={result?.timeline.eclipse}
-              missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={onTimeSeek} />
+              missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={disabled ? undefined : onTimeSeek} />
           </tr>;
         })}
       </tbody>

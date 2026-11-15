@@ -2,17 +2,20 @@ import { before, after, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'vite';
 import React from 'react';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-let server, projection, validateHeatmaps, rasterPixels, api, siteReference, MapPanel, MainPanel, navigation, isReferenceCriterion, HeatmapLegends;
+let cacheDir, server, projection, validateHeatmaps, rasterPixels, api, siteReference, MapPanel, MainPanel, navigation, isReferenceCriterion, HeatmapLegends;
 const nativeFetch = globalThis.fetch;
 const constraints = { days_on_surface: 14, horizon_clearance_deg: 0.3, min_sun_visible_pct: 60,
   max_darkness_hours: 96, min_earth_visible_pct: 45, max_earth_blackout_hours: 240, max_slope_deg: 8 };
 const mission = { windowStart: '2027-08-01', windowEnd: '2027-10-31', daysOnSurface: 14, horizonClearance: 0.3 };
 const custom = { id: 'custom_local', name: 'A map site', latitude_deg: -88, longitude_deg: 90, custom: true, enabled: true };
 before(async () => {
-  server = await createServer({ optimizeDeps: { noDiscovery: true, include: [] },
+  cacheDir = await mkdtemp(join(tmpdir(), 'moon-flyers-map-'));
+  server = await createServer({ cacheDir, optimizeDeps: { noDiscovery: true, include: [] },
     server: { middlewareMode: true, watch: null, hmr: false, ws: false }, appType: 'custom' });
   projection = await server.ssrLoadModule('/src/map/projection.ts');
   navigation = await server.ssrLoadModule('/src/map/navigation.ts');
@@ -24,7 +27,7 @@ before(async () => {
   ({ MainPanel } = await server.ssrLoadModule('/src/MainPanel.tsx'));
 });
 afterEach(() => { globalThis.fetch = nativeFetch; });
-after(async () => { await server?.close(); });
+after(async () => { await server?.close(); if (cacheDir) await rm(cacheDir, { recursive: true, force: true }); });
 
 function params() {
   const radius = projection.CAP_RADIUS_M;

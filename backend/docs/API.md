@@ -25,11 +25,18 @@ The mock returns `X-Moon-Flyers-Data-Source: mock`, exposed through CORS. The fr
 that header from the catalogue response to show a synthetic-data banner; the catalogue JSON
 shape is unchanged. Data is deterministic, varies with site/date, and recomputes visibility
 metrics, fit violations, and timelines from the same generated samples. Custom sites are
-accepted without being stored. Slope remains `null`. The horizon is mock terrain (smooth 0–1.5° hills, fixed per site), not LOLA data.
+accepted without being stored. Slope remains `null`. The standalone Node mock returns a
+flat horizon and synthetic ephemerides; its eclipse intervals are synthetic fixtures.
 
-**The Python backend (`backend/`) now uses real Sun/Earth positions from JPL Horizons** and
-returns `X-Moon-Flyers-Data-Source: horizons` (`mock` if started with
-`MOON_FLYERS_EPHEMERIS=mock`). The terrain is still the mock hills above. Each site costs two
+**The Python backend (`backend/`) uses real Sun/Earth positions from JPL Horizons by
+default** and returns `X-Moon-Flyers-Data-Source: horizons` (`mock` if started with
+`MOON_FLYERS_EPHEMERIS=mock`). That header identifies only the **Sun/Earth ephemeris**,
+not the terrain: the Python terrain model uses synthetic hills unless a startup-verified
+LOLA DEM dataset is mounted (`LOLA_DEM_DIR`, `deploy/compose.terrain.yaml`), in which case
+the backend computes the site's terrain skyline. Uncovered sites or runtime DEM errors
+fall back to a flat horizon with a server warning; the response does not report this.
+Ephemeris and terrain modes are independent, so mock ephemerides can use a real DEM.
+Each site costs two
 Horizons calls (about 2 s), and Horizons allows only about 2 requests in flight per IP, so the
 backend queues them. The usual burst (one 7-site `/compare` plus 7 `GET /sites`, 3 months) finishes in
 about 35 s: `GET /sites` responses arrive within 3–13 s, `/compare` last. Keep loading states visible.
@@ -100,7 +107,10 @@ optional, and the defaults match the mock UI:
 - `violations` lists the metric names that broke a limit, so you can show the red ⚠ markers, for
   example `["sun_visible_pct", "longest_darkness_hours"]`.
 - Power covers sunlight % and longest night. Comms covers Earth contact % and longest gap.
-- `slope_deg` is `null` until terrain data is added. Show "—" for now.
+- `slope_deg` remains `null` even with a DEM mounted. Show "—";
+  `max_slope_deg` is accepted but is not evaluated by `fit`.
+- Earth visibility does not establish a communications link, sunlight is not an energy
+  budget, and matching visibility limits does not establish mission safety.
 
 ---
 
@@ -114,7 +124,9 @@ The frontend loads heavyweight analysis data **only** on:
 On events 2–3, the frontend fires **one `POST /compare`** for all enabled sites and **one `GET /sites` per enabled site** in parallel to pre-load every horizon dataset.
 
 The time slider **never** triggers an API call. It slices pre-loaded data client-side:
-- `ComparisonTable` looks up the `window_metrics` entry whose `landing_utc` matches the slider.
+- `ComparisonTable` matches the selected numeric UTC instant in `window_metrics`, accepting
+  equivalent timestamp spellings. Missing samples show “Not sampled”, never the first row.
+  The native Landing time (UTC) field supports 6-hour, in-window keyboard selection.
 - `HorizonChart` filters the pre-loaded `timeseries` to the one lunar day starting at the slider position — switching sites is instant.
 
 ## 1. `GET /sites`: the sites catalogue and per-site horizon data
@@ -153,8 +165,12 @@ Response:
 - `timeseries` spans from `window_start_utc` to `window_end_utc + days_on_surface`, at one point
   per `timestep_seconds`. The client filters it to a one-lunar-day window starting at the slider
   position to show Sun and Earth paths without re-fetching.
-- `horizon` is the horizon profile. **For now it's mock terrain:** smooth hills of 0–1.5°, fixed per
-  site, and the Sun and Earth are blocked by it. Real LOLA terrain comes later in the same shape.
+- `horizon` is the horizon profile. **By default it's mock terrain:** smooth hills of
+  0–1.5°, fixed per site, and the Sun and Earth are blocked by it. With a startup-verified
+  LOLA DEM dataset mounted (`LOLA_DEM_DIR`) the backend returns the real terrain skyline
+  for the site instead, in the same shape (it can be negative for a rim site).
+  Uncovered sites or runtime DEM errors fall back to flat; no per-site terrain provenance
+  or fallback field is returned.
 
 ## 2. `POST /compare`: the comparison table and the timeline bars
 
@@ -182,15 +198,16 @@ Response, one entry per site in the order you sent them:
                  "eclipse": [{ "start_utc": "...", "end_utc": "..." }] } }]
 ```
 - `window_metrics` pre-computes metrics and fit for every `candidate_step_hours` step in the
-  window. The frontend looks up the entry matching the slider's current `landing_utc` to update
-  the table instantly without a new request. The ±6 h buttons shift the slider position only.
+  window. The frontend looks up the entry matching the selected UTC instant to update
+  the table without a new request. Timeline seeking and the native UTC field update
+  selection locally; the older ±6 h buttons are no longer mounted.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
 - `eclipse` lists Earth eclipses (Earth's disc overlapping the Sun's, i.e. a lunar eclipse seen
   from the Moon) while Earth is visible from the site. Drawn in purple on top of the Earth
   (cyan) bar. Same interval rules as `sun`/`earth`; also present in `GET /sites` `windows`.
 
-## 3. `POST /landing-windows`: the best landing times table
+## 3. `POST /landing-windows`: ranked candidate times (API available; no current UI table)
 ```json
 { "site": { "id": "malapert_massif" },
   "window_start_utc": "2027-08-01T00:00:00Z", "window_end_utc": "2027-10-31T00:00:00Z",

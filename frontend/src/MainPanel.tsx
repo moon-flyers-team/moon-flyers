@@ -89,7 +89,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
           }}>{name === 'profiles' ? 'Profiles' : 'Map'}</button>)}
       </div>
       <div className="main-body" id="panel-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden={tab !== 'profiles'}>
-        {validation && <div className="request-error" role="alert">{validation}</div>}
+        {validation && !dateError && <div className="request-error" role="alert">{validation}</div>}
         <ComparisonTable sites={enabled} results={comparison.data} constraints={constraints}
           selectedId={siteId ?? null} onSelect={setSelectedId} landingTime={landingUtc}
           onTimeSeek={setLandingUtc}

@@ -2,9 +2,19 @@
 
 **Status:** the v0 contract is implemented by a standalone **synthetic mock API** in
 `frontend/src/mock/`. It runs with Node and requires no Python or changes under `backend/`.
-The separate FastAPI backend (`backend/src/main.py`) now also implements the v0 endpoints
-with synthetic ephemerides and a flat horizon. Analysis mock data exercises the UI and is
-not NASA ephemeris or terrain data. Map imagery is an independent observational basemap.
+The separate FastAPI backend (`backend/src/main.py`) also implements the v0 endpoints.
+Its Sun/Earth positions come live from NASA JPL Horizons by default, or from a
+deterministic synthetic generator when started with
+`MOON_FLYERS_EPHEMERIS=mock`. Its terrain horizon is **not** JPL data either: it is
+synthetic mock hills when no DEM is mounted, or the real terrain computed from a
+host-mounted, startup-validated LOLA DEM dataset (`LOLA_DEM_DIR`). The `X-Moon-Flyers-Data-Source`
+header (`horizons`/`mock`) tells you which **Sun/Earth ephemeris** produced a response; it
+does not identify the terrain source, so a `horizons` response is not proof of real
+terrain. Uncovered sites or runtime DEM errors can fall back to a flat horizon with a
+server warning; the response does not report that fallback. Ephemeris and terrain modes
+are independent: mock ephemerides can be combined with a mounted DEM. Synthetic outputs
+exercise the UI; they are not scientific predictions. Map imagery is an independent
+observational basemap.
 
 ## Run the mock API
 
@@ -91,7 +101,10 @@ optional, and the defaults match the mock UI:
 - `violations` lists the metric names that broke a limit, so you can show the red ⚠ markers, for
   example `["sun_visible_pct", "longest_darkness_hours"]`.
 - Power covers sunlight % and longest night. Comms covers Earth contact % and longest gap.
-- `slope_deg` is `null` until terrain data is added. Show "—" for now.
+- `slope_deg` is always `null` in the current implementation, including with a DEM mounted.
+  Show "—"; `max_slope_deg` is accepted but is not evaluated by `fit`.
+- Earth visibility is geometric visibility, not a verified communications link. Sunlight
+  fractions are not an energy budget. Meeting these limits does not establish mission safety.
 
 ---
 
@@ -102,10 +115,17 @@ The frontend loads heavyweight analysis data **only** on:
 2. Any mission parameter change (window dates, constraints).
 3. A site being toggled on or off.
 
+Current UI: mission settings are edited in App's settings dialog and take effect on
+**SET MISSION**, not on each draft keystroke. Catalogue loads at startup; comparison and
+site analysis run when applied settings or enabled sites change.
+
 On events 2–3, the frontend fires **one `POST /compare`** for all enabled sites and **one `GET /sites` per enabled site** in parallel to pre-load every horizon dataset.
 
 The time slider **never** triggers an API call. It slices pre-loaded data client-side:
-- `ComparisonTable` looks up the `window_metrics` entry whose `landing_utc` matches the slider.
+- `ComparisonTable` matches `window_metrics` by numeric UTC instant, accepting equivalent
+  `Z`/`.000Z`/offset forms. A missing candidate says “Not sampled”; it never substitutes
+  the first candidate. The labeled Landing time (UTC) input provides a native keyboard
+  alternative to the custom timeline, bounded to the window and 6-hour samples.
 - `HorizonChart` filters the pre-loaded `timeseries` to the one lunar day starting at the slider position — switching sites is instant.
 
 ## 1. `GET /sites`: the sites catalogue and per-site horizon data
@@ -144,8 +164,12 @@ Response:
 - `timeseries` spans from `window_start_utc` to `window_end_utc + days_on_surface`, at one point
   per `timestep_seconds`. The client filters it to a one-lunar-day window starting at the slider
   position to show Sun and Earth paths without re-fetching.
-- `horizon` is the horizon profile. **For now it's a flat 0° line.** The real terrain profile comes
-  later in the same shape.
+- `horizon` is the horizon profile. The **standalone mock API** returns a flat 0° line.
+  The Python backend returns synthetic mock hills (smooth 0–1.5°, fixed per site; the
+  Sun and Earth are blocked by it) unless a verified LOLA DEM dataset is mounted at
+  `LOLA_DEM_DIR`, in which case it returns the real terrain skyline for the site (which
+  can be negative for a rim site). Uncovered sites or runtime DEM errors fall back to a
+  flat horizon; terrain mode/fallback is not included in the wire response.
 
 ## 2. `POST /compare`: the comparison table and the timeline bars
 
@@ -173,15 +197,16 @@ Response, one entry per site in the order you sent them:
                  "eclipse": [{ "start_utc": "...", "end_utc": "..." }] } }]
 ```
 - `window_metrics` pre-computes metrics and fit for every `candidate_step_hours` step in the
-  window. The frontend looks up the entry matching the slider's current `landing_utc` to update
-  the table instantly without a new request. The ±6 h buttons shift the slider position only.
+  window. The frontend looks up the entry matching the selected UTC instant to update
+  the table without a new request. Timeline seeking and the native Landing time (UTC)
+  field update selection locally; the older ±6 h buttons are no longer mounted.
 - `timeline` gives the yellow and cyan bars, from `window_start_utc` to `window_end_utc` +
   `days_on_surface`.
 - `eclipse` lists Earth eclipses (Earth's disc overlapping the Sun's, i.e. a lunar eclipse seen
   from the Moon) while Earth is visible from the site. Drawn in purple on top of the Earth
   (cyan) bar. Same interval rules as `sun`/`earth`; also present in `GET /sites` `windows`.
 
-## 3. `POST /landing-windows`: the best landing times table
+## 3. `POST /landing-windows`: ranked candidate times (API available; no current UI table)
 ```json
 { "site": { "id": "malapert_massif" },
   "window_start_utc": "2027-08-01T00:00:00Z", "window_end_utc": "2027-10-31T00:00:00Z",
@@ -197,8 +222,8 @@ Response:
 Returns `{"status": "ok"}`.
 
 ## Not in v0
-- Terrain-aware horizon (LOLA data).
-- `slope_deg`.
+- Terrain slope calculations (`slope_deg` remains null). Terrain-aware horizons are already
+  supported by the Python backend with a mounted DEM; the standalone mock horizon is flat.
 - Error-response format. We'll use FastAPI's default `{"detail": ...}` for now.
 
 Questions and change requests are welcome. This is a draft, and it's easier to change before we
