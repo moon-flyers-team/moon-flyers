@@ -10,7 +10,6 @@ import { useRequest } from './useRequest';
 import { useHoverCheck } from './useHoverCheck';
 import { hoverFeedback, localSlopeDeg, previewCoordinates } from './map/routePreview';
 import { RouteProfile, stopElevationChange } from './RouteProfile';
-import { displayRoute } from './routeDisplay';
 import { elevationChange, loadElevations } from './map/elevations';
 import type { ElevationGrid } from './map/elevations';
 import { formatUtc } from './time';
@@ -202,15 +201,9 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
   }), [settings]);
   const routeKey = useMemo(() => JSON.stringify([rover, waypoints.map(w => [w.name, w.latitude_deg, w.longitude_deg])]),
     [rover, waypoints]);
-  // Draft markers are preview-only: no path or distances are invented before the response.
-  const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
-    waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite],
-    path: [], legs: [], total_distance_m: 0,
-  }), [landingSite, waypoints]);
   const [submitted, setSubmitted] = useState<{ waypoints: LandingSite[]; rover: typeof rover } | null>(null);
   const [lastRoute, setLastRoute] = useState<{ route: RouteResponse; key: string } | null>(null);
-  // Recalculation is on by default so added stops refresh the geometry without a manual step.
-  const [autoRecalc, setAutoRecalc] = useState(true);
+  const [autoRecalc, setAutoRecalc] = useState(false);
   const [announcement, setAnnouncement] = useState('');
   // Map picks may be moved onto passable terrain; remember which ones moved and by how much.
   const pickedIds = useRef(new Set<string>());
@@ -231,18 +224,15 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
   }, [route, submitted]);
   const stale = !!lastRoute && lastRoute.key !== routeKey;
   const shown = route ?? (stale ? lastRoute.route : undefined);
-  // The draft stop list is always rendered; a stale result only contributes its geometry.
-  const viewRoute = useMemo(() => displayRoute(stale ? lastRoute.route : null, preview), [stale, lastRoute, preview]);
   const staleRoute = stale && !loading;
   const autoLimit = 12;
   // Opt-in auto-recalculation, debounced, and only while the leg count stays cheap.
   useEffect(() => {
-    // Never spin on a failing request: the banner stays until the user changes something.
-    if (!autoRecalc || !stale || loading || !waypoints.length || result.error) return;
+    if (!autoRecalc || !stale || loading || !waypoints.length) return;
     if (waypoints.length + 1 > autoLimit) return;
     const timer = window.setTimeout(() => setSubmitted({ waypoints, rover }), 700);
     return () => window.clearTimeout(timer);
-  }, [autoRecalc, stale, loading, waypoints, rover, result.error]);
+  }, [autoRecalc, stale, loading, waypoints, rover]);
   // A long route can outlast the gateway; say so instead of looking frozen.
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -269,7 +259,10 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
   const blockedStops = useMemo(
     () => [...checksByIndex.values()].filter(check => !check.passable),
     [checksByIndex]);
-
+  // Draft markers are preview-only: no path or distances are invented before the response.
+  const preview = useMemo<RouteResponse>(() => ({ method: 'straight_line',
+    waypoints: waypoints.length ? [landingSite, ...waypoints, landingSite] : [landingSite], path: [], legs: [], total_distance_m: 0,
+  }), [landingSite, waypoints]);
   const addedPoiIds = useMemo(() => new Set(waypoints.map(w => w.id)), [waypoints]);
   // A map pick that lands on impractical terrain is moved to the nearest workable cell, so the
   // first calculation is not spent explaining a stop the user did not mean to place. Published
@@ -453,7 +446,7 @@ export function TouristRoutePanel({ landingSite, landingUtc, poiRadiusKm = 40, o
       <RouteView onWaypointRemove={index => {
         setWaypoints(previous => previous.filter((_, i) => i !== index));
         setAnnouncement(`Removed waypoint ${index + 1}. Recalculate to update the route.`);
-      }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={viewRoute} onMapPick={addWaypoint} calculated={!!shown} stale={stale}
+      }} elevations={elevations.data} onWaypointMove={moveWaypoint} route={shown ?? preview} onMapPick={addWaypoint} calculated={!!shown}
         pois={(nearby.data?.recommendations ?? []).map(r => r.poi).filter(p => !addedPoiIds.has(poiWaypointId(p)))}
         onPoiPick={togglePoi}
         sidePanel={<RecommendedStops data={nearby.data} radiusKm={poiRadiusKm}
@@ -506,7 +499,7 @@ function RecommendedStops({ data, radiusKm, isAdded, onToggle }: {
 }
 
 function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapPick, calculated, pois,
-  onPoiPick, sidePanel, checks, onStopSnap, snapped, rover, stale }: {
+  onPoiPick, sidePanel, checks, onStopSnap, snapped, rover }: {
   onWaypointRemove: (index: number) => void;
   route: RouteResponse; elevations?: ElevationGrid; onWaypointMove: (from: number, to: number) => void;
   onMapPick: (coordinates: Coordinates) => void; calculated: boolean;
@@ -514,7 +507,6 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   checks: Map<number, StopCheck>; onStopSnap: (index: number) => void;
   snapped: Record<string, { offset_m: number; terrain_slope_deg: number }>;
   rover: NonNullable<RouteParams['rover']>;
-  stale: boolean;
 }) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -702,9 +694,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
           {legPaths.map((d, i) => (
             <path key={i} d={d} fill="none" stroke={colorOf(route.legs[i]?.to_index ?? i + 1)}
               strokeWidth={4.5 * k} strokeLinejoin="round" strokeLinecap="round"
-              strokeOpacity={stale ? 0.35 : 1}
-              {...(route.failed_legs?.includes(i) || stale
-                ? { strokeDasharray: `${10 * k} ${8 * k}` } : {})} />
+              {...(route.failed_legs?.includes(i) ? { strokeDasharray: `${10 * k} ${8 * k}`, strokeOpacity: 0.6 } : {})} />
           ))}
           <path d={fullD} fill="none" stroke="#fff" strokeOpacity={0.85}
             strokeWidth={1.5 * k} strokeDasharray={`${2 * k} ${14 * k}`} strokeLinecap="round">
@@ -859,7 +849,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
                   </td>
                   <td className="route-num">
                     {(() => {
-                      if (!i || !calculated || stale) return '—';
+                      if (!i || !calculated) return '—';
                       const leg = route.legs[i - 1];
                       if (!leg) return '—';
                       const failed = route.failed_legs?.includes(i - 1);
@@ -872,9 +862,9 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
                       </>;
                     })()}
                   </td>
-                  <td className="route-num">{calculated && !stale && cumulative[i] != null ? km(cumulative[i]!) : '—'}</td>
+                  <td className="route-num">{calculated && cumulative[i] != null ? km(cumulative[i]!) : '—'}</td>
                   <td className="route-num">
-                    {stale || change === null ? '—' : `${change > 0 ? '+' : ''}${Math.round(change)} m`}
+                    {change === null ? '—' : `${change > 0 ? '+' : ''}${Math.round(change)} m`}
                     {!sampled && change !== null && <span className="route-note">coarse grid</span>}
                   </td>
                   <td>{editable ? <div className="route-order-controls" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
