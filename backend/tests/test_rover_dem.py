@@ -90,4 +90,6 @@ def test_rover_route_on_real_lola_dataset(tmp_path):
     print(f"Real LOLA route report: {report}")
     print(f"Status: {result['status']}; distance: {result['distance_m']} m; "
           f"maximum modelled terrain slope: {result['max_terrain_slope_deg']} degrees")
+    print('Endpoint checks and nearby terrain candidates (not verified routes):')
+    print(json.dumps(result['endpoint_checks'], indent=2, allow_nan=False))
     _check_route_against_dem(result, dem, start, goal, 15)

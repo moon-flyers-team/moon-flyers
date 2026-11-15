@@ -151,6 +151,55 @@ class RoverGridTests(unittest.TestCase):
         self.assertEqual(point['distance_m'], 0)
         self.assertEqual(point['path_rc'], [[1, 1]])
 
+    def test_blocked_start_reports_measured_slope_and_unchanged_limit(self):
+        height = np.repeat((np.arange(7)*10.0)[:, None], 7, axis=1)
+        result = self.route(height, max_slope_deg=15)
+        check = result['endpoint_checks']['start']
+        self.assertEqual(check['elevation_m'], 10)
+        self.assertAlmostEqual(check['terrain_slope_deg'], 45)
+        self.assertEqual(check['max_slope_deg'], 15)
+        self.assertEqual(check['blocked_reasons'], ['terrain_slope_exceeds_limit'])
+        self.assertIn('45.000° exceeds 15°', result['reason'])
+        self.assertEqual(check['nearby_terrain_candidates'], [])
+        self.assertFalse(result['endpoint_checks']['goal']['passable'])
+
+    def test_unknown_slope_is_distinguished_from_missing_endpoint_height(self):
+        height = np.zeros((7, 7))
+        height[1, 0] = np.nan  # Start height is known, but its slope stencil is incomplete.
+        result = self.route(height)
+        check = result['endpoint_checks']['start']
+        self.assertEqual(check['elevation_m'], 0)
+        self.assertIsNone(check['terrain_slope_deg'])
+        self.assertEqual(check['blocked_reasons'], ['unknown_slope'])
+        height[1, 1] = np.nan
+        result = self.route(height)
+        self.assertIn('missing_elevation', result['endpoint_checks']['start']['blocked_reasons'])
+        self.assertIsNone(result['endpoint_checks']['start']['elevation_m'])
+        json.dumps(result, allow_nan=False)
+
+    def test_nearby_candidates_do_not_replace_excluded_endpoint(self):
+        blocked = np.zeros((7, 7), dtype=bool)
+        blocked[1, 1] = True
+        result = self.route(blocked=blocked)
+        self.assertEqual(result['status'], 'start_blocked')
+        self.assertEqual(result['path_rc'], [])
+        check = result['endpoint_checks']['start']
+        self.assertEqual(check['blocked_reasons'], ['excluded_by_mask'])
+        self.assertEqual(len(check['nearby_terrain_candidates']), 3)
+        self.assertEqual([c['offset_m'] for c in check['nearby_terrain_candidates']], [10, 10, 10])
+        for candidate in check['nearby_terrain_candidates']:
+            r, c = candidate['grid_cell']
+            self.assertFalse(blocked[r, c])
+            self.assertEqual(candidate['terrain_slope_deg'], 0)
+
+    def test_all_missing_terrain_reports_no_candidates_and_serializes_cleanly(self):
+        result = self.route(np.full((7, 7), np.nan))
+        for check in result['endpoint_checks'].values():
+            self.assertIn('missing_elevation', check['blocked_reasons'])
+            self.assertIsNone(check['terrain_slope_deg'])
+            self.assertEqual(check['nearby_terrain_candidates'], [])
+        json.dumps(result, allow_nan=False)
+
     def test_astar_matches_dijkstra_on_several_reproducible_maps(self):
         rng = np.random.default_rng(42)
         for _ in range(12):
@@ -295,6 +344,20 @@ class GeographicRoverTests(unittest.TestCase):
         for point in [(91, 0), (0, 181), (math.nan, 0)]:
             with self.assertRaises(ValueError):
                 self.route(start=point)
+
+    def test_geographic_diagnostics_locate_candidates_without_moving_start(self):
+        result = self.route(exclusion_mask=lambda lat, lon: lon < .003)
+        check = result['endpoint_checks']['start']
+        self.assertEqual(result['status'], 'start_blocked')
+        self.assertEqual(result['path'], [])
+        self.assertEqual((check['latitude_deg'], check['longitude_deg']), (0, 0))
+        self.assertEqual(check['blocked_reasons'], ['excluded_by_mask'])
+        self.assertEqual(len(check['nearby_terrain_candidates']), 3)
+        for cell in check['nearby_terrain_candidates']:
+            self.assertGreaterEqual(cell['longitude_deg'], .003)
+            self.assertGreater(cell['offset_m'], 0)
+            self.assertEqual(cell['terrain_slope_deg'], 0)
+        json.dumps(result, allow_nan=False)
 
     def test_bad_dem_shapes_and_bad_exclusion_masks_are_rejected(self):
         class WrongDEM:

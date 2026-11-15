@@ -63,16 +63,66 @@ def _search(height, x, y, start, goal, settings, blocked, unit_vectors=None):
         slopes = np.degrees(np.arctan(np.hypot(dx, dy)))
     passable = np.isfinite(height) & np.isfinite(slopes) & (slopes <= slope_limit + 1e-10) & ~blocked
 
+    def endpoint_check(point):
+        """Explain terrain checks without guessing which cause blocked a cell."""
+        r, c = point
+        reasons = []
+        if not np.isfinite(height[point]):
+            reasons.append('missing_elevation')
+        if not np.isfinite(slopes[point]):
+            reasons.append('unknown_slope')
+        elif slopes[point] > slope_limit + 1e-10:
+            reasons.append('terrain_slope_exceeds_limit')
+        if blocked[point]:
+            reasons.append('excluded_by_mask')
+        check = {
+            'grid_cell': [r, c],
+            'elevation_m': float(height[point]) if np.isfinite(height[point]) else None,
+            'terrain_slope_deg': float(slopes[point]) if np.isfinite(slopes[point]) else None,
+            'max_slope_deg': slope_limit, 'passable': bool(passable[point]),
+            'blocked_reasons': reasons, 'nearby_terrain_candidates': [],
+        }
+        if reasons:
+            # These suggestions pass node terrain checks only. They are NOT a
+            # route or proof of connected access, and never replace the endpoints.
+            cells = np.argwhere(passable)
+            if len(cells):
+                if unit_vectors is None:
+                    distances = np.hypot(x[cells[:, 1]]-x[c], y[cells[:, 0]]-y[r])
+                else:
+                    chords = np.linalg.norm(unit_vectors[cells[:, 0], cells[:, 1]]-unit_vectors[point], axis=1)
+                    distances = 2*MOON_RADIUS_M*np.arcsin(np.clip(chords/2, 0, 1))
+                for i in np.argsort(distances, kind='stable')[:3]:
+                    cell = tuple(int(v) for v in cells[i])
+                    check['nearby_terrain_candidates'].append({
+                        'grid_cell': list(cell), 'offset_m': float(distances[i]),
+                        'elevation_m': float(height[cell]), 'terrain_slope_deg': float(slopes[cell]),
+                    })
+        return check
+
+    checks = {'start': endpoint_check(start), 'goal': endpoint_check(goal)}
     result = {
+        'endpoint_checks': checks,
         'status': None, 'reason': None, 'path_rc': [], 'expanded_nodes': 0,
         'distance_m': None, 'terrain_distance_m': None, 'elevation_gain_m': None,
         'elevation_loss_m': None, 'max_terrain_slope_deg': None,
         'max_uphill_grade_deg': None, 'max_downhill_grade_deg': None, 'cost': None,
         'slope_penalty_cost': None, 'climb_penalty_cost': None,
     }
-    for point, status in [(start, 'start_blocked'), (goal, 'goal_blocked')]:
-        if not passable[point]:
-            result.update(status=status, reason='Endpoint is excluded, missing terrain, or exceeds terrain slope limit')
+    for name in ('start', 'goal'):
+        check = checks[name]
+        if not check['passable']:
+            messages = {
+                'missing_elevation': 'no finite elevation at the endpoint',
+                'unknown_slope': 'terrain slope cannot be estimated from the sampled elevations',
+                'terrain_slope_exceeds_limit':
+                    f"terrain slope {check['terrain_slope_deg']:.3f}° exceeds {slope_limit:g}°"
+                    if check['terrain_slope_deg'] is not None else '',
+                'excluded_by_mask': 'endpoint is inside the supplied exclusion mask',
+            }
+            result.update(status=name+'_blocked',
+                          reason=name.capitalize()+' blocked: '+
+                          '; '.join(messages[cause] for cause in check['blocked_reasons']))
             return result
 
     def distance(a, b):
@@ -278,6 +328,12 @@ def plan_rover_route(dem, start, goal, *, max_slope_deg, cell_size_m=20.0, paddi
         raise ValueError('DEM.sample must return one elevation per supplied coordinate')
     blocked = exclusion_mask(lat, lon) if exclusion_mask is not None else None
     result = _search(heights, x, y, start_rc, goal_rc, settings, blocked, units)
+    # Attach coordinates to the diagnostic cells only after geographic sampling.
+    for check in result['endpoint_checks'].values():
+        for cell in [check] + check['nearby_terrain_candidates']:
+            r, c = cell['grid_cell']
+            cell['latitude_deg'] = float(lat[r, c])
+            cell['longitude_deg'] = float(lon[r, c])
     result['path'] = [
         {'latitude_deg': float(lat[r, c]), 'longitude_deg': float(lon[r, c]),
          'elevation_m': float(heights[r, c])} for r, c in result['path_rc']
