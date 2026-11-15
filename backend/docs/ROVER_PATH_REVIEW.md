@@ -194,7 +194,11 @@ this same bounded grid, sorted by offset distance. They pass node terrain checks
 only: access, edge grades, connectivity, and a route have NOT been established.
 They do not replace the requested endpoint. Geographic results attach coordinates
 to the checks and candidate cells; grid-only results use row/column indices.
-The geographic function also returns `path` (latitude, longitude and elevation per
+`search_boundary_reached` records which row/column edges had expanded nodes. A
+true flag suggests extending that side might expose more options, but is not proof
+that a route exists beyond it. Grid edges follow the rotated search axes, not fixed
+north/east directions. Flags describe only the completed portion of a budget-limited
+search. The geographic function also returns `path` (latitude, longitude and elevation per
 node) and `search` (grid shape, projection, resolution request, bounds configuration,
 rover limits, and requested coordinates).
 
@@ -273,7 +277,7 @@ Run from the repository root with the project's Python environment:
 python -m pytest backend/app/Functions/Tests/test_rover_path.py backend/tests/test_rover_dem.py -v
 ```
 
-There are 29 focused offline tests, plus one opt-in real-raster test. They check known distances, terrain gradients versus
+There are 30 focused offline routing tests, plus one opt-in real-raster test. They check known distances, terrain gradients versus
 travel grades, independent uphill/downhill limits, blocked corners, missing data,
 ascent and direction-independent slope costs, gentler detours, explicit failure
 statuses, resource caps, exact endpoints,
@@ -407,7 +411,8 @@ python backend/tools/plot_rover_path.py --dem-dir "C:\path\to\lola_dem" --start 
 These latter coordinates previously exceeded the 15° slope limit; expect a
 blocked-start plot, not a successful route. Use your own coordinates for further
 inspection. Options include `--cell-size-m`, `--padding-m`, `--max-slope-deg`,
-`--climb-weight`, and `--slope-weight`. Defaults are 20 m, 300 m padding, 15°, 2 and
+`--climb-weight`, `--slope-weight`, `--max-cells`, and `--max-expansions`. The two
+resource budgets default to 250000. Other defaults are 20 m, 300 m padding, 15°, 2 and
 1 respectively. All three hard slope/grade checks use that same 15° setting unless
 changed through the plotting option. This tool does not modify planner defaults.
 
@@ -422,6 +427,32 @@ Look for a sensible detour around steep areas, correct endpoints, and elevations
 consistent with the map. The hatched map shows node terrain-slope exclusions,
 not a complete directional-edge traversability map. Visual inspection supplements
 tests; it does not establish continuous traversability or real driving safety.
+
+### Expanding the Marvin crater search
+
+A teammate's Marvin run from `(-89.25, -87.78)` to `(-89.02, -87.78)` exhausted
+its graph after 75040 expansions and returned `no_route` with 3500 m padding.
+Both endpoints passed the 15° terrain check. It did not exhaust the expansion budget;
+weights alone cannot connect a graph disconnected by hard terrain/movement limits.
+
+Try a wider region with the **same** endpoints, resolution, weights and rover limits:
+
+```bat
+python backend/tools/plot_rover_path.py --dem-dir "C:\path\to\lola_dem" --start -89.25 -87.78 --goal -89.02 -87.78 --padding-m 5000 --max-cells 500000 --max-expansions 500000 --output marvin_wider.png
+```
+
+Get the updated `plot_rover_path.py` and `app/Functions/rover_path.py` first.
+Replace the dataset path. A 5 km margin creates about 426000 cells at 20 m spacing,
+so it needs an explicitly larger memory/search budget than the previous 250000 cap.
+This increases computational search space, not a rover's physical range or capability.
+Runtime and memory can grow; no battery/endurance constraint is modelled here.
+
+The JSON and terminal output now include `search_boundary_reached`. If a no-route
+search reaches region edges, further detours might lie outside it. If it does not,
+inspect local connectivity and hard edge limits before increasing extent again.
+Boundary gradients and grid alignment can also change when the region changes;
+this diagnostic is evidence, not a proof about the continuous terrain. A wider
+search is still allowed to return no route. This real-data rerun is pending.
 
 ## References
 

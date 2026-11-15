@@ -103,6 +103,7 @@ def _search(height, x, y, start, goal, settings, blocked, unit_vectors=None):
     checks = {'start': endpoint_check(start), 'goal': endpoint_check(goal)}
     result = {
         'endpoint_checks': checks,
+        'search_boundary_reached': {'row_min': False, 'row_max': False, 'col_min': False, 'col_max': False},
         'status': None, 'reason': None, 'path_rc': [], 'expanded_nodes': 0,
         'distance_m': None, 'terrain_distance_m': None, 'elevation_gain_m': None,
         'elevation_loss_m': None, 'max_terrain_slope_deg': None,
@@ -192,6 +193,12 @@ def _search(height, x, y, start, goal, settings, blocked, unit_vectors=None):
             return result
         result['expanded_nodes'] += 1
         r, c = current
+        # This records only where the search actually expanded. Touching an edge
+        # suggests a larger region may help; it does not establish a route beyond it.
+        for name, touched in [('row_min', r == 0), ('row_max', r == height.shape[0]-1),
+                              ('col_min', c == 0), ('col_max', c == height.shape[1]-1)]:
+            if touched:
+                result['search_boundary_reached'][name] = True
         for dr, dc in _NEIGHBOURS:
             target = (r+dr, c+dc)
             if not (0 <= target[0] < height.shape[0] and 0 <= target[1] < height.shape[1]):

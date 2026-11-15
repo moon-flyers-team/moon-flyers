@@ -84,6 +84,19 @@ class RoverGridTests(unittest.TestCase):
         self.assertAlmostEqual(result['cost'], dijkstra_flat(blocked, (2, 1), (2, 5), 10))
         self.assertTrue(all(not blocked[r, c] for r, c in result['path_rc']))
 
+    def test_exhausted_search_reports_whether_it_reached_region_edges(self):
+        blocked = np.zeros((7, 7), dtype=bool)
+        blocked[:, 3] = True
+        result = self.route(start=(2, 1), goal=(2, 5), blocked=blocked)
+        self.assertEqual(result['status'], 'no_route')
+        self.assertEqual(result['search_boundary_reached'],
+                         dict(row_min=True, row_max=True, col_min=True, col_max=False))
+        blocked[:] = True
+        blocked[1, 1] = blocked[5, 5] = False
+        isolated = self.route(blocked=blocked)
+        self.assertEqual(isolated['status'], 'no_route')
+        self.assertFalse(any(isolated['search_boundary_reached'].values()))
+
     def test_corner_cutting_is_forbidden(self):
         blocked = np.ones((7, 7), dtype=bool)
         blocked[1, 1] = blocked[2, 2] = False

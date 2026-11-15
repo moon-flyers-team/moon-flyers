@@ -183,6 +183,8 @@ def main(argv=None):
     parser.add_argument('--goal', type=float, nargs=2, metavar=('LAT', 'LON'))
     parser.add_argument('--cell-size-m', type=float, default=20)
     parser.add_argument('--padding-m', type=float, default=300)
+    parser.add_argument('--max-cells', type=int, default=250_000, help='maximum grid cells (memory budget)')
+    parser.add_argument('--max-expansions', type=int, default=250_000, help='maximum A* node expansions')
     parser.add_argument('--max-slope-deg', type=float, default=15)
     parser.add_argument('--climb-weight', type=float, default=2)
     parser.add_argument('--slope-weight', type=float, default=1)
@@ -204,10 +206,12 @@ def main(argv=None):
     sampled = RecordedDEM(dem)
     result = plan_rover_route(sampled, start, goal, max_slope_deg=args.max_slope_deg,
                               cell_size_m=args.cell_size_m, padding_m=args.padding_m,
-                              climb_weight=args.climb_weight, slope_weight=args.slope_weight)
+                              climb_weight=args.climb_weight, slope_weight=args.slope_weight,
+                              max_cells=args.max_cells, max_expansions=args.max_expansions)
     plot_route(result, sampled, start, goal, source, args.output)
     report = args.output.with_suffix('.json')
     report.write_text(json.dumps({'source': source, 'result': result}, indent=2, allow_nan=False), encoding='utf-8')
+    print(f"Expanded nodes: {result['expanded_nodes']}; boundary reached: {result['search_boundary_reached']}")
     print(f"Status: {result['status']}\nPlot: {args.output.resolve()}\nReport: {report.resolve()}")
     return 0 if result['status'] == 'route_found' else 2
 
