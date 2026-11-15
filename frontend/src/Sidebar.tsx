@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Section } from './Section';
 import type { LandingSite } from './types';
 import type { Coordinates } from './map/projection';
@@ -10,7 +10,11 @@ interface Props {
   onOpenSettings: () => void;
 }
 
+const MIN_SIDEBAR_WIDTH = 220;
+const MAX_SIDEBAR_WIDTH = 600;
+
 export function Sidebar({ sites, onSiteToggle, onSiteAdd, onOpenSettings }: Props) {
+  const asideRef = useRef<HTMLElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const [adding, setAdding] = useState(false);
@@ -18,6 +22,23 @@ export function Sidebar({ sites, onSiteToggle, onSiteAdd, onOpenSettings }: Prop
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [announcement, setAnnouncement] = useState('');
+  const [width, setWidth] = useState(() => {
+    const stored = Number(localStorage.getItem('sidebarWidth'));
+    return Number.isFinite(stored) && stored >= MIN_SIDEBAR_WIDTH && stored <= MAX_SIDEBAR_WIDTH ? stored : 268;
+  });
+  const [resizing, setResizing] = useState(false);
+  useEffect(() => { localStorage.setItem('sidebarWidth', String(width)); }, [width]);
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e: PointerEvent) => {
+      const left = asideRef.current?.getBoundingClientRect().left ?? 0;
+      setWidth(Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, e.clientX - left)));
+    };
+    const onUp = () => setResizing(false);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+  }, [resizing]);
   const validCoordinates = latitude.trim() !== '' && longitude.trim() !== ''
     && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude))
     && Number(latitude) >= -90 && Number(latitude) <= 90 && Number(longitude) >= -180 && Number(longitude) <= 180;
@@ -26,7 +47,7 @@ export function Sidebar({ sites, onSiteToggle, onSiteAdd, onOpenSettings }: Prop
     addButtonRef.current?.focus();
   }
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" ref={asideRef} style={{ width, minWidth: width, maxWidth: width }}>
       <div className="sb-top-bar">
         <button className="sb-settings-btn" onClick={onOpenSettings} aria-label="Open mission planner settings" title="Mission planner settings">
           ⚙
@@ -73,6 +94,14 @@ export function Sidebar({ sites, onSiteToggle, onSiteAdd, onOpenSettings }: Prop
           ))}
         </ul>
       </Section>
+      <div
+        className={`sb-resizer${resizing ? ' sb-resizer--active' : ''}`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onPointerDown={e => { e.preventDefault(); setResizing(true); }}
+        onDoubleClick={() => setWidth(268)}
+      />
     </aside>
   );
 }

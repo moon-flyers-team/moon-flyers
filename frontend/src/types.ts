@@ -84,33 +84,29 @@ export interface HeatmapLayer {
   max: number;
   values: (number | null)[];
 }
-export type RouteWaypointType = 'base' | 'waypoint' | 'camp' | 'poi';
-
-export interface RouteWaypoint {
-  index: number;
-  lat: number;
-  lon: number;
-  label: string;
-  arrival_utc: string;
-  departure_utc: string;
-  type: RouteWaypointType;
-  sun_visible: boolean;
-  earth_visible: boolean;
-  eclipse: boolean;
-  slope_deg: number | null;
-  leg_distance_km: number | null;
-  notes: string;
+export interface RouteParams { waypoints: SiteReference[]; step_m?: number }
+export interface RoutePoint {
+  latitude_deg: number;
+  longitude_deg: number;
+  distance_m: number;
+  waypoint_index: number | null;
 }
-
-export interface TouristRoute {
-  site: SiteDefinition;
-  landing_utc: string;
-  departure_utc: string;
-  days_on_surface: number;
-  total_distance_km: number;
-  waypoints: RouteWaypoint[];
-  eclipse_windows: TimeWindow[];
+export interface RouteLeg { from_index: number; to_index: number; distance_m: number }
+export interface RouteResponse {
+  method: 'straight_line';
+  waypoints: (SiteDefinition & { id: string | null })[];
+  legs: RouteLeg[];
+  total_distance_m: number;
+  path: RoutePoint[];
 }
+export interface RecommendedSitesParams {
+  window_start_utc: string;
+  window_end_utc: string;
+  constraints: Constraints;
+  limit?: number;
+}
+export interface Recommendation { rank: number; site: SiteDefinition; landing_utc: string; metrics: Metrics; fit: Fit }
+export interface RecommendedSitesResponse { method: 'mock_heuristic'; recommendations: Recommendation[] }
 
 export interface MapHeatmapsResponse {
   projection: MapHeatmapsParams['projection'];

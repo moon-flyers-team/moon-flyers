@@ -1,8 +1,9 @@
 """Local horizon models: elevation of the horizon (terrain) per azimuth, for one site.
 
 `for_site()` returns the real LOLA terrain horizon when the server has a verified DEM
-dataset mounted (`LOLA_DEM_DIR`), and the mock hills otherwise. Nothing else in the
-calculation pipeline needs to change: every consumer only calls `elevation_deg(az)`.
+dataset mounted (`LOLA_DEM_DIR`), and the mock hills otherwise. Consumers call
+`elevation_deg(az)`, and read `slope_deg`: the real terrain slope at the site from the DEM,
+or None when there is no DEM (the mock hills and the flat horizon never invent a slope).
 """
 
 import hashlib
@@ -19,6 +20,8 @@ log = logging.getLogger(__name__)
 
 
 class HorizonModel(Protocol):
+    slope_deg: float | None  # terrain slope at the site, degrees from horizontal; None = unknown
+
     def elevation_deg(self, az_deg: float) -> float:
         """Horizon elevation in degrees at azimuth `az_deg` (clockwise from north)."""
         ...
@@ -26,6 +29,8 @@ class HorizonModel(Protocol):
 
 class FlatHorizon:
     """No terrain: the horizon is at 0° in every direction."""
+
+    slope_deg = None
 
     def elevation_deg(self, az_deg: float) -> float:
         return 0.0
@@ -39,6 +44,8 @@ class MockTerrainHorizon:
     low-latitude sites stay under 0.5°. Kept low because the mock Sun only reaches about 2° at
     the pole, and real rim sites (Shackleton, Connecting Ridge) are chosen for their low horizons.
     """
+
+    slope_deg = None  # no real terrain, so no slope
 
     _HARMONICS = (1, 2, 3, 5)  # whole cycles per 360°, so the profile joins up at north
     _WEIGHTS = (0.40, 0.30, 0.20, 0.10)
@@ -58,13 +65,14 @@ class MockTerrainHorizon:
 class DemHorizon:
     """Terrain horizon from the LOLA DEMs mounted at `LOLA_DEM_DIR`.
 
-    Holds the 360-value skyline computed once per site (see `_dem_profile`), so a
-    request that asks for the horizon at many azimuths does not touch the rasters
+    Holds the 360-value skyline and the site slope computed once per site (see `_dem_site`),
+    so a request that asks for the horizon at many azimuths does not touch the rasters
     again. Negative values are real: a site on a rim sees terrain below its horizon.
     """
 
-    def __init__(self, profile_deg: tuple[float, ...]):
+    def __init__(self, profile_deg: tuple[float, ...], slope_deg: float | None):
         self._profile = profile_deg
+        self.slope_deg = slope_deg
 
     def elevation_deg(self, az_deg: float) -> float:
         return self._profile[int(round(az_deg)) % 360]
@@ -77,11 +85,12 @@ def _dem(directory: str) -> "lunar_horizon_dem.DEM":
 
 
 @lru_cache(maxsize=512)
-def _dem_profile(directory: str, latitude_deg: float, longitude_deg: float) -> tuple[float, ...]:
-    """Skyline for one site, rounded to the precision the API reports."""
+def _dem_site(directory: str, latitude_deg: float, longitude_deg: float) -> tuple[tuple[float, ...], float | None]:
+    """Skyline and slope for one site, rounded to the precision the API reports."""
     out = lunar_horizon_dem.horizon(latitude_deg, longitude_deg,
                                     height_above_terrain=0.0, dem=_dem(directory))
-    return tuple(round(v, 3) for v in out["horizon_elevation_deg"])
+    slope = out["slope_deg"]
+    return tuple(round(v, 3) for v in out["horizon_elevation_deg"]), None if slope is None else round(slope, 1)
 
 
 def for_site(site: Site) -> HorizonModel:
@@ -96,7 +105,7 @@ def for_site(site: Site) -> HorizonModel:
     if not directory:
         return MockTerrainHorizon(site)
     try:
-        return DemHorizon(_dem_profile(directory, round(site.latitude_deg, 6), round(site.longitude_deg, 6)))
+        return DemHorizon(*_dem_site(directory, round(site.latitude_deg, 6), round(site.longitude_deg, 6)))
     except RuntimeError as exc:  # e.g. "No DEM coverage at the site"
         log.warning("DEM horizon unavailable for %s (%.4f, %.4f): %s; reporting a flat horizon",
                     site.name, site.latitude_deg, site.longitude_deg, exc)

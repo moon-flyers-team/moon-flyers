@@ -1,0 +1,1536 @@
+{
+  "version": "south-pole-20261115",
+  "retrieved_at_utc": "2026-11-15T08:45:42.043907+00:00",
+  "source_query_url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0/query?where=1%3D1&outFields=%2A&returnGeometry=false&f=json",
+  "source_sha256": "51340dd6fffd2ba71f399547a6eece0d2af72a159fe2ee0a93dd21d1e40c9bc6",
+  "pit_atlas_survey": {
+    "url": "https://www.lroc.asu.edu/atlases/pits/list",
+    "sha256": "68b2a192f035b2ad84d9fe6e994a465cea8748896d903760ae118d9952a171ce",
+    "records_checked": 278,
+    "in_cap_records": 0,
+    "southernmost_latitude_deg": -78.0579
+  },
+  "coverage": {
+    "south_latitude_deg": -90,
+    "north_latitude_deg": -80,
+    "selection": "footprint_intersects_cap",
+    "complete": false
+  },
+  "points_of_interest": [
+    {
+      "id": "iau-10114",
+      "name": "Idel son L",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -83.991924,
+      "longitude_deg": 118.563063,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 14.01945
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "259"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/10114"
+        }
+      ]
+    },
+    {
+      "id": "iau-11081",
+      "name": "Malapert A",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -80.194918,
+      "longitude_deg": -3.463150000000013,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 16.6667
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "297"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/11081"
+        }
+      ]
+    },
+    {
+      "id": "iau-11083",
+      "name": "Malapert C",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -80.972604,
+      "longitude_deg": 9.93268900000001,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 19.4942
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "299"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/11083"
+        }
+      ]
+    },
+    {
+      "id": "iau-11084",
+      "name": "Malapert E",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -83.9699,
+      "longitude_deg": 20.24654799999999,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 11.8347
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "300"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/11084"
+        }
+      ]
+    },
+    {
+      "id": "iau-11085",
+      "name": "Malapert F",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -81.526972,
+      "longitude_deg": 14.698047000000003,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 5.7073
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "301"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/11085"
+        }
+      ]
+    },
+    {
+      "id": "iau-11610",
+      "name": "Newton A",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -79.900878,
+      "longitude_deg": -20.403373999999985,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 32.6965
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "357"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/11610"
+        }
+      ]
+    },
+    {
+      "id": "iau-11611",
+      "name": "Newton B",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -81.386482,
+      "longitude_deg": -17.064486999999986,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 23.54665
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "358"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/11611"
+        }
+      ]
+    },
+    {
+      "id": "iau-11614",
+      "name": "Newton E",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -79.833457,
+      "longitude_deg": -37.464494,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 8.64865
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "361"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/11614"
+        }
+      ]
+    },
+    {
+      "id": "iau-12943",
+      "name": "Schomberger F",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -79.989015,
+      "longitude_deg": 19.82274000000001,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 4.84915
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "413"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/12943"
+        }
+      ]
+    },
+    {
+      "id": "iau-12948",
+      "name": "Schomberger L",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -80.67597,
+      "longitude_deg": 17.21309199999999,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 7.98905
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "418"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/12948"
+        }
+      ]
+    },
+    {
+      "id": "iau-13015",
+      "name": "Scott E",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -81.148551,
+      "longitude_deg": 35.517236999999994,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 14.1074
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "426"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/13015"
+        }
+      ]
+    },
+    {
+      "id": "iau-13016",
+      "name": "Scott M",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -83.81437,
+      "longitude_deg": 34.87148100000002,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 9.474
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "427"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/13016"
+        }
+      ]
+    },
+    {
+      "id": "iau-13886",
+      "name": "Wiechert A",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -82.407752,
+      "longitude_deg": 168.19978000000003,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 13.4332
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "450"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/13886"
+        }
+      ]
+    },
+    {
+      "id": "iau-13887",
+      "name": "Wiechert E",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -83.514617,
+      "longitude_deg": 176.14324799999997,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 9.75245
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "451"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/13887"
+        }
+      ]
+    },
+    {
+      "id": "iau-13888",
+      "name": "Wiechert J",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -85.176763,
+      "longitude_deg": -177.826466,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 17.39505
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "452"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/13888"
+        }
+      ]
+    },
+    {
+      "id": "iau-13889",
+      "name": "Wiechert P",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -85.081171,
+      "longitude_deg": 151.48132099999998,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 21.02365
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "453"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/13889"
+        }
+      ]
+    },
+    {
+      "id": "iau-13890",
+      "name": "Wiechert U",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -83.402365,
+      "longitude_deg": 149.11931000000004,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 14.97775
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "454"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/13890"
+        }
+      ]
+    },
+    {
+      "id": "iau-1439",
+      "name": "de Gerlache",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -88.448714,
+      "longitude_deg": -90.447515,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 15.70655
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "30"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/1439"
+        }
+      ]
+    },
+    {
+      "id": "iau-14502",
+      "name": "Haworth",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -87.202858,
+      "longitude_deg": -7.493655999999987,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 25.71155
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "476"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14502"
+        }
+      ]
+    },
+    {
+      "id": "iau-14534",
+      "name": "Ibn Bajja",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -86.001394,
+      "longitude_deg": -72.738681,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 5.98845
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "477"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14534"
+        }
+      ]
+    },
+    {
+      "id": "iau-14535",
+      "name": "Kocher",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -84.396901,
+      "longitude_deg": -134.108504,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 10.99775
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "478"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14535"
+        }
+      ]
+    },
+    {
+      "id": "iau-14536",
+      "name": "Kuhn",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -84.412411,
+      "longitude_deg": -152.100212,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 8.56425
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "479"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14536"
+        }
+      ]
+    },
+    {
+      "id": "iau-14537",
+      "name": "Laveran",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.804688,
+      "longitude_deg": -160.216308,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 6.25775
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "480"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14537"
+        }
+      ]
+    },
+    {
+      "id": "iau-14538",
+      "name": "Nefed ev",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.071889,
+      "longitude_deg": 135.772307,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 26.46775
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "481"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14538"
+        }
+      ]
+    },
+    {
+      "id": "iau-14539",
+      "name": "Svedberg",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.685957,
+      "longitude_deg": 65.135966,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 6.76745
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "482"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14539"
+        }
+      ]
+    },
+    {
+      "id": "iau-14540",
+      "name": "von Baeyer",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.807684,
+      "longitude_deg": 61.769755,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 6.72835
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "483"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14540"
+        }
+      ]
+    },
+    {
+      "id": "iau-14541",
+      "name": "Wapowski",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -83.068612,
+      "longitude_deg": 53.550089000000014,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 5.8065
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "484"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14541"
+        }
+      ]
+    },
+    {
+      "id": "iau-14564",
+      "name": "Braude",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.768727,
+      "longitude_deg": 159.09666600000003,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 5.6388
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "485"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/14564"
+        }
+      ]
+    },
+    {
+      "id": "iau-1484",
+      "name": "Demonax",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -78.168261,
+      "longitude_deg": 59.088854999999995,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 60.9655
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "31"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/1484"
+        }
+      ]
+    },
+    {
+      "id": "iau-16004",
+      "name": "Henson",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -88.57,
+      "longitude_deg": -130.63,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 21.5
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "491"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/16004"
+        }
+      ]
+    },
+    {
+      "id": "iau-16007",
+      "name": "Spudis",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -89.51,
+      "longitude_deg": -84.61,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 6.5
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "493"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/16007"
+        }
+      ]
+    },
+    {
+      "id": "iau-16008",
+      "name": "Marvin",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -89.13,
+      "longitude_deg": -87.78,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 2.3
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "492"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/16008"
+        }
+      ]
+    },
+    {
+      "id": "iau-1645",
+      "name": "Drygalski",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -79.573782,
+      "longitude_deg": -87.176984,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 81.2445
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "33"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/1645"
+        }
+      ]
+    },
+    {
+      "id": "iau-1919",
+      "name": "Faustini",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -87.177099,
+      "longitude_deg": 85.02409999999998,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 21.2423
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "35"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/1919"
+        }
+      ]
+    },
+    {
+      "id": "iau-2101",
+      "name": "Ganswindt",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -79.324591,
+      "longitude_deg": 111.22315700000001,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 38.1468
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "36"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/2101"
+        }
+      ]
+    },
+    {
+      "id": "iau-247",
+      "name": "Amundsen",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -84.439795,
+      "longitude_deg": 83.06914899999998,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 51.6975
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "8"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/247"
+        }
+      ]
+    },
+    {
+      "id": "iau-2620",
+      "name": "Hedervari",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.772261,
+      "longitude_deg": 85.63078100000001,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 37.07025
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "43"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/2620"
+        }
+      ]
+    },
+    {
+      "id": "iau-2650",
+      "name": "Idel son",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.270524,
+      "longitude_deg": 112.40091100000001,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 27.19355
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "44"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/2650"
+        }
+      ]
+    },
+    {
+      "id": "iau-3603",
+      "name": "Malapert",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -84.798043,
+      "longitude_deg": 12.305736999999993,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 35.2212
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "51"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/3603"
+        }
+      ]
+    },
+    {
+      "id": "iau-422",
+      "name": "Ashbrook",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -81.104278,
+      "longitude_deg": -110.575003,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 78.84
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "10"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/422"
+        }
+      ]
+    },
+    {
+      "id": "iau-4321",
+      "name": "Nobile",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -85.239498,
+      "longitude_deg": 53.647625000000005,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 36.76805
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "59"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/4321"
+        }
+      ]
+    },
+    {
+      "id": "iau-5395",
+      "name": "Scott",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -82.536664,
+      "longitude_deg": 48.791066,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 50.9035
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "70"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/5395"
+        }
+      ]
+    },
+    {
+      "id": "iau-5450",
+      "name": "Shackleton",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -89.625776,
+      "longitude_deg": 132.321845,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 10.5
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "71"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/5450"
+        }
+      ]
+    },
+    {
+      "id": "iau-5494",
+      "name": "Shoemaker",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -88.032497,
+      "longitude_deg": 39.854183000000006,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 24.167
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "72"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/5494"
+        }
+      ]
+    },
+    {
+      "id": "iau-5782",
+      "name": "Sverdrup",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -88.308438,
+      "longitude_deg": -153.502923,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 16.41335
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "76"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/5782"
+        }
+      ]
+    },
+    {
+      "id": "iau-6541",
+      "name": "Wiechert",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -84.042118,
+      "longitude_deg": 164.612666,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 20.4115
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "81"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/6541"
+        }
+      ]
+    },
+    {
+      "id": "iau-7236",
+      "name": "Amundsen C",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -80.760453,
+      "longitude_deg": 85.658545,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 13.13605
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "88"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/7236"
+        }
+      ]
+    },
+    {
+      "id": "iau-8057",
+      "name": "Cabeus A",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -82.044887,
+      "longitude_deg": -40.33979199999999,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 20.44105
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "158"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/8057"
+        }
+      ]
+    },
+    {
+      "id": "iau-8058",
+      "name": "Cabeus B",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -82.230204,
+      "longitude_deg": -54.687231,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 29.80865
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "159"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/8058"
+        }
+      ]
+    },
+    {
+      "id": "iau-8616",
+      "name": "De Forest P",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -79.703895,
+      "longitude_deg": -177.060698,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 9.737
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "196"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/8616"
+        }
+      ]
+    },
+    {
+      "id": "iau-8719",
+      "name": "Demonax B",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -81.472904,
+      "longitude_deg": 71.924005,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 11.58295
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "207"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/8719"
+        }
+      ]
+    },
+    {
+      "id": "iau-8720",
+      "name": "Demonax C",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -80.283681,
+      "longitude_deg": 56.13801999999998,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 5.18335
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "208"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/8720"
+        }
+      ]
+    },
+    {
+      "id": "iau-8838",
+      "name": "Drygalski P",
+      "category": "natural_feature",
+      "feature_type": "Satellite Feature",
+      "latitude_deg": -80.950624,
+      "longitude_deg": -99.621663,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 13.9882
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "214"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/8838"
+        }
+      ]
+    },
+    {
+      "id": "iau-953",
+      "name": "Cabeus",
+      "category": "natural_feature",
+      "feature_type": "Crater, craters",
+      "latitude_deg": -85.277073,
+      "longitude_deg": -41.805499999999995,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 50.291
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "21"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://planetarynames.wr.usgs.gov/Feature/953"
+        }
+      ]
+    },
+    {
+      "id": "im1-odysseus",
+      "name": "IM-1 Odysseus lander",
+      "category": "lander",
+      "feature_type": "Robotic lander",
+      "latitude_deg": -80.13,
+      "longitude_deg": 1.44,
+      "boundary": {
+        "kind": "point",
+        "radius_km": 0
+      },
+      "location_uncertainty_km": null,
+      "notes": "LRO-observed landing location, February 2024. Coordinates published to 0.01 degree; precision is not a quantified uncertainty. No separate payload/rover locations inferred.",
+      "sources": [
+        {
+          "title": "NASA: LRO images Odysseus (2024-02-26)",
+          "url": "https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/"
+        }
+      ]
+    },
+    {
+      "id": "im2-athena",
+      "name": "IM-2 Athena lander",
+      "category": "lander",
+      "feature_type": "Robotic lander",
+      "latitude_deg": -84.7906,
+      "longitude_deg": 29.1957,
+      "boundary": {
+        "kind": "point",
+        "radius_km": 0
+      },
+      "location_uncertainty_km": null,
+      "notes": "LROC-observed landing location, March 2025; lander came to rest on its side. Location uncertainty is not quantified. No separate payload/rover locations inferred.",
+      "sources": [
+        {
+          "title": "NASA/GSFC/ASU LROC: IM-2 Athena Seen Obliquely (2025-03-10)",
+          "url": "https://www.lroc.asu.edu/images/1408"
+        }
+      ]
+    },
+    {
+      "id": "trek-494",
+      "name": "Mons Mouton",
+      "category": "natural_feature",
+      "feature_type": "Mons, montes",
+      "latitude_deg": -84.81,
+      "longitude_deg": 38.150000000000006,
+      "boundary": {
+        "kind": "approximate_circle",
+        "radius_km": 65.0
+      },
+      "location_uncertainty_km": null,
+      "notes": "Moon Trek nomenclature centre and diameter; circular extent is approximate, not a surveyed boundary. Label spelling follows Moon Trek.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "494"
+        },
+        {
+          "title": "Feature reference",
+          "url": "https://www.nasa.gov/feature/ames/moon-mountain-name-honors-nasa-mathematician-melba-mouton"
+        }
+      ]
+    },
+    {
+      "id": "trek-impact-0",
+      "name": "Lunar Prospector",
+      "category": "impact",
+      "feature_type": "Impact",
+      "latitude_deg": -87.7,
+      "longitude_deg": 42,
+      "boundary": {
+        "kind": "point",
+        "radius_km": 0
+      },
+      "location_uncertainty_km": null,
+      "notes": "Published Moon Trek impact location, not a verified hardware footprint. Location uncertainty is not quantified in this source.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "0"
+        },
+        {
+          "title": "Mission reference",
+          "url": "https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id=1998-001A"
+        }
+      ]
+    },
+    {
+      "id": "trek-impact-1",
+      "name": "Chandraya'an 1 MIP",
+      "category": "impact",
+      "feature_type": "Impact",
+      "latitude_deg": -89,
+      "longitude_deg": -30,
+      "boundary": {
+        "kind": "point",
+        "radius_km": 0
+      },
+      "location_uncertainty_km": null,
+      "notes": "Published Moon Trek impact location, not a verified hardware footprint. Location uncertainty is not quantified in this source.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "1"
+        },
+        {
+          "title": "Mission reference",
+          "url": "https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id=2008-052A"
+        }
+      ]
+    },
+    {
+      "id": "trek-impact-3",
+      "name": "LCROSS Centaur",
+      "category": "impact",
+      "feature_type": "Impact",
+      "latitude_deg": -84.6796,
+      "longitude_deg": -48.709299999999985,
+      "boundary": {
+        "kind": "point",
+        "radius_km": 0
+      },
+      "location_uncertainty_km": null,
+      "notes": "Published Moon Trek impact location, not a verified hardware footprint. Location uncertainty is not quantified in this source. The source layer also contains a differing unofficial LCROSS label; this record preserves the explicit Impact entry, not a highest-accuracy reconstruction.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "3"
+        },
+        {
+          "title": "Mission reference",
+          "url": "https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id=2009-031B"
+        }
+      ]
+    },
+    {
+      "id": "trek-impact-4",
+      "name": "LCROSS spacecraft",
+      "category": "impact",
+      "feature_type": "Impact",
+      "latitude_deg": -84.719,
+      "longitude_deg": -49.610000000000014,
+      "boundary": {
+        "kind": "point",
+        "radius_km": 0
+      },
+      "location_uncertainty_km": null,
+      "notes": "Published Moon Trek impact location, not a verified hardware footprint. Location uncertainty is not quantified in this source. The source layer also contains a differing unofficial LCROSS label; this record preserves the explicit Impact entry, not a highest-accuracy reconstruction.",
+      "sources": [
+        {
+          "title": "NASA Moon Trek combined south-polar nomenclature",
+          "url": "https://trek.nasa.gov/moon/trekarcgis/rest/services/CombinedNomenclatureS/MapServer/0",
+          "record_id": "4"
+        },
+        {
+          "title": "Mission reference",
+          "url": "https://nssdc.gsfc.nasa.gov/nmc/spacecraft/display.action?id=2009-031B"
+        }
+      ]
+    }
+  ]
+}

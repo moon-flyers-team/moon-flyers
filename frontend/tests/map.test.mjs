@@ -118,7 +118,7 @@ test('map renders the polar grid, real local basemap tiles, disabled and custom 
   assert.match(html,/Shackleton/);
   assert.match(html,/A map site/);
   assert.match(html,/map-waypoint--disabled/);
-  assert.match(html,/1 sidebar site lies outside/);
+  assert.doesNotMatch(html,/sidebar sites? lies? outside/);
   assert.match(html,/class="map-coordinates"/);
   assert.match(html,/<\/svg><div class="map-coordinate-bar">/, 'cursor readout is inside the map viewport after its SVG');
   assert.match(html,/map-waypoint--custom/);

@@ -31,7 +31,7 @@ class SiteSeries:
         """Metrics and fit for a mission landing at `landing` and staying `days_on_surface`."""
         i = round((landing - self.start).total_seconds() / self.step_s)
         j = i + self.stay_samples
-        m = visibility.metrics(self.sun[i:j], self.earth[i:j], self.step_s)
+        m = visibility.metrics(self.sun[i:j], self.earth[i:j], self.step_s, self.horizon.slope_deg)
         return m, visibility.fit(m, self.c)
 
     def timeline(self) -> Windows:

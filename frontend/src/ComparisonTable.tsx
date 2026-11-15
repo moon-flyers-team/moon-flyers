@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { FitBadge } from './FitBadge';
-import { TimelineBars } from './TimelineBars';
+import { SurfaceStayWindow, TimelineBars } from './TimelineBars';
 import type { LandingSite, ComparisonResult, Constraints, Metrics, WindowMetricsEntry } from './types';
 
 const THREE_MONTHS_MS = 91 * 86_400_000;
@@ -19,6 +20,8 @@ interface Props {
   constraints: Constraints;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onLandingSelect?: (id: string) => void;
+  landingSiteId?: string | null;
   landingTime: string;
   onTimeSeek: (iso: string) => void;
   missionStart: string;
@@ -27,12 +30,13 @@ interface Props {
   loading: boolean;
   error?: string;
   onRetry: () => void;
+  children?: ReactNode;
 }
 
-export function ComparisonTable({ sites, results, constraints: c, selectedId, onSelect,
+export function ComparisonTable({ sites, results, constraints: c, selectedId, onSelect, onLandingSelect, landingSiteId,
   landingTime, onTimeSeek,
   missionStart, sliderEnd, disabled,
-  loading, error, onRetry }: Props) {
+  loading, error, onRetry, children }: Props) {
 
   const startMs = useMemo(() => {
     const value = Date.parse(missionStart);
@@ -68,6 +72,27 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
 
   function goPrev() { setViewStartMs(ms => Math.max(startMs, ms - THREE_MONTHS_MS)); }
   function goNext() { setViewStartMs(ms => Math.min(sliderEndMs - THREE_MONTHS_MS, ms + THREE_MONTHS_MS)); }
+
+  // Topbar slider tracks the timeline column so thumb and bar markers line up
+  const topbarRef = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLTableCellElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [sliderBox, setSliderBox] = useState<{ left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const bar = topbarRef.current, col = columnRef.current, scroller = scrollRef.current;
+    if (!bar || !col || !scroller) return;
+    const measure = () => {
+      const b = bar.getBoundingClientRect(), c = col.getBoundingClientRect();
+      const pad = 9;
+      setSliderBox({ left: c.left - b.left + pad, width: Math.max(0, c.width - 2 * pad) });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(bar);
+    ro.observe(col);
+    scroller.addEventListener('scroll', measure, { passive: true });
+    return () => { ro.disconnect(); scroller.removeEventListener('scroll', measure); };
+  }, []);
 
   // Custom inline slider
   const sliderRef      = useRef<HTMLDivElement>(null);
@@ -117,8 +142,10 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
   }, [viewStart, viewEnd, onTimeSeek, disabled]);
 
   return <section className="ct-wrap" aria-label="Site comparison" aria-busy={loading}>
-    <div className="ct-topbar">
-      <span className="ct-tab">Comparison</span>
+    <div className="ct-topbar" ref={topbarRef}>
+      <span className="ct-tab">Comparison{onLandingSelect && <span className="ct-info" tabIndex={0} role="img"
+        aria-label="Double-click a site to choose landing · keyboard: Shift+Enter"
+        data-tip="Double-click a site to choose landing · keyboard: Shift+Enter">i</span>}</span>
       <div className="ct-time">
         <span className="ct-time-label">Landing (UTC)</span>
         <input type="datetime-local" className="ct-time-val ct-time-input"
@@ -134,68 +161,82 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             }
           }} />
       </div>
-    </div>
-    {loading && <p className="request-status" role="status">Comparing sites. This can take 10–30 seconds…</p>}
-    {error && <div className="request-error" role="alert">Comparison failed: {error} <button className="ct-btn" onClick={onRetry}>Retry comparison</button></div>}
-    <div className="ct-scroll"><table className="ct">
-      <thead>
-      <tr>
-        <th className="ct-left">Site</th>
-        <th>Result</th>
-        <th>Sunlight<span className="th-sub">min {c.min_sun_visible_pct}%</span></th>
-        <th>Longest night<span className="th-sub">max {c.max_darkness_hours} h</span></th>
-        <th>Earth contact<span className="th-sub">min {c.min_earth_visible_pct}%</span></th>
-        <th>Longest gap<span className="th-sub">max {c.max_earth_blackout_hours} h</span></th>
-        <th>Terrain<span className="th-sub">Slope max {c.max_slope_deg}°</span></th>
-        <th className="ct-slider-cell">
-          <div className="ts-wrapper">
-            <div className="ts-controls-row">
-              <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoPrev} onClick={goPrev}>◀</button>
-              <div
-                ref={sliderRef}
-                className={`ts-custom-track${disabled ? ' ts-custom-track--disabled' : ''}`}
-                aria-disabled={!!disabled}
-                onMouseDown={e => { if (!disabled) { sliderDragging.current = true; seekSlider(e.clientX); } }}
-              >
-                {thumbPct !== null && <div className="ts-thumb" style={{ left: `${thumbPct}%` }} />}
-              </div>
-              <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoNext} onClick={goNext}>▶</button>
-            </div>
-            <div className="ts-ticks-inset">
-              {ticks.map(t => (
-                <div key={t.label} className="ts-tick" style={{ left: `${t.pct}%` }}>
-                  <div className="ts-tick-mark" />
-                  <span className="ts-tick-label">{t.label}</span>
-                </div>
-              ))}
-            </div>
+      <div className="ts-wrapper ct-topbar-slider"
+        style={sliderBox ? { left: sliderBox.left, width: sliderBox.width } : undefined}>
+        <div className="ts-controls-row">
+          <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoPrev} onClick={goPrev}>◀</button>
+          <div
+            ref={sliderRef}
+            className={`ts-custom-track${disabled ? ' ts-custom-track--disabled' : ''}`}
+            aria-disabled={!!disabled}
+            onMouseDown={e => { if (!disabled) { sliderDragging.current = true; seekSlider(e.clientX); } }}
+          >
+            {!disabled && <SurfaceStayWindow landingUtc={landingTime} daysOnSurface={c.days_on_surface}
+              missionStart={viewStart} missionEnd={viewEnd} />}
+            {thumbPct !== null && <div className="ts-thumb" style={{ left: `${thumbPct}%` }} />}
           </div>
-        </th>
-      </tr>
-      </thead>
-      <tbody>
-        {!sites.length && <tr><td colSpan={8} className="ct-empty">No sites selected</td></tr>}
-        {sites.map((site, index) => {
-          const result = results?.[index];
-          const entry: WindowMetricsEntry | undefined = result?.window_metrics.find(
-            e => Date.parse(e.landing_utc) === selectedMs
-          );
-          const metrics = entry?.metrics;
-          const warn = (metric: keyof Metrics) => entry?.fit.violations.includes(metric) ?? false;
-          return <tr key={site.id} className={selectedId === site.id ? 'row-sel' : ''} onClick={() => onSelect(site.id)}>
-            <td className="ct-left ct-name"><button className="site-select" aria-pressed={selectedId === site.id} onClick={() => onSelect(site.id)}>{site.name}</button></td>
-            <td>{entry ? <FitBadge fit={entry.fit.status} /> : result ? 'Not sampled' : '—'}</td>
-            <NumCell value={metrics?.sun_visible_pct} warn={warn('sun_visible_pct')} unit="%" />
-            <NumCell value={metrics?.longest_darkness_hours} warn={warn('longest_darkness_hours')} unit=" h" />
-            <NumCell value={metrics?.earth_visible_pct} warn={warn('earth_visible_pct')} unit="%" />
-            <NumCell value={metrics?.longest_earth_blackout_hours} warn={warn('longest_earth_blackout_hours')} unit=" h" />
-            <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
-            <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
-              eclipseWindows={result?.timeline.eclipse}
-              missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={disabled ? undefined : onTimeSeek} />
-          </tr>;
-        })}
-      </tbody>
-    </table></div>
+          <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoNext} onClick={goNext}>▶</button>
+        </div>
+        <div className="ts-ticks-inset">
+          {ticks.map(t => (
+            <div key={t.label} className="ts-tick" style={{ left: `${t.pct}%` }}>
+              <div className="ts-tick-mark" />
+              <span className="ts-tick-label">{t.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+    <div className="ct-body">
+      <div className="ct-card">
+      {loading && <p className="request-status" role="status">Comparing sites. This can take 10–30 seconds…</p>}
+      {error && <div className="request-error" role="alert">Comparison failed: {error} <button className="ct-btn" onClick={onRetry}>Retry comparison</button></div>}
+      <div className="ct-scroll" ref={scrollRef}><table className="ct">
+        <thead>
+        <tr>
+          <th className="ct-left">Site</th>
+          <th>Result</th>
+          <th>Sunlight<span className="th-sub">min {c.min_sun_visible_pct}%</span></th>
+          <th>Longest night<span className="th-sub">max {c.max_darkness_hours} h</span></th>
+          <th>Earth contact<span className="th-sub">min {c.min_earth_visible_pct}%</span></th>
+          <th>Longest gap<span className="th-sub">max {c.max_earth_blackout_hours} h</span></th>
+          <th>Terrain<span className="th-sub">Slope max {c.max_slope_deg}°</span></th>
+          <th className="ct-slider-cell" ref={columnRef}>Timeline
+            <span className="th-sub">
+              <span className="tl-legend-dot tl-legend-dot--sun" />Sun
+              <span className="tl-legend-dot tl-legend-dot--earth" />Earth
+            </span>
+            <span className="th-sub"><span className="surface-stay-key" />Shaded: {c.days_on_surface} {c.days_on_surface === 1 ? 'day' : 'days'} on surface</span>
+          </th>
+        </tr>
+        </thead>
+        <tbody>
+          {!sites.length && <tr><td colSpan={8} className="ct-empty">No sites selected</td></tr>}
+          {sites.map((site, index) => {
+            const result = results?.[index];
+            const entry: WindowMetricsEntry | undefined = result?.window_metrics.find(
+              e => Date.parse(e.landing_utc) === selectedMs
+            );
+            const metrics = entry?.metrics;
+            const warn = (metric: keyof Metrics) => entry?.fit.violations.includes(metric) ?? false;
+            return <tr key={site.id} className={`${selectedId === site.id ? 'row-sel' : ''}${landingSiteId === site.id ? ' row-landing' : ''}`}  onClick={() => onSelect(site.id)} onDoubleClick={() => onLandingSelect?.(site.id)}>
+              <td className="ct-left ct-name"><button className="site-select" onKeyDown={event => { if (event.key === 'Enter' && event.shiftKey) { event.preventDefault(); onLandingSelect?.(site.id); } }} aria-pressed={selectedId === site.id} onClick={() => onSelect(site.id)}>{site.name}</button>{landingSiteId === site.id && <span className="ct-landing-badge">Landing site</span>}</td>
+              <td>{entry ? <FitBadge fit={entry.fit.status} /> : result ? 'Not sampled' : '—'}</td>
+              <NumCell value={metrics?.sun_visible_pct} warn={warn('sun_visible_pct')} unit="%" />
+              <NumCell value={metrics?.longest_darkness_hours} warn={warn('longest_darkness_hours')} unit=" h" />
+              <NumCell value={metrics?.earth_visible_pct} warn={warn('earth_visible_pct')} unit="%" />
+              <NumCell value={metrics?.longest_earth_blackout_hours} warn={warn('longest_earth_blackout_hours')} unit=" h" />
+              <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
+              <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
+                missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime}
+                daysOnSurface={disabled ? undefined : c.days_on_surface} onChange={disabled ? undefined : onTimeSeek}
+                allMet={entry?.fit.status === 'both_met'} />
+            </tr>;
+          })}
+        </tbody>
+      </table></div>
+      </div>
+      {children}
+    </div>
   </section>;
 }

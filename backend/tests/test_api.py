@@ -82,15 +82,6 @@ def test_far_side_site_never_sees_earth():
     assert "earth_visible_pct" in first["fit"]["violations"]
 
 
-def test_landing_windows_sorted_and_limited():
-    r = client.post("/landing-windows", json={"site": {"id": "malapert_massif"}, **WINDOW, "limit": 3})
-    res = r.json()
-    assert [x["rank"] for x in res] == [1, 2, 3]
-    order = {"both_met": 0, "power_short": 1, "comms_short": 1, "neither_met": 2}
-    keys = [(order[x["fit"]["status"]], -x["metrics"]["sun_visible_pct"]) for x in res]
-    assert keys == sorted(keys)
-
-
 def test_error_status_codes():
     bad_json = client.post("/compare", content="{not json", headers={"content-type": "application/json"})
     assert bad_json.status_code == 400
@@ -110,3 +101,13 @@ def test_limits_and_validation():
 def test_eclipse_needs_overlap_and_visible_earth():
     from src.services.visibility import eclipse_flags
     assert eclipse_flags([10, 10, 10], [5, 5, 5], [10.5, 10.5, 20], [5, 5, 5], [True, False, True]) == [True, False, False]
+
+
+def test_slope_over_the_limit_is_flagged_but_keeps_the_status():
+    from src.schemas import Constraints, Metrics
+    from src.services.visibility import fit
+    m = dict(sun_visible_pct=100, longest_darkness_hours=0, earth_visible_pct=100, longest_earth_blackout_hours=0)
+    steep = fit(Metrics(**m, slope_deg=12.0), Constraints(max_slope_deg=8))
+    assert steep.status == "both_met" and steep.violations == ["slope_deg"]
+    assert fit(Metrics(**m, slope_deg=5.0), Constraints(max_slope_deg=8)).violations == []
+    assert fit(Metrics(**m, slope_deg=None), Constraints(max_slope_deg=0)).violations == []  # unknown: no flag

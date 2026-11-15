@@ -15,6 +15,7 @@ import { HeatmapLegends } from './map/HeatmapLegends';
 
 interface Props {
   sites: LandingSite[];
+  landingSiteId?: string | null;
   constraints: Constraints;
   mission: MissionParams;
   active: boolean;
@@ -61,7 +62,7 @@ function HeatmapImages({ data, opacity }: { data?: MapHeatmapsResponse; opacity:
     width={2 * MAP_RADIUS} height={2 * MAP_RADIUS} preserveAspectRatio="none" />)}</g>;
 }
 
-export function MapPanel({ sites, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
+export function MapPanel({ sites, landingSiteId, constraints, mission, active, validation, showValidation = true, onSiteAdd, onSiteRename, onSiteDelete }: Props) {
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -199,7 +200,13 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
       <label className="map-opacity">Opacity <input type="range" aria-label="Heatmap opacity" title="Opacity for all displayed overlays" min="0" max="1" step="0.05"
         value={opacity} onChange={event => setOpacity(Number(event.target.value))} /></label>
     </div>
-    <div className="map-heading"><div><h2>South polar cap</h2><p>80°S–90°S · Polar stereographic · East-positive longitude</p></div>
+    <div className="map-heading">
+      <div className="map-heading-title">
+        <h2>South polar cap</h2>
+        <span className="ct-info map-info-tip" tabIndex={0} role="img"
+          aria-label="80°S–90°S · Polar stereographic · East-positive longitude. Click map to add a site; Sun/Earth: reference averages, other heatmaps: mission analysis. Pinch/wheel: zoom; two-finger scroll/right-drag: pan; Shift+scroll: pan."
+          data-tip={'80°S–90°S · Polar stereographic · East-positive longitude\nClick map to add a site · Sun/Earth: reference averages · Other heatmaps: mission analysis\nPinch/wheel: zoom · Two-finger scroll/right-drag: pan · Shift+scroll: pan'}>i</span>
+      </div>
       <div className="map-zoom" role="group" aria-label="Map zoom">
         <button className="ct-btn" aria-label="Zoom out" disabled={zoom <= 1} onClick={() => { setCamera(previous => zoomAt(previous, 0.5, previous)); setSelection(null); }}>−</button>
         <span>{Number(zoom.toFixed(1))}×</span>
@@ -215,7 +222,6 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
       {/^(404|405|501)\b/.test(heatmaps.error) ? 'Heatmaps unavailable: the backend does not yet implement POST /map/heatmaps.' : `Heatmap request failed: ${heatmaps.error}`}
       {' '}<button className="ct-btn" onClick={heatmaps.retry}>Retry overlays</button>
     </p>}
-    {!criteria.length && !referenceCriteria.length && <p className="map-hint">Click map to add a site · Sun/Earth: reference averages · Other heatmaps: mission analysis</p>}
     {referenceCriteria.length > 0 && <p className="map-reference-notice" role="note">
       LOLA averages (~18.6 years), unaffected by mission settings. Any-disc visibility; mission scoring uses whole-disc clearance.
       {referenceCriteria.length > 1 && ' Layers blend; view individually to read their scales.'}
@@ -224,7 +230,6 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
       A reference overlay could not load. Turn its checkbox off and on to retry.
     </p>}
     <div className="map-preamble-controls">
-      <p className="map-hint">Pinch/wheel: zoom · Two-finger scroll/right-drag: pan · Shift+scroll: pan</p>
       <div className="map-site-legend"><span className="map-site-key map-site-key--default">Default sites</span><span className="map-site-key map-site-key--custom">Your sites · click to edit</span></div>
     </div>
     {showBasemap && basemap === 'topography' && <p className="map-hint">LOLA elevation · 500 m contours · Reference radius: 1,737.4 km</p>}
@@ -307,6 +312,7 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
               onKeyDown={site.custom ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); choose(site, undefined, undefined, site); } } : undefined}>
               <title>{`${site.name}: ${formatCoordinates(site)}${site.enabled ? '' : ' (disabled)'}`}</title>
               {site.custom && <circle className="map-waypoint-hit" cx={point.x} cy={point.y} r={11 / zoom} />}
+              {site.id === landingSiteId && <circle className="map-landing-ring" cx={point.x} cy={point.y} r={10 / zoom}><title>Selected landing site</title></circle>}
               <circle cx={point.x} cy={point.y} r={5 / zoom} />
               <text x={point.x + 8 / zoom} y={point.y - 8 / zoom} fontSize={10 / zoom} strokeWidth={2 / zoom}>{site.name}</text>
             </g>;
@@ -353,11 +359,9 @@ export function MapPanel({ sites, constraints, mission, active, validation, show
       </form>}
     </div>
     <p className="map-announcement" role="status">{announcement}</p>
-    {outside.length > 0 && <p className="map-hint">{outside.length} sidebar {outside.length === 1 ? 'site lies' : 'sites lie'} outside 80°S–90°S and {outside.length === 1 ? 'is' : 'are'} not plotted.</p>}
-    <footer className="map-attribution">{showBasemap ? 'Basemap' : 'Surface layers'}: <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek · {basemap === 'topography' ? 'LRO/LOLA elevation' : 'LRO/LROC WAC'}</a>{!showBasemap && ' (hidden)'}.
-      {referenceCriteria.length > 0 && <> Reference overlays: <a href="https://pgda.gsfc.nasa.gov/products/69" target="_blank" rel="noreferrer">NASA/LOLA · Mazarico et al. (2011), updated 2016 products</a>.</>}
-      {' '}Names: IAU/USGS via Moon Trek. Feature hover areas approximate catalogue diameters.
+    {(referenceCriteria.length > 0 || criteria.length + referenceCriteria.length > 1) && <footer className="map-attribution">
+      {referenceCriteria.length > 0 && <>Reference overlays: <a href="https://pgda.gsfc.nasa.gov/products/69" target="_blank" rel="noreferrer">NASA/LOLA · Mazarico et al. (2011), updated 2016 products</a>.</>}
       {criteria.length + referenceCriteria.length > 1 && ' Overlays blend; enable one for an unambiguous color scale.'}
-    </footer>
+    </footer>}
   </section>;
 }

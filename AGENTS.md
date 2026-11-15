@@ -14,16 +14,36 @@ when agreed behavior changes.
 
 ## Current handoff state
 
+- Python `POST /recommended-sites` now searches a real bundled POI catalogue near a landing
+  site, not the former mocked mission ranking. Request: `site` (landing-site ID or coordinates)
+  and optional `radius_km` (40 default). Response: published POIs and point/approximate-area
+  distances, no scores/ranks. The 80°S–90°S cap includes boundary-crossing features. Successful
+  responses use data-source header `catalogue`, independent of ephemerides. No frontend UI or
+  client is wired yet; Node mock has no implementation. Root `API.md` owns the revised contract;
+  `docs/poi-sources.md` records sources, cave/pit coverage limits and regeneration. POI IDs are
+  not landing-site IDs. Do not invent cave, rover or suitability data for missing records.
+- Python `GET /sites` has 21 entries (seven preserved plus 14 sourced location additions),
+  covering 49/61 POIs within 40 km. Most additions are explicitly unvetted exploration
+  references at published feature centres, not selected landing points. Sources/coverage are
+  in `docs/poi-sources.md`; Node mock/offline catalogues are unchanged. App currently enables
+  every returned site by default, so the larger catalogue increases initial analysis work.
+
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including
   comparison results, visibility timelines and sampled Earth-eclipse intervals. Ranked
   landing times remain available through the client/API, but no best-times UI is mounted.
-- MainPanel has Profiles and Map tabs. Profiles retains the existing dashboard and the
+- MainPanel has Profiles and Map tabs, plus a Route Planner tab after explicitly choosing
+  a landing site by double-clicking a comparison row (Shift+Enter on its site button).
+  TouristRoutePanel lives only in Route Planner; selecting another landing site resets it.
+  Profiles retains the existing dashboard and the
   contributor-added time slider; Map shows the 80°S–90°S lunar south-polar cap. Analysis
   preloads every enabled site over the mission window plus its stay. Scrubbing filters
   locally; the horizon axis stays fixed across the full loaded site batch.
 - API loading/error messages and retry controls are implemented. The offline banner occupies
   its own layout row above the dashboard and must never cover content.
+- Profiles shows an accessible loading popup while comparison or site-analysis batches are
+  pending, including retries. It clears after both requests settle so errors/retry controls
+  remain accessible. The overlay is confined to Profiles; tabs and settings remain available.
 - FastAPI defaults to live JPL Horizons ephemerides; `MOON_FLYERS_EPHEMERIS=mock`
   selects synthetic positions. Terrain independently uses synthetic hills without a mounted
   DEM, a LOLA skyline with one, or flat fallback for uncovered sites/runtime DEM errors.
@@ -46,7 +66,8 @@ when agreed behavior changes.
 | `frontend/src/main.tsx` | React entry point with StrictMode |
 | `frontend/src/App.tsx` | Draft/applied mission settings, settings dialog, catalogue, enabled sites, banner |
 | `frontend/src/Sidebar.tsx` | Settings launcher, site toggles and manual custom-site entry |
-| `frontend/src/MainPanel.tsx` | Profiles/Map tabs, landing time, validation, comparison and batch analysis requests |
+| `frontend/src/MainPanel.tsx` | Profiles/Map/Route Planner tabs, landing selection/time, comparison and batch analysis requests |
+| `frontend/src/TouristRoutePanel.tsx` | Route Planner map, local waypoints, explicit round-trip request and exports |
 | `frontend/src/MapPanel.tsx` | Polar map, overlay controls, floating cursor readout, reference layers, and click-to-add site dialog |
 | `frontend/src/map/` | Stereographic math, heatmap validation/color ramps, bundled feature catalogue |
 | `frontend/public/maps/south-pole/` | NASA Moon Trek basemap tiles and source/projection metadata |
@@ -167,6 +188,10 @@ Keep **mission scoring duration** separate from **visualization coverage**:
    timestamp spellings. Missing samples show “Not sampled”, never first-candidate evidence.
    The native Landing time (UTC) field supports keyboard editing on the 6-hour grid and
    changes selection locally without fetching; retain the custom timeline as another input.
+   `SurfaceStayWindow` in TimelineBars shades landing through `days_on_surface` on the
+   slider and every site's timeline. It follows selection locally and clips to the visible
+   range; a dashed right edge indicates the stay continues beyond view. Keep its duration
+   tied to applied scoring constraints, not the lunar-day chart coverage.
 
 Use each body's own azimuth/elevation and the current sample's `sun_visible`/`earth_visible`
 flags. Do not label peak elevations as current positions or infer visibility from elevation
@@ -333,3 +358,41 @@ decisions change.
 - Group pre-map notices/help in `.map-preamble`, with a 3px gap and 1.25 line height. Keep
   navigation hints and site color keys on a wrapping row, and keep reference-data caveats
   concise while preserving their long-term/any-disc meaning. Errors remain conspicuous.
+
+## Route Planner
+
+- MainPanel owns an explicit landing-site ID, separate from ordinary profile selection.
+  Single clicks still compare; double-click/Shift+Enter selects the landing and reveals Route Planner
+  without changing tabs or focus. The landing row has a green glow and explicit label; both
+  maps highlight it in green. With no landing
+  selected the tab is absent. Closing clears it, and deleting the landing site removes it.
+- TouristRoutePanel is keyed by landing ID/coordinates, so a different landing resets all
+  waypoints and requests. Switching tabs preserves the current plan. Site visibility toggles
+  do not add sites to this map: only the landing and locally picked waypoints are rendered.
+- Left-click picks up to 98 additional waypoints in visit order. Arrow keys pan and Enter
+  picks the map center. Right/middle drag pans; wheel/pinch zooms and smooth scrolling pans.
+  Draft edits immediately hide obsolete routes and abort pending requests. No automatic
+  recommendations are fetched. Waypoints are session-only and separate from Sidebar sites.
+- Calculate round trip calls `api.getRoute` with `[landing, ...waypoints, landing]` and
+  `step_m: 100`. Custom stops send names/decimal coordinates, never local UUIDs. The existing
+  FastAPI `/route` returns great-circle segments; retain its terrain/slope/shadow limitation.
+  The Node mock does not implement `/route`: show its error instead of inventing a path.
+- The map starts centered on the landing. Picking stops preserves the camera; calculation
+  fits the returned route, and Fit can frame draft markers. KML/CSV appear only for a current
+  successful response. Route distances and path come from the backend, not draft geometry.
+
+- Intermediate route-table rows support native drag-and-drop; there is no separate waypoint list.
+  Coordinates appear beneath each stop name, with a Remove button for intermediate waypoints.
+  Up/down buttons provide keyboard/touch reordering. Start/return entries stay fixed.
+  Reordering updates draft state and invalidates the previous path just like adding/removing.
+- Route table columns are Stop, Leg, Total and signed Elevation change (plus index/order
+  controls). No Sun/Earth/Fit columns or mission scoring legend appear in the planner.
+  `map/elevations.ts` bilinearly samples bundled real LOLA metre elevations (~792 m grid),
+  subtracting the previous endpoint from the current one. No-data/out-of-coverage values
+  show a dash. This is approximate net endpoint change, not accumulated ascent or route safety.
+  `scripts/generate-elevations.py` regenerates the JSON from the same validated F32 crop as
+  the contour tool. All data remain frontend assets; `/route` payload/response is unchanged.
+
+- The frontend caps intermediate waypoints at 98, matching FastAPI's 100 request entries
+  with start/return included. Mouse and keyboard additions share the same guard. The
+  counter shows the limit; remove a stop to make room when it is reached.

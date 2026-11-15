@@ -32,7 +32,7 @@ export default function App() {
     if (catalogue.data) {
       const catalogueSites = catalogue.data.sites;
       setSites(previous => [...catalogueSites.map(site => ({ ...site,
-        enabled: previous.find(existing => existing.id === site.id)?.enabled ?? true })),
+        enabled: previous.find(existing => existing.id === site.id)?.enabled ?? false })),
         ...previous.filter(site => site.custom)]);
       setUsingMock(false);
       setBackendMock(catalogue.data.isMock);
