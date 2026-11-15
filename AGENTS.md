@@ -64,6 +64,8 @@ when agreed behavior changes.
 - The separate mock API lives entirely in `frontend/src/mock/` and implements every v0
   endpoint with deterministic synthetic data. Run `pnpm mock:api`; it uses Node and requires
   no Python environment. `data.mjs` generates consistent samples, metrics, windows, and fit.
+  `/compare` and `/landing-windows` build one hourly series per site and slice per candidate
+  (`candidateMetrics`) instead of rebuilding every stay, mirroring the real backend.
 - The frontend identifies mock responses via `X-Moon-Flyers-Data-Source: mock` and labels
   them explicitly. Offline fallback data still contains example site metadata only. Do not
   present synthetic results as scientific predictions.
@@ -86,6 +88,7 @@ when agreed behavior changes.
 | `frontend/src/api.ts` | Shared HTTP client, typed endpoint methods, request payloads, FastAPI error handling |
 | `frontend/src/types.ts` | API response types and UI parameter types |
 | `frontend/src/useRequest.ts` | Debouncing, abort handling, retry state, and suppression of obsolete responses |
+| `frontend/src/useSiteBatch.ts` | Per-site comparison/analysis cache so enabling a site fetches only that site |
 | `frontend/src/time.ts` | UTC helpers and lunar-day constants |
 | `frontend/src/ComparisonTable.tsx`, `FitBadge.tsx` | Backend metrics, fit statuses, and violation indicators |
 | `frontend/src/TimelineBars.tsx` | Visibility intervals clipped to the displayed time range |
@@ -188,14 +191,19 @@ Keep **mission scoring duration** separate from **visualization coverage**:
 
 1. `/compare` and `/landing-windows` receive the user's `days_on_surface` unchanged
    (default 14). Mission constraints are assembled in `MainPanel.tsx`.
-2. Visualization requests all enabled sites in parallel with the mission window, mission
-   duration, and hourly samples (`timestep_seconds: 3600`). The batch extends through the
-   window end plus the mission stay. Switching sites uses the preloaded data.
+2. Visualization requests enabled sites with the mission window, mission duration, and
+   hourly samples (`timestep_seconds: 3600`). The batch extends through the window end plus
+   the mission stay. Switching sites uses the preloaded data. `useSiteBatch.ts` caches one
+   entry per site: a changed mission window or constraint set invalidates every entry, while
+   enabling or disabling a site reuses the cache and fetches only sites with no entry (one
+   comparison request for those sites plus one analysis each). Disabling a site or
+   re-enabling a cached site makes no request.
 3. `HorizonChart.tsx` selects returned samples from the current time through one mean lunar
    day. Markers use the first available sample in that slice. The full site batch determines
    altitude-axis bounds. The custom timeline slider updates time locally; ±6 h buttons
    are no longer mounted.
-4. Applied mission dates/constraints or enabled sites load new batches. Comparison returns
+4. Applied mission dates/constraints or enabled sites load new batches. A site with no cached
+   entry renders as pending (`—`) until its own response arrives. Comparison returns
    `window_metrics`; the table matches numeric UTC instants exactly, accepting equivalent
    timestamp spellings. Missing samples show “Not sampled”, never first-candidate evidence.
    The native Landing time (UTC) field supports keyboard editing on the 6-hour grid and

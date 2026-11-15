@@ -16,7 +16,7 @@ function NumCell({ value, warn, unit = '' }: { value?: number | null; warn: bool
 
 interface Props {
   sites: LandingSite[];
-  results?: ComparisonResult[];
+  results?: (ComparisonResult | undefined)[];
   constraints: Constraints;
   selectedId: string | null;
   onSelect: (id: string) => void;
