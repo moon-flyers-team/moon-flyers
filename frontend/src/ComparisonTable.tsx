@@ -200,7 +200,10 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
           <th>Longest gap<span className="th-sub">max {c.max_earth_blackout_hours} h</span></th>
           <th>Terrain<span className="th-sub">Slope max {c.max_slope_deg}°</span></th>
           <th className="ct-slider-cell" ref={columnRef}>Timeline
-            <span className="th-sub">Sun · Earth · eclipse windows</span>
+            <span className="th-sub">
+              <span className="tl-legend-dot tl-legend-dot--sun" />Sun
+              <span className="tl-legend-dot tl-legend-dot--earth" />Earth
+            </span>
             <span className="th-sub"><span className="surface-stay-key" />Shaded: {c.days_on_surface} {c.days_on_surface === 1 ? 'day' : 'days'} on surface</span>
           </th>
         </tr>
@@ -223,7 +226,6 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
               <NumCell value={metrics?.longest_earth_blackout_hours} warn={warn('longest_earth_blackout_hours')} unit=" h" />
               <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
               <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
-                eclipseWindows={result?.timeline.eclipse}
                 missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime}
                 daysOnSurface={disabled ? undefined : c.days_on_surface} onChange={disabled ? undefined : onTimeSeek} />
             </tr>;

@@ -7,7 +7,6 @@ const STEP_MS = 6 * 3_600_000;
 interface Props {
   powerWindows?: TimeWindow[];
   commsWindows?: TimeWindow[];
-  eclipseWindows?: TimeWindow[];
   missionStart: string;
   missionEnd: string;
   landingUtc?: string;
@@ -42,7 +41,7 @@ export function SurfaceStayWindow({ landingUtc, daysOnSurface, missionStart, mis
     style={{ left: `${segment.left * 100}%`, width: `${segment.width * 100}%` }} />;
 }
 
-export function TimelineBars({ powerWindows, commsWindows, eclipseWindows, missionStart, missionEnd, landingUtc, daysOnSurface, onChange }: Props) {
+export function TimelineBars({ powerWindows, commsWindows, missionStart, missionEnd, landingUtc, daysOnSurface, onChange }: Props) {
   const startMs = Date.parse(missionStart);
   const endMs   = Date.parse(missionEnd);
   const tracksRef = useRef<HTMLDivElement>(null);
@@ -74,9 +73,6 @@ export function TimelineBars({ powerWindows, commsWindows, eclipseWindows, missi
     const inside = (w: TimeWindow) => Date.parse(w.start_utc) <= t && t < Date.parse(w.end_utc);
     return Number.isFinite(t) && !!powerWindows?.some(inside) && !!commsWindows?.some(inside);
   }, [landingUtc, powerWindows, commsWindows]);
-  const eclipseSegs = useMemo(() => normalise(eclipseWindows ?? [], missionStart, missionEnd),
-    [eclipseWindows, missionStart, missionEnd]);
-
   return (
     <td>
       <div className="tl-wrap">
@@ -94,15 +90,10 @@ export function TimelineBars({ powerWindows, commsWindows, eclipseWindows, missi
             ))}
           </div>
           <div className={`tl-track${commsWindows ? '' : ' tl-track--empty'}`}
-            role="img" aria-label={`Earth: ${commsWindows ? `${commsWindows.length} visibility windows` : 'data unavailable'}${eclipseSegs.length ? `, ${eclipseSegs.length} eclipses` : ''}`}>
+            role="img" aria-label={`Earth: ${commsWindows ? `${commsWindows.length} visibility windows` : 'data unavailable'}`}>
             {normalise(commsWindows ?? [], missionStart, missionEnd).map((seg, i) => (
               <div key={i} className="tl-seg tl-seg--comms"
                 title={`${formatUtc(seg.window.start_utc)} – ${formatUtc(seg.window.end_utc)}`}
-                style={{ left: `${seg.left * 100}%`, width: `${seg.width * 100}%` }} />
-            ))}
-            {eclipseSegs.map((seg, i) => (
-              <div key={`eclipse-${i}`} className="tl-seg tl-seg--eclipse"
-                title={`Earth eclipse: ${formatUtc(seg.window.start_utc)} – ${formatUtc(seg.window.end_utc)}`}
                 style={{ left: `${seg.left * 100}%`, width: `${seg.width * 100}%` }} />
             ))}
           </div>

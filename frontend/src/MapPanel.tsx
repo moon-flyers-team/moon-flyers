@@ -355,11 +355,9 @@ export function MapPanel({ sites, landingSiteId, constraints, mission, active, v
       </form>}
     </div>
     <p className="map-announcement" role="status">{announcement}</p>
-    {outside.length > 0 && <p className="map-hint">{outside.length} sidebar {outside.length === 1 ? 'site lies' : 'sites lie'} outside 80°S–90°S and {outside.length === 1 ? 'is' : 'are'} not plotted.</p>}
-    <footer className="map-attribution">{showBasemap ? 'Basemap' : 'Surface layers'}: <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noreferrer">NASA Moon Trek · {basemap === 'topography' ? 'LRO/LOLA elevation' : 'LRO/LROC WAC'}</a>{!showBasemap && ' (hidden)'}.
-      {referenceCriteria.length > 0 && <> Reference overlays: <a href="https://pgda.gsfc.nasa.gov/products/69" target="_blank" rel="noreferrer">NASA/LOLA · Mazarico et al. (2011), updated 2016 products</a>.</>}
-      {' '}Names: IAU/USGS via Moon Trek. Feature hover areas approximate catalogue diameters.
+    {(referenceCriteria.length > 0 || criteria.length + referenceCriteria.length > 1) && <footer className="map-attribution">
+      {referenceCriteria.length > 0 && <>Reference overlays: <a href="https://pgda.gsfc.nasa.gov/products/69" target="_blank" rel="noreferrer">NASA/LOLA · Mazarico et al. (2011), updated 2016 products</a>.</>}
       {criteria.length + referenceCriteria.length > 1 && ' Overlays blend; enable one for an unambiguous color scale.'}
-    </footer>
+    </footer>}
   </section>;
 }

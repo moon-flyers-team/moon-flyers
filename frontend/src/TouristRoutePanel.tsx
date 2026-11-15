@@ -3,8 +3,7 @@ import { project, unproject, MAP_CENTER, MAP_RADIUS, METRES_TO_SVG } from './map
 import type { Coordinates, MapPoint } from './map/projection';
 import { zoomAt, panBy, wheelAction } from './map/navigation';
 import type { MapCamera } from './map/navigation';
-import { ROUTE_LAYERS, visibleTiles } from './map/routeTiles';
-import type { RouteLayer } from './map/routeTiles';
+import { visibleTiles } from './map/routeTiles';
 import { api, siteReference } from './api';
 import { useRequest } from './useRequest';
 import { elevationChange, loadElevations } from './map/elevations';
@@ -158,15 +157,10 @@ export function TouristRoutePanel({ landingSite, landingUtc, onClose }: Props) {
           <button className="ct-btn route-close" aria-label="Close tourist route" onClick={onClose}>✕</button>
         </div>
       </div>
-      {route?.method === 'straight_line' && (
-        <div className="route-mock-banner">
-          Straight-line route: the planner doesn't consider terrain, slope or shadow yet.
-        </div>
-      )}
+
       <div className="route-editor">
         <p>Click the map to add up to {MAX_WAYPOINTS} waypoints. Drag stops to reorder, or use ↑/↓. Right-drag to pan; wheel to zoom.</p>
-        <span>{waypoints.length}/{MAX_WAYPOINTS} waypoints · returns to {siteName}</span>
-        <button className="ct-btn" disabled={!waypoints.length || loading}
+<button className="ct-btn" disabled={!waypoints.length || loading}
           onClick={() => { setAnnouncement(''); if (submitted === waypoints) result.retry(); else setSubmitted(waypoints); }}>Calculate round trip</button>
         <button className="ct-btn" disabled={!waypoints.length} onClick={() => setWaypoints([])}>Clear waypoints</button>
 
@@ -196,7 +190,6 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   const svgRef = useRef<SVGSVGElement>(null);
   const drag = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const [panning, setPanning] = useState(false);
-  const [layer, setLayer] = useState<RouteLayer>('relief');
   const [active, setActive] = useState<number | null>(null);
   const [px, setPx] = useState(600);
 
@@ -257,8 +250,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   const half = MAP_CENTER / camera.zoom;
   const k = (2 * half) / px; // svg units per screen pixel
   const tiles = useMemo(
-    () => visibleTiles(layer, { x: camera.x, y: camera.y, half, pxPerSvg: 1 / k }),
-    [layer, camera.x, camera.y, half, k],
+    () => visibleTiles('relief', { x: camera.x, y: camera.y, half, pxPerSvg: 1 / k }),
+    [camera.x, camera.y, half, k],
   );
   const scaleKm = niceKm((px / 5) * k / METRES_TO_SVG / 1000);
   const scalePx = scaleKm * 1000 * METRES_TO_SVG / k;
@@ -329,7 +322,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
           <rect x={camera.x - half * 2} y={camera.y - half * 2} width={half * 4} height={half * 4} fill="#0b0b14" />
           <g clipPath={`url(#${clipId}-cap)`}>
             {BASE_TILES.map(t => (
-              <image key={`${t.row}-${t.col}`} href={`/maps/south-pole/${t.row}-${t.col}.png`}
+              <image key={`${t.row}-${t.col}`} href={`/maps/south-pole/topography/${t.row}-${t.col}.png`}
                 x={t.x} y={t.y} width={t.size} height={t.size} preserveAspectRatio="none" />
             ))}
             {tiles.map(t => (
@@ -384,14 +377,6 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
           <button className="ct-btn" onClick={() => setCamera(fit)}>Fit</button>
         </div>
 
-        <div className="route-layers" role="radiogroup" aria-label="Terrain layer">
-          {(Object.keys(ROUTE_LAYERS) as RouteLayer[]).map(id => (
-            <button key={id} role="radio" aria-checked={layer === id}
-              className={`route-layer${layer === id ? ' route-layer--on' : ''}`}
-              onClick={() => setLayer(id)}>{ROUTE_LAYERS[id].label}</button>
-          ))}
-        </div>
-
         <div className="route-scale" aria-hidden="true">
           <span className="route-scale-bar" style={{ width: scalePx }} />
           <span>{scaleKm >= 1 ? `${scaleKm} km` : `${scaleKm * 1000} m`}</span>
@@ -406,7 +391,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
               </span>
             ))}
           </div>
-          <span className="route-credit">NASA Moon Trek · {ROUTE_LAYERS[layer].credit}</span>
+          <span className="route-credit">NASA Moon Trek · LRO/LOLA relief, 5 m/px</span>
         </div>
       </div>
 

@@ -29,7 +29,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
   const siteId = selectedSite?.id;
   const [landingSiteId, setLandingSiteId] = useState<string | null>(null);
   const landingSite = sites.find(site => site.id === landingSiteId);
-  const tabs: ('profiles' | 'map' | 'route')[] = landingSite ? ['profiles', 'map', 'route'] : ['profiles', 'map'];
+  const tabs: ('profiles' | 'map' | 'route')[] = landingSite ? ['map', 'profiles', 'route'] : ['map', 'profiles'];
   const activeTab = tab === 'route' && !landingSite ? 'profiles' : tab;
   useEffect(() => {
     if (landingSiteId && !landingSite) { setLandingSiteId(null); setTab('profiles'); }
@@ -102,7 +102,7 @@ export function MainPanel({ sites, power, comms, terrain, mission, onSiteAdd, on
               : tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
             setTab(next);
             document.getElementById(`tab-${next}`)?.focus();
-          }}>{name === 'profiles' ? 'Profiles' : name === 'map' ? 'Map' : 'Route Planner'}</button>)}
+          }}>{name === 'profiles' ? 'Site Comparison' : name === 'map' ? 'Map' : 'Route Planner'}</button>)}
       </div>
       <div className="main-body profiles-body" id="panel-profiles" role="tabpanel" aria-labelledby="tab-profiles" hidden={activeTab !== 'profiles'}>
         {activeTab === 'profiles' && profilesLoading && <div className="profiles-loading-overlay">
