@@ -4,6 +4,15 @@ Single source of truth for where the work stands. Update at the end of every
 work chunk. Newest info at the top of each section. Dates are YYYY-MM-DD.
 
 ## Now
+- **Default POI-adjacent references (2026-11-15, branch `feat/poi-default-sites`).** Preserved
+  the seven original sites; added Athena's published observed landing location plus 13
+  explicitly unvetted exploration references at published feature centres. NASA candidate
+  region context informed Nobile/Faustini; their centres are not candidate rim points.
+  All additions are in 80°S–90°S. The 21-site catalogue covers 49/61 POIs (80.3%) within
+  40 km versus 14/61 before, using the POI endpoint's area/point distance semantics.
+  Sources, remaining gaps and frontend loading impact: root `docs/poi-sources.md`.
+  No frontend/mock catalogue changes; App currently enables every returned site, increasing
+  initial analysis work. References are not certified landing locations or reachable routes.
 - **Real `slope_deg` (2026-11-15, branch `feat/real-slope`).** `DemHorizon` carries the DEM's
   site slope (`lunar_horizon_dem.horizon()["slope_deg"]`, 0.1°); `metrics.slope_deg` reports it,
   `null` without a DEM (mock hills never invent a slope). `fit` adds `"slope_deg"` to
@@ -82,7 +91,9 @@ draft). Error policy (user decision): **only the HTTP status codes matter**. 400
 To raise with the frontend team:
 - API.md still says the mock lives in `frontend/src/mock/` (Node) and the backend is the bare
   scaffold. There are now two mocks (theirs in Node, ours in Python), so agree which one they use.
-- Site ids and list: ours (7 sites in `services/catalogue.py`) were invented. Their mock UI shows 10.
+- Site IDs/list: seven legacy approximate entries remain, now supplemented by 14 sourced
+  location additions (21 total). The Node mock/offline catalogues are unchanged. App enables
+  all returned entries by default; review initial loading cost and selection policy separately.
 - The Node mock's 0.4 s artificial delay isn't in the Python mock.
 - With LOLA terrain mounted, horizon elevations reach about -3 to +24 deg; the mock hills
   stayed within 0-1.5 deg. Check the chart's y-axis range, clearance labels and any
@@ -201,6 +212,12 @@ _(date: decision, then why)_
     Earth's angular radius is only about 1°, so it's fully hidden even before terrain.
 
 ## Done
+- 2026-11-15: Added POI-adjacent catalogue defaults with source/safety labels and a measured
+  >=80% coverage regression test. New IDs resolve through GET catalogue, site analysis and
+  POI search without changing response shapes. Checked after rebasing onto current main
+  (real-slope and landing-window removal preserved): backend pytest **107 passed, 2 skipped**;
+  ruff on both changed Python files clean; `git diff --check` clean. Tests use offline
+  ephemerides; no new real terrain or landing-safety validation is claimed. Frontend unchanged.
 - 2026-11-15: Replaced the mocked `/recommended-sites` implementation with sourced POI
   proximity; added bundled catalogue, stdlib refresh/source-survey tool, source documentation,
   strict request/geometry models and 40 focused tests. Nonfinite validation inputs now serialize

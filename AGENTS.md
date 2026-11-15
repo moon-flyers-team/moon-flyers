@@ -22,6 +22,11 @@ when agreed behavior changes.
   client is wired yet; Node mock has no implementation. Root `API.md` owns the revised contract;
   `docs/poi-sources.md` records sources, cave/pit coverage limits and regeneration. POI IDs are
   not landing-site IDs. Do not invent cave, rover or suitability data for missing records.
+- Python `GET /sites` has 21 entries (seven preserved plus 14 sourced location additions),
+  covering 49/61 POIs within 40 km. Most additions are explicitly unvetted exploration
+  references at published feature centres, not selected landing points. Sources/coverage are
+  in `docs/poi-sources.md`; Node mock/offline catalogues are unchanged. App currently enables
+  every returned site by default, so the larger catalogue increases initial analysis work.
 
 - The frontend is React 18, TypeScript, and Vite, using custom CSS and SVG charts.
 - The frontend now implements the request and response formats in `API.md`, including

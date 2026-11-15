@@ -141,6 +141,13 @@ The time slider **never** triggers an API call. It slices pre-loaded data client
    "latitude_deg": -86.0, "longitude_deg": 0.0, "notes": "..." }]
 ```
 
+The Python catalogue now has 21 sites: seven preserved entries and 14 published-location
+additions, mostly explicitly unvetted exploration references. They cover 49/61 POIs within
+40 km using the proximity endpoint's area/point semantics. See root
+[API.md](../../API.md) and [source/coverage notes](../../docs/poi-sources.md#default-landing-site--exploration-reference-coverage).
+No wire-format change; Node mock and frontend fallback catalogues are unchanged. The current
+frontend enables all returned catalogue sites by default, increasing initial analysis work.
+
 *With analysis parameters* it also returns `analysis` for one site, which feeds the horizon
 chart. The frontend calls this **once per enabled site in parallel** on mission params change
 or site toggle — not on slider moves, and not only for the selected site.
