@@ -179,7 +179,7 @@ test('horizon shows the first lunar-day sample rather than maxima without slider
     analysis: { timeseries, horizon: { horizon_azimuth_deg: [0, 180, 360], horizon_elevation_deg: [0, 0, 0] }, metrics, fit, windows } };
   const calls = capture();
   const html = renderToStaticMarkup(React.createElement(HorizonChart, props));
-  assert.match(html, /Sun visible · 1.0°/);
+  assert.match(html, /Sun not visible · 1.0°/);
   assert.match(html, /Earth visible · 3.7°/);
   assert.doesNotMatch(html, /type="range"/);
   assert.match(html, /2027-08-07 06:00 UTC/);
