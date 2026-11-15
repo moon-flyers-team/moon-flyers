@@ -1183,3 +1183,22 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--comms); out
 .route-recs-empty, .route-recs-foot { margin: 0; padding: 8px 6px; color: var(--muted); font-size: 10px; line-height: 1.4; }
 .route-poi { cursor: pointer; }
 .route-poi:hover path { fill: #2a2016; }
+
+/* Hover preview of where a route click would land, and why it moved. */
+.route-hover-tip {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border-hi);
+  background: rgba(9, 9, 18, .92);
+  color: #d5d5ef;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.route-hover-tip--snapped, .route-hover-tip--blocked { border-color: rgba(255,188,120,.65); color: #ffbc78; }
+.route-hover-tip--checking { color: #9292b3; }
+.route-ghost { pointer-events: none; }

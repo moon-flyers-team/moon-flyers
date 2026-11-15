@@ -85,6 +85,14 @@ Ordered by user impact. Each item is a reviewable increment with its own tests.
   blocked banner and "Move to workable cell"; a map pick on impractical terrain is snapped
   automatically and the row records how far it moved. Published POI stops and the App-owned
   landing keep their coordinates.
+- B1b. Done: hovering the route map probes the cursor position (120 ms debounce, one 30 m bucket
+  per cached answer, aborted on move) and previews where a click would land: a dashed ring at the
+  snapped position, a dotted connector from the cursor, and a cursor label stating the reason
+  ("Steep 21° (limit 20°) · moves 120 m"). Enter/click uses the previewed position. Pointer moves
+  are coalesced to one React update per animation frame so a long path does not jank.
+- Open: the hover probe is one small `/route/stops` request per 30 m bucket rather than a local
+  slope raster; a bundled slope grid would remove the latency and the server round trip if hover
+  traffic ever matters. Keyboard picking (Enter at the map centre) has no preview yet.
 - B2. Per-leg result in the table: distance, `no route` with the reason in text (not only a
   `title`), and the corridor width actually used.
 - B3. Elevation profile of the returned path, with placeholder segments marked, replacing the

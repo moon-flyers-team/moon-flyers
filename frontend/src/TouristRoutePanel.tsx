@@ -7,6 +7,8 @@ import type { MapCamera } from './map/navigation';
 import { visibleTiles } from './map/routeTiles';
 import { api, siteReference } from './api';
 import { useRequest } from './useRequest';
+import { useHoverCheck } from './useHoverCheck';
+import { hoverFeedback, previewCoordinates } from './map/routePreview';
 import { elevationChange, loadElevations } from './map/elevations';
 import type { ElevationGrid } from './map/elevations';
 import { formatUtc } from './time';
@@ -401,6 +403,23 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
   const [panning, setPanning] = useState(false);
   const [active, setActive] = useState<number | null>(null);
   const [viewport, setViewport] = useState({ width: 600, height: 600 });
+  // Hover preview: where a click would place the stop, and why it moved.
+  const [hover, setHover] = useState<{ coordinates: Coordinates; x: number; y: number } | null>(null);
+  // Pointer moves arrive faster than React can render a large path; coalesce to one per frame.
+  const hoverPending = useRef<{ coordinates: Coordinates; x: number; y: number } | null>(null);
+  const hoverFrame = useRef(0);
+  useEffect(() => () => { if (hoverFrame.current) cancelAnimationFrame(hoverFrame.current); }, []);
+  const scheduleHover = (value: { coordinates: Coordinates; x: number; y: number } | null) => {
+    hoverPending.current = value;
+    if (hoverFrame.current) return;
+    hoverFrame.current = requestAnimationFrame(() => {
+      hoverFrame.current = 0;
+      setHover(hoverPending.current);
+    });
+  };
+  const hoverCheck = useHoverCheck(hover?.coordinates ?? null);
+  const hoverPreview = hover ? previewCoordinates(hover.coordinates, hoverCheck.check, hoverCheck.pending) : null;
+  const hoverTip = hoverFeedback(hoverCheck.check, hoverCheck.pending);
   const px = Math.max(viewport.width, viewport.height);
 
   const colorOf = (i: number) => i === 0 ? LANDING_COLOR : WAYPOINT_COLOR;
@@ -502,7 +521,8 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
             if (event.button !== 0) return;
             const inverse = event.currentTarget.getScreenCTM()?.inverse();
             const coordinates = inverse ? unproject(new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse)) : null;
-            if (coordinates) onMapPick(coordinates);
+            // Place the stop where the hover preview showed it, not at the raw cursor point.
+            if (coordinates) onMapPick(hoverPreview ?? coordinates);
           }}
           onContextMenu={e => e.preventDefault()}
           onPointerDown={e => {
@@ -513,6 +533,16 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
           }}
           onPointerMove={e => {
             const prev = drag.current;
+            if (!prev) {
+              const inverse = e.currentTarget.getScreenCTM()?.inverse();
+              const coordinates = inverse
+                ? unproject(new DOMPoint(e.clientX, e.clientY).matrixTransform(inverse)) : null;
+              const overPoi = (e.target as Element).closest?.('.route-poi');
+              if (coordinates && !overPoi) {
+                const box = e.currentTarget.getBoundingClientRect();
+                scheduleHover({ coordinates, x: e.clientX - box.left, y: e.clientY - box.top });
+              } else scheduleHover(null);
+            }
             if (!prev || prev.pointerId !== e.pointerId) return;
             const inv = e.currentTarget.getScreenCTM()?.inverse();
             if (!inv) return;
@@ -528,6 +558,7 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
           }}
           onPointerCancel={stopPanning}
           onLostPointerCapture={stopPanning}
+          onPointerLeave={() => { scheduleHover(null); setHover(null); }}
         >
           <defs>
             <clipPath id={`${clipId}-cap`}>
@@ -557,6 +588,23 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
             strokeWidth={1.5 * k} strokeDasharray={`${2 * k} ${14 * k}`} strokeLinecap="round">
             {!reducedMotion && <animate attributeName="stroke-dashoffset" from="0" to={-16 * k} dur="0.9s" repeatCount="indefinite" />}
           </path>
+
+          {hoverPreview && hover && (() => {
+            const ghost = project(hoverPreview);
+            const cursor = project(hover.coordinates);
+            const moved = Math.hypot(ghost.x - cursor.x, ghost.y - cursor.y) > 0.1;
+            const warned = hoverTip.state === 'snapped' || hoverTip.state === 'blocked';
+            const tint = warned ? '#ffbc78' : '#9fe8ff';
+            return (
+              <g className="route-ghost" aria-hidden="true">
+                {moved && <line x1={cursor.x} y1={cursor.y} x2={ghost.x} y2={ghost.y}
+                  stroke={tint} strokeOpacity={0.55} strokeWidth={1.2 * k} strokeDasharray={`${3 * k} ${4 * k}`} />}
+                <circle cx={ghost.x} cy={ghost.y} r={9 * k} fill="none" stroke={tint}
+                  strokeWidth={2 * k} strokeDasharray={`${4 * k} ${3 * k}`} />
+                <circle cx={ghost.x} cy={ghost.y} r={2 * k} fill={tint} />
+              </g>
+            );
+          })()}
 
           {pois.map(poi => {
             const pt = project(poi);
@@ -607,6 +655,13 @@ function RouteView({ route, elevations, onWaypointRemove, onWaypointMove, onMapP
             onClick={() => setCamera(c => zoomAt(c, 0.5, c, MAX_ZOOM))}>−</button>
           <button className="ct-btn" onClick={() => setCamera(fit)}>Fit</button>
         </div>
+
+        {hover && hoverTip.label && (
+          <div className={`route-hover-tip route-hover-tip--${hoverTip.state}`}
+            style={{ left: hover.x + 14, top: hover.y + 14 }} role="status">
+            {hoverTip.label}
+          </div>
+        )}
 
         <div className="route-scale" aria-hidden="true">
           <span className="route-scale-bar" style={{ width: scalePx }} />
