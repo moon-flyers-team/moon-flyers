@@ -5,6 +5,30 @@ dataset (`LOLA_DEM_DIR=/data/lola`, 8 polar products) with the current `main` pl
 read-only throwaway container so production was not touched. Re-run a probe before claiming a
 number has not moved.
 
+## Reverted 2026-11-15 (read this before re-adding B2-B8/C1)
+
+Commits `9ec8f95` (route settings, path elevation column, elevation profile, stale-route state,
+export marking, nginx timeout) and `39e0168` (draft-authoritative stale rendering) were reverted
+after user testing: the panel got worse, not better.
+
+- The stale-route work rendered the previous response wholesale. A `RouteResponse` carries its own
+  `waypoints`, so after the first calculation a map click updated the draft while the map and table
+  kept the old stop list: clicks looked ignored until Recalculate. The follow-up fix split geometry
+  from stops, but the feature had already cost more than it returned.
+- Auto-recalculation defaulting to on re-planned every leg after each edit (~1 s per leg at 60 m),
+  which made the panel feel saturated rather than responsive.
+- Path-sampled stop deltas and the profile were correct but changed numbers the user had learned to
+  read, without a clear win in the reported problems.
+
+Kept from the same work: hover preview and snapping (`4518c2f`), per-stop chips with the blocked
+banner, per-leg limits, `stops[]`/`summary`, `POST /route/stops` and the 20° traversal default.
+
+If any of it comes back: markers and table rows must always come from the draft, geometry may be
+stale but must be visibly marked, auto-recalculation stays opt-in, and the elevation column only
+switches to `path[].elevation_m` together with the profile so the two agree.
+
+`frontend/nginx.conf` is back to the 60 s default read timeout, so a very long route (roughly 50+
+legs) can still end in a 504. That timeout is worth re-adding on its own, without the rest.
 ## What the feature does today
 
 `POST /route` with `planner: "terrain"` plans one A* search per leg over the mounted LOLA DEM at
