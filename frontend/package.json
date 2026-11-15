@@ -11,6 +11,7 @@
     "lint": "eslint . --ext ts,tsx",
     "test": "node --test tests/*.test.mjs",
     "test:mock": "node tests/mock-pipeline.mjs",
+    "test:mock:isolated": "node tests/run-mock-pipeline.mjs",
     "mock:api": "node src/mock/server.mjs"
   },
   "dependencies": {

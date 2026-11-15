@@ -114,8 +114,9 @@ interface SettingsModalProps {
   onCompare: () => void;
 }
 
-function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowerChange, onCommsChange, onTerrainChange, onClose, onCompare }: SettingsModalProps) {
+export function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowerChange, onCommsChange, onTerrainChange, onClose, onCompare }: SettingsModalProps) {
   const dateErrorId = useId();
+  const fieldId = useId();
   const dateError = landingWindowError(mission.windowStart, mission.windowEnd);
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -145,16 +146,16 @@ function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowe
               errorId={dateError ? dateErrorId : undefined}
               onChange={windowEnd => onMissionChange({ ...mission, windowEnd })} />
             <div className="sb-row">
-              <Field label="Days on surface">
+              <Field label="Days on surface" htmlFor={`${fieldId}-stay`}>
                 <div className="sb-unit">
-                  <input type="number" className="sb-input" min={1} step={1} value={mission.daysOnSurface}
+                  <input id={`${fieldId}-stay`} type="number" className="sb-input" min={1} step={1} value={mission.daysOnSurface}
                     onChange={e => onMissionChange({ ...mission, daysOnSurface: +e.target.value })} />
                   <span>d</span>
                 </div>
               </Field>
-              <Field label="Horizon clearance">
+              <Field label="Horizon clearance" htmlFor={`${fieldId}-clearance`}>
                 <div className="sb-unit">
-                  <input type="number" className="sb-input" step="0.1" min={0} max={90} value={mission.horizonClearance}
+                  <input id={`${fieldId}-clearance`} type="number" className="sb-input" step="0.1" min={0} max={90} value={mission.horizonClearance}
                     onChange={e => onMissionChange({ ...mission, horizonClearance: +e.target.value })} />
                   <span>°</span>
                 </div>
@@ -164,16 +165,16 @@ function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowe
 
           <Section title="Power (Sun)" dot="#f5a623">
             <div className="sb-row">
-              <Field label="Min sunlight">
+              <Field label="Min sunlight" htmlFor={`${fieldId}-sunlight`}>
                 <div className="sb-unit">
-                  <input type="number" className="sb-input" min={0} max={100} value={power.minSunlight}
+                  <input id={`${fieldId}-sunlight`} type="number" className="sb-input" min={0} max={100} value={power.minSunlight}
                     onChange={e => onPowerChange({ ...power, minSunlight: +e.target.value })} />
                   <span>%</span>
                 </div>
               </Field>
-              <Field label="Max night">
+              <Field label="Max night" htmlFor={`${fieldId}-night`}>
                 <div className="sb-unit">
-                  <input type="number" className="sb-input" min={0} value={power.maxNight}
+                  <input id={`${fieldId}-night`} type="number" className="sb-input" min={0} value={power.maxNight}
                     onChange={e => onPowerChange({ ...power, maxNight: +e.target.value })} />
                   <span>h</span>
                 </div>
@@ -183,16 +184,16 @@ function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowe
 
           <Section title="Comms (Earth)" dot="#4fc3f7">
             <div className="sb-row">
-              <Field label="Min Earth contact">
+              <Field label="Min Earth contact" htmlFor={`${fieldId}-earth`}>
                 <div className="sb-unit">
-                  <input type="number" className="sb-input" min={0} max={100} value={comms.minEarthContact}
+                  <input id={`${fieldId}-earth`} type="number" className="sb-input" min={0} max={100} value={comms.minEarthContact}
                     onChange={e => onCommsChange({ ...comms, minEarthContact: +e.target.value })} />
                   <span>%</span>
                 </div>
               </Field>
-              <Field label="Max comms gap">
+              <Field label="Max comms gap" htmlFor={`${fieldId}-gap`}>
                 <div className="sb-unit">
-                  <input type="number" className="sb-input" min={0} value={comms.maxCommsGap}
+                  <input id={`${fieldId}-gap`} type="number" className="sb-input" min={0} value={comms.maxCommsGap}
                     onChange={e => onCommsChange({ ...comms, maxCommsGap: +e.target.value })} />
                   <span>h</span>
                 </div>
@@ -201,9 +202,9 @@ function SettingsModal({ mission, power, comms, terrain, onMissionChange, onPowe
           </Section>
 
           <Section title="Terrain">
-            <Field label="Max slope">
+            <Field label="Max slope" htmlFor={`${fieldId}-slope`}>
               <div className="sb-unit">
-                <input type="number" className="sb-input" min={0} max={90} value={terrain.maxSlope}
+                <input id={`${fieldId}-slope`} type="number" className="sb-input" min={0} max={90} value={terrain.maxSlope}
                   onChange={e => onTerrainChange({ ...terrain, maxSlope: +e.target.value })} />
                 <span>°</span>
               </div>

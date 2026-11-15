@@ -34,8 +34,14 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
   missionStart, sliderEnd, disabled,
   loading, error, onRetry }: Props) {
 
-  const startMs     = useMemo(() => Date.parse(missionStart), [missionStart]);
-  const sliderEndMs = useMemo(() => Date.parse(sliderEnd),    [sliderEnd]);
+  const startMs = useMemo(() => {
+    const value = Date.parse(missionStart);
+    return Number.isFinite(value) ? value : 0;
+  }, [missionStart]);
+  const sliderEndMs = useMemo(() => {
+    const value = Date.parse(sliderEnd);
+    return Number.isFinite(value) ? Math.max(startMs, value) : startMs;
+  }, [sliderEnd, startMs]);
 
   const [viewStartMs, setViewStartMs] = useState(() => startMs);
 
@@ -92,8 +98,9 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
   }, [viewStart, viewEnd]);
 
   function seekSlider(clientX: number) {
-    if (!sliderRef.current) return;
+    if (disabled || !sliderRef.current) return;
     const rect  = sliderRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
     const pct   = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const start = Date.parse(viewStart);
     const end   = Date.parse(viewEnd);
@@ -106,7 +113,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [viewStart, viewEnd, onTimeSeek]);
+  }, [viewStart, viewEnd, onTimeSeek, disabled]);
 
   return <section className="ct-wrap" aria-label="Site comparison" aria-busy={loading}>
     <div className="ct-topbar">
@@ -131,15 +138,16 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
         <th className="ct-slider-cell">
           <div className="ts-wrapper">
             <div className="ts-controls-row">
-              <button className="ct-btn ts-nav-btn" disabled={!canGoPrev} onClick={goPrev}>◀</button>
+              <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoPrev} onClick={goPrev}>◀</button>
               <div
                 ref={sliderRef}
                 className={`ts-custom-track${disabled ? ' ts-custom-track--disabled' : ''}`}
-                onMouseDown={e => { sliderDragging.current = true; seekSlider(e.clientX); }}
+                aria-disabled={!!disabled}
+                onMouseDown={e => { if (!disabled) { sliderDragging.current = true; seekSlider(e.clientX); } }}
               >
                 {thumbPct !== null && <div className="ts-thumb" style={{ left: `${thumbPct}%` }} />}
               </div>
-              <button className="ct-btn ts-nav-btn" disabled={!canGoNext} onClick={goNext}>▶</button>
+              <button className="ct-btn ts-nav-btn" disabled={disabled || !canGoNext} onClick={goNext}>▶</button>
             </div>
             <div className="ts-ticks-inset">
               {ticks.map(t => (
@@ -172,7 +180,7 @@ export function ComparisonTable({ sites, results, constraints: c, selectedId, on
             <NumCell value={metrics?.slope_deg} warn={warn('slope_deg')} unit="°" />
             <TimelineBars powerWindows={result?.timeline.sun} commsWindows={result?.timeline.earth}
               eclipseWindows={result?.timeline.eclipse}
-              missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={onTimeSeek} />
+              missionStart={viewStart} missionEnd={viewEnd} landingUtc={landingTime} onChange={disabled ? undefined : onTimeSeek} />
           </tr>;
         })}
       </tbody>
