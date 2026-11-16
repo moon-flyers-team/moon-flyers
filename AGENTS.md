@@ -240,6 +240,15 @@ The hook does not cache earlier site/date batches across requests.
 
 ## Checks and remaining work
 
+Deployment security: `deploy/SECURITY.md` documents the root-equivalent CI trust
+boundary and external GitHub/Tailscale/firewall controls. Compose caps each app
+container's CPU, memory/swap and PIDs; nginx applies an aggregate API rate limit
+with HTTP 429 responses. `deploy/test_security.py` validates resolved Compose
+configuration, and CI runs `deploy/check-api-limit.py` only on its isolated stack.
+Do not run that traffic test on live deployments or mistake these abuse limits
+for containment of a malicious release. Deployment tests now require the Docker
+Compose CLI as well as Linux/Python/Bash/flock.
+
 Verification commands are `pnpm --dir frontend test` and `pnpm --dir frontend build`.
 Tests cover payloads, custom-site serialization, UTC values, API failures, abort propagation,
 timeline clipping, fit/violation rendering, first-sample markers, and chart path wrapping.

@@ -106,6 +106,9 @@ jobs:
       - name: Check frontend, API, and API documentation
         run: python3 deploy/smoke-test.py http://127.0.0.1:18080
 
+      - name: Verify API abuse limits on the isolated stack
+        run: python3 deploy/check-api-limit.py http://127.0.0.1:18080
+
       # The fixture is synthetic, tiny and test-only: it proves the read-only mount,
       # startup validation and proxy work in the real image without real LOLA data.
       - name: Verify optional read-only terrain mount
