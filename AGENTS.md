@@ -250,12 +250,16 @@ for containment of a malicious release. Deployment tests now require the Docker
 Compose CLI as well as Linux/Python/Bash/flock.
 
 `.github/rulesets/` holds importable, active GitHub ruleset templates for `main`
-review/CI/force-push protection and for restricted, immutable `v*` tags. They are
-not enforced by being committed; see its README for the manual import and
-post-import checks. `deploy/test_rulesets.py` validates the templates and required
-check names (standard library only, no GitHub calls). Keep required checks limited
-to the frontend, backend and container jobs: deployment and public-URL checks run
-after pushes, so requiring them would block every pull request.
+CI/force-push protection, a separate review rule, and restricted, immutable `v*`
+tags. They are not enforced by being committed; see its README for the manual
+import and post-import checks. CI and review are split deliberately: a maintainer
+team added as a pull-request-only bypass on the review ruleset can self-merge its
+own PRs, while the CI ruleset stays unbypassable and a PR remains mandatory for
+everyone. Never add bypass actors to the CI or tag-immutability rulesets.
+`deploy/test_rulesets.py` validates the templates and required check names
+(standard library only, no GitHub calls). Keep required checks limited to the
+frontend, backend and container jobs: deployment and public-URL checks run after
+pushes, so requiring them would block every pull request.
 `deploy/install-host-egress.sh` is a manual, root-only host installer for the
 Docker-to-LAN boundary; never invoke it from the workflow.
 
