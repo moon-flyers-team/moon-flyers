@@ -14,6 +14,11 @@ alone does not protect the host: pushes to `main` deploy test automatically.
 
 These settings cannot be enforced by a file in this repository:
 
+Importable templates and post-import verification steps are in
+[`../.github/rulesets/README.md`](../.github/rulesets/README.md). Committing a
+ruleset file does not activate it; a repository administrator must import it, so
+`deploy/test_rulesets.py` only checks the templates and their CI check names.
+
 - Protect `main`: require reviewed pull requests and successful frontend, backend
   and container checks; prohibit force pushes/deletion and minimize bypass roles.
   Review workflow, Dockerfile, Compose, deployment script, dependency and build
@@ -49,9 +54,22 @@ container-to-LAN traffic. Ordinary Docker bridge networks permit outgoing
 connections. With the current iptables-based Docker setup, review `DOCKER-USER`
 for forwarded traffic and host INPUT rules for traffic addressed to the host.
 UFW's ordinary incoming rules do not reliably govern Docker-published ports.
-Preserve established connections, Docker DNS, frontend-to-backend traffic and
-backend HTTPS to JPL Horizons. Design and test rules against the actual Docker
-and Tailscale chains; do not blindly apply an allow/deny template remotely.
+Preserve established connections, Docker DNS (including the Tailscale resolver at
+`100.100.100.100`), frontend-to-backend traffic and backend HTTPS to JPL Horizons.
+Design and test rules against the actual Docker and Tailscale chains; do not
+blindly apply an allow/deny template remotely.
+
+[`install-host-egress.sh`](install-host-egress.sh) is a manual, root-only installer
+for that boundary. It replaces only its own `MF-EGRESS-PERSIST` chain, hooks
+standard IPv4 Docker bridges (`br+`, `docker0`) through `DOCKER-USER`, and re-applies
+itself from a Docker service drop-in. It permits established traffic, traffic that
+stays on the same bridge, and the Tailscale DNS resolver; it rejects private,
+Tailscale/CGNAT and link-local destinations. It never restarts Docker, never edits
+UFW or Tailscale rules, and does not touch the host-network Funnel gateway. Do not
+run it from the deployment workflow. Verify the public URL and both app
+environments after changes, and keep a console or existing SSH session available.
+It is not protection against a malicious release, which can change the rules, and
+IPv6 Docker networks are not covered.
 
 Read-only checks on the host (some need sudo):
 
@@ -117,5 +135,6 @@ python3 deploy/check-api-limit.py http://127.0.0.1:18082
 The unit suite requires Linux, Bash, `flock`, Python and Docker Compose (config
 validation only; deployment commands are mocked). The traffic check needs a
 running isolated stack with the new nginx configuration. Never load-test the
-live test/production site as a substitute. Merging these files does not change
-GitHub/Tailscale protections or host firewall rules.
+live test/production site as a substitute. `deploy/test_rulesets.py` needs only
+Python's standard library and makes no GitHub calls. Merging these files does not
+change GitHub/Tailscale protections or host firewall rules.
