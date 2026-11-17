@@ -39,9 +39,12 @@ administrators. The bypass team is how "just us main devs" self-merge.
 
 The tag rulesets are deliberately separate. The repository-admin bypass in the
 creation ruleset permits creation only; it must not also bypass tag immutability.
-GitHub's standard RepositoryRole ID 5 is repository admin. To delegate releases,
-select a specific trusted release team in the **creation ruleset's bypass list**
-after importing. Do not add bypass actors to the immutability ruleset.
+GitHub's standard RepositoryRole ID 5 is repository admin. `v*` tag creation is
+limited to that role so a single releaser controls production. **If more than one
+person is a repository admin, replace the bypass with a one-person team** (the
+sole releaser) after import; otherwise every admin can publish production. To
+delegate releases, select a specific trusted release team instead. Do not add
+bypass actors to the immutability ruleset.
 Administrators who can edit ruleset settings can still weaken these protections;
 this is not protection against compromise of the repository administrator account.
 
@@ -56,10 +59,20 @@ in sync with `.github/workflows/deploy.yml`. Only the frontend, backend and
 container-build checks are required. **Do not require deployment or public-URL
 verification checks before merging:** those run after pushes, not on PRs.
 
-These rulesets do not configure environment approvals or Tailscale. A production
-environment whose only reviewer is you must allow self-review, or have a second
-trusted reviewer, or a release cannot be approved. Review that separately from
-these branch rules.
+These rulesets do not configure environment approvals or Tailscale. The intended
+split is: every maintainer merges self-reviewed pull requests to `main`, which
+deploys **test** without further human approval; only the sole releaser creates a
+`v*` tag, which deploys **production** from the `production` environment.
+
+Environment gates override that intent, so configure them accordingly:
+
+- **`test`:** restrict deployment to branch `main`, and remove required reviewers.
+  Any required reviewer makes a test deployment wait for a human, so maintainers
+  would no longer deploy autonomously by merging.
+- **`production`:** keep deployment restricted to `v*` tags and keep the sole
+  releaser as reviewer. If self-review is prevented and that person is the only
+  reviewer, their own tag release cannot be approved; either allow self-review or
+  add a second trusted reviewer.
 
 Importing these rules changes future Git operations only: it does not push code,
 start a deployment, move existing tags, restart Beelink, or change the jury URL:
