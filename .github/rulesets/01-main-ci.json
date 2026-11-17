@@ -1,0 +1,37 @@
+{
+  "name": "Main: deletion, force push and required CI",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {"type": "deletion"},
+    {"type": "non_fast_forward"},
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "strict_required_status_checks_policy": true,
+        "required_status_checks": [
+          {
+            "context": "Frontend contracts, build, and isolated mock HTTP",
+            "integration_id": 15368
+          },
+          {
+            "context": "Backend unit and API tests (offline fixtures)",
+            "integration_id": 15368
+          },
+          {
+            "context": "Build and smoke-test containers",
+            "integration_id": 15368
+          }
+        ]
+      }
+    }
+  ]
+}

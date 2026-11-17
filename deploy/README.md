@@ -1,5 +1,8 @@
 # Deploy Moon Flyers on Beelink
 
+See [SECURITY.md](SECURITY.md) for the root-equivalent deployment trust boundary,
+required GitHub/Tailscale protections, host/LAN isolation and abuse limits.
+
 ## Release model
 
 | Event | Environment | Public URL | Loopback origin |
@@ -73,7 +76,7 @@ Repository variables:
 - `BEELINK_USER=maxence`: SSH user (existing default).
 - `PUBLIC_HOST=moon-flyers.tail644248.ts.net`: dedicated gateway's public DNS name, without scheme/port. Set this after the gateway is authorized and verified. If omitted, the workflow falls back to `BEELINK_HOST` for compatibility with the original host-based Funnel setup.
 
-Protect `main` and restrict creation/update of `v*` tags to trusted releasers. An environment approval gate for production is optional; otherwise a trusted tag push publishes automatically. Do not move published tags.
+Protect `main` and restrict creation/update of `v*` tags to trusted releasers. For independent approval before host access, require environment reviewers on **both test and production**, prevent self-review and disable administrator bypass where available. Without these gates, a trusted main/tag push deploys automatically; production approval alone does not protect the shared host. Do not move published tags.
 
 The workflow's Tailscale nodes are ephemeral and log out after the job. No GitHub-stored deployment secret or separate known-hosts secret is needed: `tailscale ssh` authenticates through tailnet policy and verifies the server key through Tailscale. References: [GitHub Action OIDC configuration](https://github.com/tailscale/github-action#workload-identity-federation), [Tailscale federation](https://tailscale.com/kb/1581/workload-identity-federation).
 
@@ -206,7 +209,8 @@ The containers run unprivileged with read-only root filesystems and temporary `/
 
 ## Verification without publishing
 
-Deployment promotion/rollback tests (Linux, Python standard library, Bash and `flock`; Docker is mocked):
+Deployment promotion/rollback and security tests (Linux, Python standard library, Bash,
+`flock` and Docker Compose; deployment commands are mocked, Compose config is validated):
 
 ```sh
 python3 -m unittest discover -s deploy -p 'test_*.py' -v

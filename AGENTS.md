@@ -240,6 +240,29 @@ The hook does not cache earlier site/date batches across requests.
 
 ## Checks and remaining work
 
+Deployment security: `deploy/SECURITY.md` documents the root-equivalent CI trust
+boundary and external GitHub/Tailscale/firewall controls. Compose caps each app
+container's CPU, memory/swap and PIDs; nginx applies an aggregate API rate limit
+with HTTP 429 responses. `deploy/test_security.py` validates resolved Compose
+configuration, and CI runs `deploy/check-api-limit.py` only on its isolated stack.
+Do not run that traffic test on live deployments or mistake these abuse limits
+for containment of a malicious release. Deployment tests now require the Docker
+Compose CLI as well as Linux/Python/Bash/flock.
+
+`.github/rulesets/` holds importable, active GitHub ruleset templates for `main`
+CI/force-push protection, a separate review rule, and restricted, immutable `v*`
+tags. They are not enforced by being committed; see its README for the manual
+import and post-import checks. CI and review are split deliberately: a maintainer
+team added as a pull-request-only bypass on the review ruleset can self-merge its
+own PRs, while the CI ruleset stays unbypassable and a PR remains mandatory for
+everyone. Never add bypass actors to the CI or tag-immutability rulesets.
+`deploy/test_rulesets.py` validates the templates and required check names
+(standard library only, no GitHub calls). Keep required checks limited to the
+frontend, backend and container jobs: deployment and public-URL checks run after
+pushes, so requiring them would block every pull request.
+`deploy/install-host-egress.sh` is a manual, root-only host installer for the
+Docker-to-LAN boundary; never invoke it from the workflow.
+
 Verification commands are `pnpm --dir frontend test` and `pnpm --dir frontend build`.
 Tests cover payloads, custom-site serialization, UTC values, API failures, abort propagation,
 timeline clipping, fit/violation rendering, first-sample markers, and chart path wrapping.

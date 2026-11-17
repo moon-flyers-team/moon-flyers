@@ -1,6 +1,11 @@
 services:
   backend:
     image: moon-flyers-backend:${REVISION:?Set the release commit SHA}
+    # Per environment: leave headroom on the shared 4-core / 16 GiB host.
+    cpus: 1.5
+    mem_limit: 3g
+    memswap_limit: 3g
+    pids_limit: 128
     restart: unless-stopped
     init: true
     read_only: true
@@ -24,6 +29,10 @@ services:
 
   frontend:
     image: moon-flyers-frontend:${REVISION:?Set the release commit SHA}
+    cpus: 0.5
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 64
     restart: unless-stopped
     init: true
     read_only: true
